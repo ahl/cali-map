@@ -197,14 +197,17 @@ until its inputs are signed off. Every phase is a jj commit.
   - **P1.5b — Vallejo inset** [BUILT]: 120x120 mm @1:1M engraved slab of
     the Carquinez junction (out/p15b_vallejo_inset.stl, p15b_preview.png)
     — for eyeballing the messiest region interactions.
-- **P2 — Layout & scale.** [PARTIAL] Done: Census land authority
-  (p2_land.py) + topological vectorization with shared snapped borders
-  (p2_vectorize.py; zero gaps/overlaps) — BUT v1 predates 13.5 km, the
-  islands piece, and ahl's markup; re-run after P1 signs off (also fold
-  in: Terminal Island -> mainland, Oregon sea stack fix, islands hull
-  piece + its frame cavity). Remaining: physical size decision
-  (scale-at-end per D11 — supports multiple), frame tiling plan (G5),
-  per-scale min-width smoothing, dimensioned layout drawing.
+- **P2 — Layout & scale.** [VECTORIZATION DONE on signed-off geometry
+  2026-09-13] data/p2_regions.geojson (canonical, DP 500 m) +
+  data/p2_regions_smooth.geojson (Chaikin x2 preview flavor) — both with
+  ZERO gaps/overlaps, shared borders bit-identical; valley-coast contact
+  0.000 km statewide (min separation 7.2 km); islands piece = 5th
+  feature (hull+10 km, 19,264 km², 84 vertices, 9 km clear of coast
+  piece); coast = 3 parts (mainland + Angel Isl + Treasure/Yerba Buena);
+  Farallones dropped by name. QA: out/p2_regions_qa.png (with Vallejo
+  vector inset). Remaining in P2: physical size decision (scale-at-end,
+  D11), frame tiling plan (G5), per-scale min-width/tolerance passes,
+  dimensioned layout drawing.
 - **P3 — 3D prototype.** [NOT STARTED; foundations ready] Generate ONE
   real puzzle piece + matching frame corner at 2–3 vertical
   exaggerations; base height proposal (G2). Waterway multi-body deferred
