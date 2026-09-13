@@ -22,6 +22,17 @@ island_min_lat = 32.6
 # puzzle borders printable; final per-scale min-width pass comes later.
 smooth_radius_km = 2.0
 
+# Coast cells within this distance (km) of the Great Valley are absorbed
+# INTO the valley region — stops the shoreline band curling through the
+# Delta toward Sacramento (ahl, 2026-09-13: "explicitly subtract out the
+# valley region"). 0 disables.
+valley_absorb_km = 7.5
+
+# Desert cells north of this line (km, CA Albers y) become Mountains:
+# the northern Basin and Range (Modoc country) reads as mountains, not
+# desert (ahl, 2026-09-13, marked on p0_map_area_relief).
+desert_north_limit_km = 100
+
 # CGS province -> region grouping (RANGE_NAME values)
 valley_provinces = ["Great Valley"]
 desert_provinces = ["Mojave Desert", "Colorado Desert", "Basin and Range"]

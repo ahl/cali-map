@@ -128,6 +128,13 @@ def build_regions(dem, prov, name_id, coast_threshold_m, coast_from=None,
     valley = np.isin(prov, [ids[n] for n in CFG["valley_provinces"]]) & ca
     desert = np.isin(prov, [ids[n] for n in CFG["desert_provinces"]]) & ca
 
+    # northern Basin and Range counts as Mountains, not Desert
+    lim = CFG.get("desert_north_limit_km")
+    if lim is not None:
+        r_cut = int((META["y_max"] - lim * 1000.0) / META["res"])
+        if r_cut > 0:
+            desert[:min(r_cut, desert.shape[0])] = False
+
     if coast_from is not None:
         coast = (coast_from & ca & ~valley & ~desert) | islands
     else:
@@ -148,6 +155,16 @@ def build_regions(dem, prov, name_id, coast_threshold_m, coast_from=None,
         coast_sm = ndimage.binary_closing(
             ndimage.binary_opening(coast & mainland, st), st) & ca & ~valley & ~desert
         coast = (coast_sm & mainland) | islands
+
+    # the valley absorbs adjacent low coast cells (Delta): the band must
+    # not curl around the Great Valley's western edge toward Sacramento
+    ab = CFG.get("valley_absorb_km", 0)
+    if ab and coast_from is None:
+        near_valley = ndimage.distance_transform_edt(~valley) \
+            <= ab * 1000 / META["res"]
+        grabbed = coast & near_valley & mainland
+        valley = valley | grabbed
+        coast = coast & ~grabbed
 
     out = np.zeros(dem.shape, dtype=np.uint8)
     out[ca] = MOUNTAINS
