@@ -10,22 +10,33 @@
 #   "scikit-image",
 # ]
 # ///
-"""P1a: refine the chosen Coast region (300 m + 5 km band) into a single,
-smooth, atlas-style puzzle-piece shape.
+"""P1a: refine the chosen Coast region (300 m + 5 km band) into a smooth,
+atlas-style puzzle-piece shape.
 
 Rules (per ahl's review of out/p1_coast_candidates.png):
-  1. The mainland coast strip must be ONE connected component; inland
-     enclaves that only touch the strip through thin necks (Clear Lake
-     basin, upper Russian River valleys, ...) revert to Mountains.
+  1. Contiguity: inland blobs that only touch the strip through thin necks
+     (Clear Lake basin, upper Russian River valleys, Eureka-area scraps)
+     revert to Mountains.  NOTE the mainland strip itself is topologically
+     TWO land components: SF Bay + Carquinez Strait + Delta channels reach
+     the Great Valley province (verified: sea mask touches Valley), so no
+     land path connects Marin to San Francisco without circling the whole
+     Central Valley.  The two halves are joined by the piece's printed
+     bay/ocean shelf (D2), exactly like the Channel Islands.
   2. The Coast/Mountains border is dramatically simplified -- flowing,
      children's-atlas curves.  Losing fine fidelity is OK.
   3. Borders that are NOT ours to smooth stay exact: the ocean coastline,
      the Coast/Valley and Coast/Desert borders (CGS province lines), and
-     the state line.  This is enforced by growing the mask into those
-     fixed zones before vectorizing, then clipping the smoothed polygon
-     back against them.
-  4. SF Bay stays sea; Channel Islands stay Coast (they ride the printed
-     ocean shelf) and keep their raster outline.
+     the state line.  Enforced by growing the mask into those fixed zones
+     before vectorizing, then clipping the smoothed polygons back.
+  4. SF Bay stays sea; Channel Islands stay Coast and keep their raster
+     outline.  Delta islands (Great Valley province scraps in the sea
+     mask) are dropped from Coast.
+  5. Data patch: the CGS province polygons are coarser than the 250 m
+     coastline and leave prov==0 hairline slivers along the shore and
+     between adjacent provinces.  Slivers adjacent to the coast strip are
+     claimed into it (they are CA land the polygons miss), gated to
+     latitudes strictly inside CA so nothing bleeds past OR/MX borders.
+     P2 replaces this with the Census state polygon.
 
 Outputs:
   data/p1a_coast_mask.npy         final boolean Coast mask on the DEM grid
@@ -52,37 +63,45 @@ OUT = ROOT / "out"
 CFG = tomllib.loads((ROOT / "config.toml").read_text())["regions"]
 META = json.loads((DATA / "dem_meta.json").read_text())
 TO_ALB = Transformer.from_crs("EPSG:4326", META["crs"], always_xy=True)
+TO_LL = Transformer.from_crs(META["crs"], "EPSG:4326", always_xy=True)
 RES = META["res"]
 
 # ----------------------------------------------------------------------------
 # Tuning parameters (candidates for promotion to config.toml [regions])
 # ----------------------------------------------------------------------------
-# Morphological opening radius (km) applied to coast+sea: cuts the thin
-# necks (river canyons) that tie inland low-elevation blobs to the strip,
-# so the connectivity filter can drop them, and shaves ragged fringes.
+# Morphological opening radius (km), computed with sea/valley/desert/
+# out-of-state as solid support: cuts the thin necks (river canyons) tying
+# inland low-elevation blobs to the strip so the connectivity filter can
+# drop them, and shaves ragged fringes.  Only the Coast/Mountains edge is
+# eroded; the strip can never be eaten from the water/province side.
 OPEN_KM = 3.0
-# Morphological closing radius (km) applied after opening: fills notches
-# where Mountains poke into the strip, keeping the band plump/continuous.
+# Morphological closing radius (km) after opening: fills notches where
+# Mountains poke into the strip, keeping the band plump and continuous.
 CLOSE_KM = 6.0
-# Cap on distance from the ocean (km): coast cells farther than this from
-# any sea revert to Mountains BEFORE smoothing. Shortens the Salinas
-# Valley spur without touching the LA basin. 0 disables.
+# Cap on distance from the sea (km): coast cells farther than this revert
+# to Mountains before smoothing.  Shortens the Salinas Valley spur; also
+# the outer limit of the "15-50 km wide band" spec.  0 disables.
 MAX_SHORE_KM = 50.0
 # Douglas-Peucker tolerance (km) for the Coast/Mountains boundary.
 SIMPLIFY_KM = 3.0
 # Chaikin corner-cutting iterations after simplification (flowing curves).
 CHAIKIN_ITERS = 2
-# Max segment length (km) fed into Chaikin; bounds how far corner-cutting
-# can deviate from the simplified line (~ SEGMENTIZE/4 worst case).
+# Max segment length (km) fed into Chaikin; bounds corner-cutting
+# deviation from the simplified line to ~SEGMENTIZE/4 worst case.
 SEGMENTIZE_KM = 4.0
-# How far (km) the mask is grown into "fixed border" zones (sea, Valley,
-# Desert, out-of-state) before vectorizing.  Must exceed the worst-case
+# How far (km) the mask is grown into fixed-border zones (sea, Valley,
+# Desert, out-of-state) before vectorizing.  Must exceed worst-case
 # simplify+Chaikin deviation so smoothing never bites into fixed borders;
 # the growth is clipped back exactly afterwards.
 GROW_KM = 6.0
-# Parts smaller than this (km^2) are dropped from the final polygon set
-# (border slivers created by the clip).
+# Mainland strip components smaller than this (km^2) are reassigned to
+# Mountains; smaller polygon slivers from the vector clip are dropped too.
+MIN_COMP_KM2 = 500.0
 MIN_PART_KM2 = 25.0
+# prov==0 sliver claiming: max distance from a CGS province cell (km) for
+# a sliver to count as a data gap, and latitude window strictly inside CA.
+CLAIM_NEAR_KM = 0.75
+CLAIM_LAT = (32.545, 41.995)
 
 # region ids / colors (identical to p1_regions.py)
 SEA, MOUNTAINS, VALLEY, DESERT, COAST = 0, 1, 2, 3, 4
@@ -143,7 +162,6 @@ def ocean_mask(dem):
 
 
 def ca_islands(sea, mainland):
-    to_ll = Transformer.from_crs(META["crs"], "EPSG:4326", always_xy=True)
     lab, n = ndimage.label(~sea & ~mainland)
     if n == 0:
         return np.zeros(sea.shape, bool)
@@ -153,7 +171,7 @@ def ca_islands(sea, mainland):
         cy, cx = ndimage.center_of_mass(lab == i)
         x = META["x_min"] + (cx + 0.5) * RES
         y = META["y_max"] - (cy + 0.5) * RES
-        lon, lat = to_ll.transform(x, y)
+        lon, lat = TO_LL.transform(x, y)
         if lat >= CFG["island_min_lat"] and lon < -117.0:
             keep.append(i)
     return np.isin(lab, keep)
@@ -213,16 +231,16 @@ def dilate(m, r_px):
     return ndimage.distance_transform_edt(~m) <= r_px
 
 
-def open_with_sea(m, sea, r_px):
-    """Opening of the coast treating sea as solid mass, so the coastal
-    ribbon and capes are never eaten; only inland necks/fringes go."""
-    M = m | sea
-    return dilate(erode(M, r_px), r_px) & ~sea & m
+def open_supported(m, support, r_px):
+    """Opening of m with `support` treated as solid mass: only the free
+    (Coast/Mountains) edge erodes; capes, the shoreline ribbon, and cells
+    pinned against fixed borders survive.  Never adds cells."""
+    return dilate(erode(m | support, r_px), r_px) & m
 
 
-def close_with_sea(m, sea, r_px):
-    M = m | sea
-    return erode(dilate(M, r_px), r_px) & ~sea
+def close_supported(m, support, r_px):
+    """Closing of m with `support` solid; returns m plus fill cells."""
+    return (erode(dilate(m | support, r_px), r_px) | m) & ~support
 
 
 def keep_shore_connected(m, sea):
@@ -230,6 +248,15 @@ def keep_shore_connected(m, sea):
     shore = ndimage.binary_dilation(sea, iterations=2)
     ids = np.unique(lab[shore & m])
     return np.isin(lab, ids[ids > 0])
+
+
+def drop_small(m, min_km2):
+    lab, n = ndimage.label(m)
+    if n == 0:
+        return m
+    sizes = ndimage.sum_labels(np.ones_like(lab), lab, index=np.arange(1, n + 1))
+    keep = np.where(sizes * (RES / 1000.0) ** 2 >= min_km2)[0] + 1
+    return np.isin(lab, keep)
 
 
 def mask_to_rings(mask):
@@ -251,15 +278,14 @@ def rings_to_polygons(rings):
     shells, holes = [], []
     for i, p in enumerate(polys):
         pt = p.representative_point()
-        depth = sum(1 for q in polys[:i] if q.contains(pt))
+        depth = sum(1 for q, _ in shells + holes if q.contains(pt))
         (shells if depth % 2 == 0 else holes).append((p, depth))
     out = []
     for p, d in shells:
-        pt_holes = [h.exterior.coords for h, hd in holes
-                    if hd == d + 1 and p.contains(h.representative_point())]
-        out.append(Polygon(p.exterior.coords, pt_holes))
-    geom = shapely.union_all([p if p.is_valid else p.buffer(0) for p in out])
-    return geom
+        hole_rings = [h.exterior.coords for h, hd in holes
+                      if hd == d + 1 and p.contains(h.representative_point())]
+        out.append(Polygon(p.exterior.coords, hole_rings))
+    return shapely.union_all([p if p.is_valid else p.buffer(0) for p in out])
 
 
 def chaikin_ring(coords, iters):
@@ -288,7 +314,7 @@ def polygons_of(geom):
         return []
     if geom.geom_type == "Polygon":
         return [geom]
-    return [g for g in geom.geoms if g.geom_type == "Polygon"]
+    return [g for g in getattr(geom, "geoms", []) if g.geom_type == "Polygon"]
 
 
 def rasterize_geom(geom):
@@ -311,48 +337,77 @@ def ring_count(geom):
                for p in polygons_of(geom))
 
 
+def claim_slivers(m, prov, sea, mainland):
+    """prov==0 hairline gaps (coastline slivers, inter-province cracks)
+    adjacent to the coast strip, within CLAIM_NEAR_KM of a CGS province
+    cell, at latitudes strictly inside CA.  These are CA land the coarse
+    CGS polygons miss; claiming them keeps the strip from being cracked
+    by data artifacts."""
+    near_ca = ndimage.distance_transform_edt(~((prov > 0) & mainland)) \
+        <= km_px(CLAIM_NEAR_KM)
+    cand = (prov == 0) & mainland & ~sea & near_ca & dilate(m, km_px(1.0))
+    rr, cc = np.where(cand)
+    if rr.size == 0:
+        return cand
+    x = META["x_min"] + (cc + 0.5) * RES
+    y = META["y_max"] - (rr + 0.5) * RES
+    _, lat = TO_LL.transform(x, y)
+    ok = (lat > CLAIM_LAT[0]) & (lat < CLAIM_LAT[1])
+    out = np.zeros(m.shape, bool)
+    out[rr[ok], cc[ok]] = True
+    return out
+
+
+def offshore_islands(sea, mainland, prov, vd_ids):
+    """ca_islands minus Delta scraps: island components whose majority
+    province is Valley/Desert are not Channel Islands."""
+    isl = ca_islands(sea, mainland)
+    lab, n = ndimage.label(isl)
+    if n == 0:
+        return isl
+    frac = ndimage.mean(np.isin(prov, vd_ids).astype(float), lab,
+                        index=np.arange(1, n + 1))
+    keep = np.where(frac < 0.5)[0] + 1
+    return np.isin(lab, keep)
+
+
 # ----------------------------------------------------------------------------
 
-def refine_coast(reg, sea, prov, name_id, dem):
-    ids = name_id
+def refine_coast(reg, sea, prov, name_id, shore_dist):
     land_lab, _ = ndimage.label(~sea)
     mainland = land_lab == np.argmax(np.bincount(land_lab[~sea].ravel()))
-    islands = ca_islands(sea, mainland)
-    valley = reg == VALLEY
-    desert = reg == DESERT
-    ca_main = (reg > 0) & mainland
-    allowed = ca_main & ~valley & ~desert         # where Coast may live
-    fixed_zone = ~allowed                          # borders we must not move
+    vd_ids = [name_id[n] for n in
+              CFG["valley_provinces"] + CFG["desert_provinces"]]
+    valley = np.isin(prov, [name_id[n] for n in CFG["valley_provinces"]])
+    desert = np.isin(prov, [name_id[n] for n in CFG["desert_provinces"]])
+    islands = offshore_islands(sea, mainland, prov, vd_ids)
 
-    m = (reg == COAST) & mainland
+    m0 = (reg == COAST) & mainland
+    claim = claim_slivers(m0, prov, sea, mainland)
+    ca_main = (((prov > 0) & ~valley & ~desert) | claim) & mainland & ~sea
+    allowed = ca_main                              # where mainland Coast may live
+    fixed = ~allowed                               # borders we must not move
+    open_support = fixed                           # water/provinces/state pin the strip
+    close_support = sea                            # closing may only span water gaps
 
+    m = m0 | claim
     # 1) contiguity: only shoreline-connected coast
     m = keep_shore_connected(m, sea)
-
-    # 2) cut necks (opening with sea as solid), drop what disconnects
-    m = open_with_sea(m, sea, km_px(OPEN_KM))
+    # 2) cut necks, drop what disconnects
+    m = open_supported(m, open_support, km_px(OPEN_KM))
     m = keep_shore_connected(m, sea)
-
-    # 3) shorten deep inland spurs (Salinas): hard cap on distance to sea
+    # 3) band-width cap: shorten deep inland spurs (Salinas)
     if MAX_SHORE_KM > 0:
-        shore_dist = ndimage.distance_transform_edt(~sea)
         m &= shore_dist <= km_px(MAX_SHORE_KM)
         m = keep_shore_connected(m, sea)
-
     # 4) fill notches + interior mountain enclaves
-    m = close_with_sea(m, sea, km_px(CLOSE_KM))
-    m = ndimage.binary_fill_holes(m | sea) & ~sea
-    m &= allowed
+    m = close_supported(m, close_support, km_px(CLOSE_KM)) & allowed
+    m = ndimage.binary_fill_holes(m | sea) & ~sea & allowed
     m = keep_shore_connected(m, sea)
-    # keep only the largest shore-connected piece (must dominate)
-    lab, n = ndimage.label(m)
-    if n > 1:
-        sizes = ndimage.sum_labels(np.ones_like(lab), lab,
-                                   index=np.arange(1, n + 1))
-        m = lab == (1 + int(np.argmax(sizes)))
+    m = drop_small(m, MIN_COMP_KM2)
 
     # 5) grow into fixed zones so smoothing can't nibble exact borders
-    grown = m | (dilate(m, km_px(GROW_KM)) & fixed_zone)
+    grown = m | (dilate(m, km_px(GROW_KM)) & fixed)
 
     # 6) vectorize -> simplify -> Chaikin
     rings = mask_to_rings(grown)
@@ -364,8 +419,8 @@ def refine_coast(reg, sea, prov, name_id, dem):
                        CHAIKIN_ITERS) for p in parts])
     smooth_vertices = ring_count(smooth)
 
-    # 7) clip smoothed shape back to the allowed zone, in vector space,
-    #    so mask and geojson agree; fixed borders come back exact.
+    # 7) clip smoothed shape back to the allowed zone in vector space, so
+    #    mask and geojson agree; fixed borders come back exact.
     allowed_geom = rings_to_polygons(mask_to_rings(allowed))
     final_vec = shapely.union_all([
         p for p in polygons_of(smooth.intersection(allowed_geom))
@@ -373,8 +428,9 @@ def refine_coast(reg, sea, prov, name_id, dem):
 
     final_main = rasterize_geom(final_vec) & allowed
     final_main = keep_shore_connected(final_main, sea)
+    final_main = drop_small(final_main, MIN_COMP_KM2)
 
-    return final_main, islands, final_vec, raw_vertices, smooth_vertices
+    return final_main, islands, claim, final_vec, raw_vertices, smooth_vertices
 
 
 def render(dem, panels, sea):
@@ -429,33 +485,37 @@ def main():
     ca_px = (reg > 0).sum()
     pct0 = 100 * (reg == COAST).sum() / ca_px
 
-    final_main, islands, final_vec, raw_v, smooth_v = \
-        refine_coast(reg, sea, prov, name_id, dem)
+    final_main, islands, claim, final_vec, raw_v, smooth_v = \
+        refine_coast(reg, sea, prov, name_id, shore_dist)
     final = final_main | islands
 
     # safety checks
     assert not (final & sea).any(), "coast bleeds into sea"
     assert not (final & np.isin(reg, [VALLEY, DESERT])).any(), \
         "coast overlaps valley/desert"
-    assert (final & ~(reg > 0)).sum() == 0, "coast outside CA"
-    lab, n_main = ndimage.label(final_main)
+    assert not (final & ~((reg > 0) | claim)).any(), "coast outside CA"
+    _, n_main = ndimage.label(final_main)
+    _, n_piece = ndimage.label(final_main | sea)
     pct1 = 100 * final.sum() / ca_px
 
-    reg2 = reg.copy()
-    reg2[reg2 == COAST] = MOUNTAINS
+    # region raster for the "after" panel (delta islands revert to Valley)
+    vd = np.isin(prov, [name_id[n] for n in CFG["valley_provinces"]])
+    dd = np.isin(prov, [name_id[n] for n in CFG["desert_provinces"]])
+    reg2 = np.zeros_like(reg)
+    reg2[reg > 0] = MOUNTAINS
+    reg2[(reg > 0) & vd] = VALLEY
+    reg2[(reg > 0) & dd] = DESERT
     reg2[final] = COAST
 
     np.save(DATA / "p1a_coast_mask.npy", final)
     print(f"wrote {DATA / 'p1a_coast_mask.npy'}")
 
-    # geojson: smoothed mainland polygon(s) + raster-exact islands
     feats = []
     for p in polygons_of(final_vec):
         feats.append({"type": "Feature",
                       "properties": {"part": "mainland"},
                       "geometry": mapping(shapely.set_precision(p, 0.1))})
-    isl_geom = rings_to_polygons(mask_to_rings(islands))
-    for p in polygons_of(isl_geom):
+    for p in polygons_of(rings_to_polygons(mask_to_rings(islands))):
         feats.append({"type": "Feature",
                       "properties": {"part": "island"},
                       "geometry": mapping(shapely.set_precision(p, 0.1))})
@@ -467,7 +527,9 @@ def main():
     print(f"wrote {DATA / 'p1a_coast_boundary.geojson'}")
 
     print(f"coast before: {pct0:.1f}% of CA;  after: {pct1:.1f}% of CA")
-    print(f"mainland components: {n_main} (must be 1)")
+    print(f"mainland land components: {n_main} "
+          "(2 expected: bay/delta water splits north from south)")
+    print(f"components incl. printed water shelf: {n_piece} (must be 1)")
     print(f"boundary vertices: raw {raw_v} -> simplified+smoothed {smooth_v}")
     md = shore_dist[final_main].max() * RES / 1000
     print(f"max distance from sea inside coast: {md:.0f} km")

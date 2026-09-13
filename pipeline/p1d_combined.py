@@ -78,14 +78,19 @@ def main():
     r = PINHOLE_CLOSE_KM * 1000 / b.META["res"]
     coast = b.disk_close(coast | sea, r) & allowed & ~sea
 
+    # the physical piece connects through the printed ocean shelf (D2), so
+    # keep every component touching the shore; drop only inland strays
     lab, n = ndimage.label(coast)
-    if n > 1:
-        sizes = np.bincount(lab.ravel())
-        sizes[0] = 0
-        print(f"dropping {n - 1} stray blob(s), "
-              f"{(sizes.sum() - sizes.max()) * b.META['res']**2 / 1e6:.0f} km2")
-        coast = lab == sizes.argmax()
-    ncomp = ndimage.label(coast)[1]
+    near_shore = ndimage.binary_dilation(sea, iterations=2)
+    keep = np.unique(lab[near_shore & coast])
+    keep = keep[keep > 0]
+    dropped = coast.sum() - np.isin(lab, keep).sum()
+    if dropped:
+        print(f"dropping {n - len(keep)} inland stray blob(s), "
+              f"{dropped * b.META['res']**2 / 1e6:.0f} km2")
+    coast = np.isin(lab, keep)
+    ncomp = len(keep)
+    print(f"{ncomp} shore-connected components (join via ocean shelf)")
     coast = coast | islands
 
     np.save(b.DATA / "p1d_coast_mask.npy", coast)

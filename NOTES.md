@@ -79,12 +79,19 @@ set into a frame of the surrounding geography.
   - *Mountains* = everything else.
   - **Remaining decision**: pick the coast elevation threshold from
     side-by-side rendered candidates (Phase 1 check-in).
-  - P1 renders done (out/p1_coast_candidates.png): 200/300/400 m plus
-    "300 m + 5 km shoreline band" (band keeps the strip continuous at
-    Big Sur / Lost Coast; islands always Coast). CGS's own Coastline
-    SubProvinces rendered too but far skinnier (3% of CA) than ahl's
-    reference images. **Recommendation: 300 m + 5 km band.** Config knobs:
-    coast_threshold_m, coast_band_km in config.toml. Awaiting ahl's pick.
+  - P1 exploration history (all figures in out/): threshold sweeps
+    150-450 m; band sweeps 5-12.5 km; low thresholds 50-200 m; agent
+    explorations p1a (morphological simplify + polygon smoothing — came
+    out over-trimmed at 3%) and p1b (curriculum-map transplant,
+    registration IoU 0.971 — strong).
+  - ahl's direction (2026-09-13): TWO live candidates —
+    (1) p1d = RAW p1b image-derived coast strip + CGS valley/desert;
+    (2) p1c family = very low threshold (<50 m) + 12.5 km band.
+    Plus global rules, both in config.toml:
+    - valley_absorb_km = 7.5 — coast near the Great Valley is absorbed
+      into the valley (kills the Delta curl toward Sacramento);
+    - desert_north_limit_km = 100 — Desert north of Albers y=+100 km
+      becomes Mountains (northern Basin & Range = Modoc country).
 - **G2 — Vertical exaggeration factor**: TBD (typical 3–8× at this scale).
   Also: base thickness value.
 - **G3 — Clearances**: PLA-on-PLA puzzle fit; likely ~0.15–0.25 mm/side,

@@ -6,6 +6,7 @@
 #   "pyproj",
 #   "matplotlib",
 #   "scipy",
+#   "scikit-image",
 # ]
 # ///
 """P1b: transplant the Coastal Region from the scanned curriculum map
@@ -26,11 +27,12 @@ Steps:
      Landmark (extreme-point) init is the fallback if that stalls.
   3. warp the pink class onto the DEM grid; apply project precedence
      (Great Valley / Desert provinces win over coast); add a one-source-
-     pixel shore ribbon (the scan is pink along its whole open coast, so
-     this restores the strip where the scan's generalized coastline sits
-     seaward of ours); light morphological smoothing (source is low-res
-     => keep its smooth character); one mainland component; islands are
-     always Coast.
+     pixel shore ribbon where warped pink is nearby (the scan is pink
+     along its whole open coast; this restores the strip where the scan's
+     generalized coastline sits seaward of ours); light morphological
+     smoothing (source is low-res => keep its smooth character); one
+     mainland component (noise blobs dropped, genuine strip segments
+     joined by minimal geodesic land corridors); islands always Coast.
   4. mountains = rest of CA; render QA + result.
 
 Outputs:
@@ -289,20 +291,60 @@ def disk_close(mask, r_px):
     return disk_erode(disk_dilate(mask, r_px), r_px)
 
 
+def bridge_components(coast, allowed, half_w_px, min_keep_px):
+    """One mainland component: drop scan-noise blobs (< min_keep_px), then
+    join the remaining genuine strip segments with minimal-length geodesic
+    corridors through `allowed` land, one source-pixel wide."""
+    from skimage import graph
+
+    cost = np.where(allowed, 1.0, np.inf)
+    n_bridged = 0
+    while True:
+        lab, n = ndimage.label(coast)
+        if n <= 1:
+            return coast, n_bridged
+        sizes = np.bincount(lab.ravel())
+        sizes[0] = 0
+        noise = np.where((sizes > 0) & (sizes < min_keep_px))[0]
+        if len(noise):
+            print(f"dropping {len(noise)} stray blob(s) "
+                  f"({sizes[noise].sum() * META['res'] ** 2 / 1e6:.0f} km2)")
+            coast &= ~np.isin(lab, noise)
+            continue
+        main = lab == sizes.argmax()
+        d, (ir, ic) = ndimage.distance_transform_edt(
+            ~main, return_indices=True)
+        d = np.where(coast & ~main, d, np.inf)
+        p = np.unravel_index(np.argmin(d), d.shape)
+        q = (ir[p], ic[p])
+        path, _ = graph.route_through_array(cost, p, q, fully_connected=True,
+                                            geometric=True)
+        corridor = np.zeros_like(coast)
+        corridor[tuple(np.asarray(path).T)] = True
+        coast |= disk_dilate(corridor, half_w_px) & allowed
+        n_bridged += 1
+        print(f"bridged strip gap near map px {p} "
+              f"(corridor {len(path) * META['res'] / 1000:.0f} km long)")
+
+
 def build_coast(cls_map, ca, sea, mainland, islands, valley, desert, px_m):
     """Pink class on the map grid -> cleaned Coast mask + component count.
 
     px_m = source-map pixel size in meters (from the fitted affine). The
-    scan's pink strip hugs the ENTIRE open coastline (verified: virtually
+    scan's pink strip hugs its ENTIRE open coastline (verified: virtually
     every shoreline-adjacent classified pixel is pink), but its generalized
     coastline wanders a few km off ours, so the warped strip pinches to
-    zero where the scan's coast sits seaward of the real one. Adding a
-    one-source-pixel shore ribbon restores exactly what the scan asserts
-    at its own resolution ("the shore is pink") and reconnects the strip.
+    zero where the scan's coast sits seaward of the real one. A one-source-
+    pixel shore ribbon, applied only where warped pink is nearby (so it
+    can't invent coast around the Delta's below-sea-level channels, where
+    the scan has no pink), restores exactly what the scan asserts at its
+    own resolution: "the shore is pink".
     """
     allowed = ca & mainland & ~valley & ~desert
     shore_dist = ndimage.distance_transform_edt(~sea) * META["res"]
-    coast = ((cls_map == COAST) | (shore_dist <= px_m)) & allowed
+    pink_dist = ndimage.distance_transform_edt(cls_map != COAST) * META["res"]
+    ribbon = (shore_dist <= px_m) & (pink_dist <= 2 * px_m)
+    coast = ((cls_map == COAST) | ribbon) & allowed
 
     # light smoothing (project-standard radius) — the scan is inherently
     # smooth at map scale, this only cleans warp jaggies. Smooth the union
@@ -313,14 +355,9 @@ def build_coast(cls_map, ca, sea, mainland, islands, valley, desert, px_m):
         u = disk_close(disk_open(coast | sea, r), r)
         coast = u & allowed & ~sea
 
-    # one mainland component: keep the largest, drop scan-noise blobs
-    lab, n = ndimage.label(coast)
-    if n > 1:
-        sizes = np.bincount(lab.ravel())
-        sizes[0] = 0
-        print(f"dropping {n - 1} stray coast blob(s) "
-              f"({(sizes.sum() - sizes.max()) * META['res'] ** 2 / 1e6:.0f} km2)")
-        coast = lab == sizes.argmax()
+    coast, n_bridged = bridge_components(
+        coast, allowed, half_w_px=0.5 * px_m / META["res"],
+        min_keep_px=int(500e6 / META["res"] ** 2))  # noise = < 500 km2
     n_after = ndimage.label(coast)[1]
 
     return coast | islands, n_after
