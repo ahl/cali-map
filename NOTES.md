@@ -177,7 +177,9 @@ until its inputs are signed off. Every phase is a jj commit.
 - **P0 — Data & pipeline skeleton.** [DONE 2026-09-13] Fetch DEM tiles,
   CGS provinces, state borders; reproject to CA Albers (EPSG:3310);
   heightfield built. Extent approved (final crop may REDUCE it, D10).
-- **P1 — Region boundaries.** [SIGNED OFF by ahl 2026-09-13] 25 m +
+- **P1 — Region boundaries.** [SCREEN-APPROVED by ahl 2026-09-13;
+  physical validation = the P1.5 print, which ahl counts as part of P1]
+  25 m +
   13.5 km band + all rules + ahl's markup overrides (Vallejo mountain
   corridor; p1_final red->mountains / orange->coast marks — overrides/
   *.geojson, applied by build_regions [overrides]). Definitive artifact:
