@@ -25,6 +25,7 @@ set into a frame of the surrounding geography.
 | D6 | Print bed 256×256 mm; whole model ≤ 1000×1000 mm total | Either frame fits one bed, or frame is carved into tiles |
 | D7 | Material: PLA. Fit: snug but disassemblable | Clearance values TBD (see G3) |
 | D8 | Version control: jj (colocated git), repo = this directory | |
+| D9 | Waterways/lakes as second color on EACH piece | Requires multi-material (rivers span Z — layer swap won't work), so pieces export as multi-body 3MF (region body + water bodies). Designed in from start; prototyped P3; implemented P5. Fallback if no AMS: recessed engraving (paintable). |
 
 ## Data sources (verified accessible 2026-09-13)
 
@@ -74,6 +75,13 @@ set into a frame of the surrounding geography.
   ~11° of latitude (likely a local transverse Mercator or CA Albers,
   EPSG:3310). CA Albers is equal-area and the state standard — probable
   choice.
+- **G9 — Multi-material capability**: RESOLVED 2026-09-13 — printer has an
+  AMS; slicer is Bambu Studio. True second-color waterways via multi-body
+  3MF, colors assigned per body in Bambu Studio.
+- **G10 — Waterway selection & width**: which rivers/lakes make the cut
+  (NHD is exhaustive; Natural Earth has just the majors), and how much to
+  exaggerate river width (true width is sub-nozzle at this scale;
+  ~0.8–1.0 mm printed minimum).
 
 ## Plan (phases with check-ins)
 
@@ -93,6 +101,8 @@ until its inputs are signed off. Every phase is a jj commit.
   *Check-in: dimensioned 2D layout drawing.*
 - **P3 — 3D prototype.** Generate STL for ONE piece + matching frame
   corner at 2–3 vertical exaggerations; base height proposal (G2).
+  Include a waterway body on the prototype piece to validate the
+  multi-body 3MF approach (D9).
   *Check-in: Blender screenshots + STLs to open in slicer; pick
   exaggeration & base.*
 - **P4 — Fit coupon.** Small test print: one small real boundary segment
