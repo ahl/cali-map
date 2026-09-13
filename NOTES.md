@@ -167,6 +167,15 @@ until its inputs are signed off. Every phase is a jj commit.
 - **P2 — Layout & scale.** Fix overall physical size, frame tiling plan
   (G5), minimum piece widths, projection sanity.
   *Check-in: dimensioned 2D layout drawing.*
+- **P1.5 — Engraved one-piece validation print (ahl, 2026-09-13).** Once
+  region borders are settled: print CALIFORNIA AS ONE CONTIGUOUS PIECE,
+  150 mm NORTH-SOUTH (E-W follows the real aspect, ~134 mm; ~1:7M scale),
+  with region borders engraved as narrow recesses: <0.5 mm wide, 1-2
+  layers deep at 0.2 mm layer height (0.2-0.4 mm). Validates borders
+  physically + first topo print + early read on vertical exaggeration,
+  before any puzzle cutting. (The model is NOT square — 150 mm is the
+  N-S dimension; likewise the final frame's 1000 mm cap applies to the
+  long edge.)
 - **P3 — 3D prototype.** Generate STL for ONE piece + matching frame
   corner at 2–3 vertical exaggerations; base height proposal (G2).
   Include a waterway body on the prototype piece to validate the
@@ -188,6 +197,26 @@ until its inputs are signed off. Every phase is a jj commit.
   conversation directly.
 - 3D check-ins: STLs imported to Blender (MCP bridge) → viewport
   screenshots; user can also Quick Look STLs in Finder or open in slicer.
+
+## P1 output: how boundaries are represented
+
+- Source of truth = **config.toml [regions] + pipeline/p1_regions.py**,
+  which deterministically regenerate the region layout from the DEM +
+  CGS provinces. Nothing hand-drawn; every rule is a named config knob.
+- Working representation = **region index raster**: uint8 grid aligned
+  to the DEM (4791 x 5632 @ 250 m, EPSG:3310); values 0=sea, 1=Mountains,
+  2=Valley, 3=Desert, 4=Coast. Candidate snapshots in data/*.npy
+  (p1d_regions.npy etc.); p1a also produced vector polygons
+  (data/p1a_coast_boundary.geojson, EPSG:3310).
+- P2 converts the WINNING raster to the durable form: **vector polygons
+  in Albers meters with shared borders snapped** — adjacent regions
+  reference the identical polyline, which is what guarantees puzzle
+  pieces mate. Those polygons + the DEM drive all mesh generation
+  (P1.5 engraving grooves = the same border polylines).
+- Known raster-stage flaw, cured in P2: CGS province polygons miss the
+  250 m shoreline in places (prov==0 hairline cracks) — this is what
+  invisibly fragments the coast band; the Census state polygon becomes
+  the land authority in P2.
 
 ## Toolchain
 

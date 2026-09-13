@@ -204,7 +204,44 @@ def build_regions(dem, prov, name_id, coast_threshold_m, coast_from=None,
     out[valley] = VALLEY
     out[desert] = DESERT
     out[coast] = COAST
+    if CFG.get("enforce_contiguous"):
+        make_contiguous(out, mainland, sea)
     return out, sea
+
+
+def make_contiguous(out, mainland, sea, passes=2):
+    """Each region = one connected PIECE. For coast, the piece includes
+    the printed ocean shelf (D2), so any coast fragment touching the sea
+    is already connected — only LANDLOCKED coast fragments are reassigned.
+    Other regions: minor fragments go to the neighboring region that
+    borders them most (kills the stranded desert triangle at the north
+    cap, mountain exclaves inside the coast band, etc.)."""
+    for _ in range(passes):
+        changed = 0
+        for rid in (VALLEY, DESERT, COAST, MOUNTAINS):
+            mask = out == rid
+            if rid == COAST:
+                mask = mask & mainland
+            lab, n = ndimage.label(mask)
+            if n <= 1:
+                continue
+            sizes = np.bincount(lab.ravel())
+            sizes[0] = 0
+            main_id = sizes.argmax()
+            for i in range(1, n + 1):
+                if i == main_id:
+                    continue
+                comp = lab == i
+                ring = ndimage.binary_dilation(comp) & ~comp
+                if rid == COAST and (ring & sea).any():
+                    continue  # shelf-connected (D2)
+                vals = out[ring]
+                vals = vals[(vals != rid) & (vals != SEA)]
+                if len(vals):
+                    out[comp] = np.bincount(vals).argmax()
+                    changed += 1
+        if not changed:
+            break
 
 
 def render(dem, panels, sea):

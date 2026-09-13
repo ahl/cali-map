@@ -5,8 +5,14 @@
 # Coast piece = shoreline-contiguous land at/below this elevation (meters),
 # excluding the Great Valley. THE knob for the coast/mountains border.
 # Candidates rendered side-by-side by p1_regions.py; pick at P1 check-in.
-coast_threshold_m = 300
+coast_threshold_m = 25
 coast_candidates_m = [200, 300, 400]
+
+# Every region must be ONE connected component (coast: judged on the
+# mainland; offshore islands join the coast piece via the printed ocean
+# shelf, D2). Minor fragments are reassigned to the neighboring region
+# that borders them most. Also kills exclaves (P2 no-exclave contract).
+enforce_contiguous = true
 
 # Minimum shoreline band (km): mainland within this distance of the ocean
 # is Coast regardless of elevation, keeping the strip continuous where

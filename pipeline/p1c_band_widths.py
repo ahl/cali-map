@@ -24,10 +24,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import p1_regions as base
 
 # (threshold_m, band_km) per panel; output filename for the figure
-PANELS_SPEC = [(0, 12.5), (10, 12.5), (25, 12.5), (40, 12.5)]
-OUT_NAME = "p1c_low_thresholds.png"
-FIG_TITLE = ("P1c: very low elevation thresholds (0 = pure band), "
-             "band 12.5 km, valley absorb + desert cap applied")
+PANELS_SPEC = [(25, 12), (25, 13), (25, 14), (25, 15)]
+OUT_NAME = "p1c_band_fine.png"
+FIG_TITLE = ("P1c: fine band sweep at 25 m threshold, "
+             "all rules incl. contiguity")
 
 
 def main():
