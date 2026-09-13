@@ -25,16 +25,22 @@ Regions are REGENERATED from p1_regions.build_regions with the current
 config.toml (25 m threshold + 13 km band, all rules) — no stale .npy.
 
 Geometry rules:
-  - window faces: straight vertical cuts, NO clearance;
-  - interior (piece/piece) borders: each piece shrunk by CLEARANCE_MM
-    per side -> 2x that as the assembled gap;
+  - a FRAME part surrounds the pieces: a FRAME_MM-wide rim carrying real
+    terrain/ocean from the surrounding geography (preview of the final
+    outer frame, D3 gray). Its inner opening is the NOMINAL window
+    square; total print = (WINDOW_MM + 2*FRAME_MM) square;
+  - piece/piece borders: each piece shrunk by CLEARANCE_MM per side
+    -> 2x that as the assembled gap;
+  - window-edge faces: pieces are shrunk by the same CLEARANCE_MM there
+    too, so they drop into the frame opening (single-sided gap = one
+    CLEARANCE_MM against the frame's nominal inner wall);
   - Coast piece includes all sea/bay cells in the window as a flat shelf
     at datum height (D2);
   - flat bottom z=0, base BASE_MM thick, ocean surface = top of base,
     land top = base + elev * z-scale (Z_EXAG x true vertical scale).
 
 Outputs:
-  out/p4_bay_235mm/<region>.stl   binary STL, watertight
+  out/p4_bay_235mm/<region>.stl   binary STL, watertight (+ frame.stl)
   out/p4_bay_420mm/<region>.stl
   out/p4_preview.png              assembled + junction zoom + exploded
 """
@@ -61,6 +67,7 @@ import p1_regions as base
 # CA mainland N-S print extent per variant (mm) -> implied scale
 VARIANTS = {"235mm": 235.0, "420mm": 420.0}
 WINDOW_MM = 80.0          # square coupon window, print mm, both variants
+FRAME_MM = 10.0           # frame rim width around the window -> 100 mm print
 # window center in CA Albers km, per variant (triple junction ~(-190, +5))
 # 235mm: window reaches around the valley's north tip (y~302 km) so the
 # western Coast Range mountains stay connected to the Sierra in-window and
@@ -202,17 +209,16 @@ def fill_and_contiguity(regw, seaw, notes, s, cx, cy):
 def mask_polygon(mask, erode_px):
     """Sub-pixel polygon of `mask` shrunk inward by erode_px pixels.
 
-    Method: Euclidean distance transform of the (edge-replicated-padded)
-    mask, lightly gaussian-smoothed, contoured at level erode_px + 0.5
-    (EDT measures to outside pixel CENTERS, 0.5 px beyond the nominal
-    pixel-edge border, hence the +0.5). Marching squares interpolates the
-    crossing linearly -> boundary accuracy ~= +/-0.5 px (0.025 mm) before
-    the SIMPLIFY_MM simplification. Padding is edge-replicated so window
-    faces see no erosion; the clip to the window box makes them straight.
+    Method: Euclidean distance transform of the zero-padded mask, lightly
+    gaussian-smoothed, contoured at level erode_px + 0.5 (EDT measures to
+    outside pixel CENTERS, 0.5 px beyond the nominal pixel-edge border,
+    hence the +0.5). Marching squares interpolates the crossing linearly
+    -> boundary accuracy ~= +/-0.5 px (0.025 mm) before the SIMPLIFY_MM
+    simplification. Zero padding means the window edge itself erodes too:
+    pieces pull CLEARANCE_MM inside the nominal window square, mating
+    with the frame's nominal inner wall at a single-sided gap.
     """
-    padded = np.pad(mask, PAD_PX, mode="edge")
-    padded[0, :] = padded[-1, :] = False
-    padded[:, 0] = padded[:, -1] = False
+    padded = np.pad(mask, PAD_PX, mode="constant", constant_values=False)
     field = ndimage.distance_transform_edt(padded)
     if EDT_SMOOTH_PX > 0:
         field = ndimage.gaussian_filter(field, EDT_SMOOTH_PX)
@@ -450,6 +456,26 @@ def build_variant(tag, target_mm, reg, sea, dem, extent_m):
               f"{bb[1][2]:.2f} mm  min land width ~{mlw:.2f} mm  -> {path}")
         if not mesh.is_watertight:
             print(f"  !! {name} NOT WATERTIGHT")
+
+    # frame: rim with real surrounding terrain; inner opening = nominal
+    # window square (pieces carry the clearance on their edge faces)
+    frame_poly = box(-FRAME_MM, -FRAME_MM, WINDOW_MM + FRAME_MM,
+                     WINDOW_MM + FRAME_MM).difference(
+                         box(0, 0, WINDOW_MM, WINDOW_MM))
+    fmesh = solid_mesh(frame_poly, hfn)
+    fpath = out_dir / "frame.stl"
+    fmesh.export(fpath)
+    fb = fmesh.bounds
+    stats["frame"] = dict(tris=len(fmesh.faces),
+                          watertight=fmesh.is_watertight,
+                          volume=float(fmesh.volume), bbox=fb,
+                          min_land_w=float("nan"), area=frame_poly.area)
+    print(f"  {'frame':9s} {len(fmesh.faces):7d} tris  "
+          f"watertight={fmesh.is_watertight}  "
+          f"bbox {fb[1][0]-fb[0][0]:.1f} x {fb[1][1]-fb[0][1]:.1f} x "
+          f"{fb[1][2]:.2f} mm  rim {FRAME_MM:g} mm  -> {fpath}")
+    if not fmesh.is_watertight:
+        print("  !! frame NOT WATERTIGHT")
     for n in notes:
         print(f"  note: {n}")
     return dict(tag=tag, s=s, cx=cx, cy=cy, ground_km=ground_km,
@@ -481,6 +507,9 @@ def render_preview(results):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
+    frame_poly = box(-FRAME_MM, -FRAME_MM, WINDOW_MM + FRAME_MM,
+                     WINDOW_MM + FRAME_MM).difference(
+                         box(0, 0, WINDOW_MM, WINDOW_MM))
     rid_of = {v: k for k, v in REGION_NAME.items()}
     fig, axes = plt.subplots(2, 3, figsize=(16.5, 11.5), dpi=200)
     for row, res in enumerate(results):
@@ -488,6 +517,8 @@ def render_preview(results):
         for col, ax in enumerate(axes[row]):
             ax.set_facecolor("#1c1c22")
             explode = col == 2
+            if col != 1:
+                add_poly(ax, frame_poly, "#9a9aa2")
             for name, (poly, sea_poly) in res["pieces"].items():
                 color = base.COLORS[rid_of[name]]
                 g, sg = poly, sea_poly
@@ -495,20 +526,20 @@ def render_preview(results):
                     c = poly.centroid
                     v = np.array([c.x - WINDOW_MM / 2, c.y - WINDOW_MM / 2])
                     n = np.linalg.norm(v)
-                    dx, dy = (v / n * 7.0) if n > 1e-6 else (0, 7.0)
+                    dx, dy = (v / n * 18.0) if n > 1e-6 else (0, 18.0)
                     g = affinity.translate(g, dx, dy)
                     if sg is not None:
                         sg = affinity.translate(sg, dx, dy)
-                add_poly(ax, g, color)
+                add_poly(ax, g, color, z=3)
                 if sg is not None:
-                    add_poly(ax, g.intersection(sg), SEA_COLOR, z=2)
+                    add_poly(ax, g.intersection(sg), SEA_COLOR, z=4)
                 if explode:
                     c = g.centroid
                     ax.annotate(name, (c.x, c.y), color="black", fontsize=9,
-                                ha="center", weight="bold", zorder=5)
+                                ha="center", weight="bold", zorder=6)
             if col == 0:
-                ax.set_xlim(-2, WINDOW_MM + 2)
-                ax.set_ylim(-2, WINDOW_MM + 2)
+                ax.set_xlim(-FRAME_MM - 2, WINDOW_MM + FRAME_MM + 2)
+                ax.set_ylim(-FRAME_MM - 2, WINDOW_MM + FRAME_MM + 2)
                 ax.set_title(
                     f"{res['tag']}  (1:{1/res['s']/1e6:.2f}M)  assembled — "
                     f"{res['ground_km']:.0f} km window @ "
@@ -521,16 +552,18 @@ def render_preview(results):
                 ax.set_title(f"triple junction zoom (12 mm) — gaps = "
                              f"2 x {CLEARANCE_MM:g} mm", fontsize=10)
             else:
-                ax.set_xlim(-14, WINDOW_MM + 14)
-                ax.set_ylim(-14, WINDOW_MM + 14)
-                ax.set_title("exploded (+7 mm)", fontsize=10)
+                ax.set_xlim(-FRAME_MM - 22, WINDOW_MM + FRAME_MM + 22)
+                ax.set_ylim(-FRAME_MM - 22, WINDOW_MM + FRAME_MM + 22)
+                ax.set_title("exploded (+18 mm, frame in place)",
+                             fontsize=10)
             ax.set_aspect("equal")
             ax.set_xticks([]), ax.set_yticks([])
     fig.suptitle(
         "P4 Bay Area fit coupon — clearance "
-        f"{CLEARANCE_MM:g} mm/side, base {BASE_MM:g} mm, "
-        f"Z = {Z_EXAG:g}x true scale  "
-        "(magenta=Mountains, green=Valley, yellow=Coast, blue=shelf)",
+        f"{CLEARANCE_MM:g} mm/side (incl. window edge vs frame), "
+        f"base {BASE_MM:g} mm, Z = {Z_EXAG:g}x true scale  "
+        "(magenta=Mountains, green=Valley, yellow=Coast, blue=shelf, "
+        "gray=frame)",
         fontsize=12)
     fig.tight_layout()
     OUT.mkdir(exist_ok=True)
@@ -555,7 +588,10 @@ def main():
           "straight borders); residual local error = contour "
           f"interpolation (~+/-{PX_MM/2:g} mm) + simplify tolerance "
           f"({SIMPLIFY_MM:g} mm) => border position within ~+/-0.045 mm "
-          "worst case, typically +/-0.02 mm. Window faces: no clearance.")
+          "worst case, typically +/-0.02 mm. Window-edge faces carry the "
+          "same per-side clearance; the frame's inner opening is the "
+          "NOMINAL window square, so piece-to-frame gap = "
+          f"{CLEARANCE_MM:g} mm (single-sided).")
 
 
 if __name__ == "__main__":
