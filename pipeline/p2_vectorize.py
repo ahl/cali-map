@@ -387,6 +387,48 @@ def political_reference():
     return parts
 
 
+def split_by_part(paths, cycles, political, raw, parts):
+    """Political arcs can span two reference polylines (the Colorado
+    River [Census chain] meets the NE US-Mexico line at the tripoint in
+    one raster arc): split them wherever the nearest reference part
+    changes, so each political arc maps onto exactly one polyline.
+    Stretches too far from every line (>1.5 km) demote to natural."""
+    o_paths, o_cyc, o_pol, o_raw = [], [], [], []
+    part_of = {}
+    for i in range(len(paths)):
+        if not political[i]:
+            o_paths.append(paths[i]), o_cyc.append(cycles[i])
+            o_pol.append(False), o_raw.append(raw[i])
+            continue
+        pts = shapely.points(raw[i])
+        d = np.stack([shapely.distance(prt, pts) for prt in parts])
+        near = d.argmin(axis=0)
+        mind = d.min(axis=0)
+        runs = [[int(near[0]), 0]]
+        for v in near:
+            if v == runs[-1][0]:
+                runs[-1][1] += 1
+            else:
+                runs.append([int(v), 1])
+        runs = _merge_short_runs(runs, MIN_RUN_EDGES)
+        s = 0
+        for k, n in runs:
+            e = min(s + n, len(raw[i]) - 1)  # sub-arc = vertices s..e
+            if e <= s:
+                break
+            pol = bool(mind[s:e + 1].mean() <= 1500.0)
+            if not pol:
+                print(f"  note: {LineString(raw[i][s:e + 1]).length / 1000:.0f}"
+                      f" km political stretch is far from every border "
+                      f"line; kept natural")
+            else:
+                part_of[len(o_paths)] = k
+            o_paths.append(paths[i][s:e + 1]), o_cyc.append(False)
+            o_pol.append(pol), o_raw.append(raw[i][s:e + 1])
+            s = e
+    return o_paths, o_cyc, o_pol, o_raw, part_of
+
+
 def census_ne_corner(parts):
     """The exact 42N/120W corner vertex: the reference-chain vertex
     nearest to (lon -120, lat 42)."""
@@ -638,19 +680,10 @@ def main():
     parts = political_reference()
     print(f"  border reference: {len(parts)} polyline part(s), "
           f"{[f'{p.length / 1000:.0f} km' for p in parts]}")
-    part_of = {}
-    for i, pol in enumerate(political):
-        if not pol:
-            continue
-        pts = shapely.points(raw[i][::max(1, len(raw[i]) // 25)])
-        dm = [float(shapely.distance(prt, pts).mean()) for prt in parts]
-        k = int(np.argmin(dm))
-        if dm[k] > 1500.0:
-            print(f"  WARNING: political arc {i} is {dm[k]:.0f} m from any "
-                  f"border line; keeping it natural")
-            political[i] = False
-        else:
-            part_of[i] = k
+    paths, cycles, political, raw, part_of = split_by_part(
+        paths, cycles, political, raw, parts)
+    print(f"  {len(paths)} arcs after reference-part split "
+          f"({len(part_of)} political)")
     node_pos = {}  # node id -> ((x, y), part index) — moved onto the line
     max_shift = 0.0
     for i, k in part_of.items():
