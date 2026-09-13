@@ -300,52 +300,39 @@ def build_regions(dem, prov, name_id, coast_threshold_m, coast_from=None,
 
 
 def apply_mountain_edges(out, sea, mainland):
-    """Hand-drawn barrier lines (ahl markups, config [overrides]): cut the
-    coast and valley masks along each line; fragments severed from their
-    region's main body -> Mountains; the line footprint itself ->
-    Mountains. Endpoints auto-seal to the nearest sea/mountains cell."""
+    """Hand-drawn mountain corridors (ahl markups, config [overrides]):
+    each Polygon feature in the override files marks an area whose coast
+    and valley cells become Mountains — the polygon is built from ahl's
+    drawn edge lines, so its boundary IS the new region border there.
+    (LineString features in the same files are provenance only.)"""
     files = OVR.get("mountain_edges", [])
     if not files:
         return
     h, w = out.shape
     img = Image.new("L", (w, h), 0)
     drw = ImageDraw.Draw(img)
-    endpoints = []
+    n_poly = 0
     for fp in files:
         gj = json.loads((ROOT / fp).read_text())
         for f in gj["features"]:
-            pts = [((x - META["x_min"]) / META["res"],
-                    (META["y_max"] - y) / META["res"])
-                   for x, y in f["geometry"]["coordinates"]]
-            drw.line(pts, fill=1, width=3)
-            endpoints += [pts[0], pts[-1]]
-    stop = sea | (out == MOUNTAINS) | (out == 0)
-    _, (ir, ic) = ndimage.distance_transform_edt(~stop, return_indices=True)
-    for cx, cy in endpoints:
-        c, r = int(round(cx)), int(round(cy))
-        if 0 <= r < h and 0 <= c < w:
-            tr, tc = int(ir[r, c]), int(ic[r, c])
-            if np.hypot(tr - r, tc - c) * META["res"] <= 20000:
-                drw.line([(cx, cy), (float(tc), float(tr))], fill=1, width=3)
-    bar = np.asarray(img, bool)
-
-    for rid in (COAST, VALLEY):
-        mask = out == rid
-        if rid == COAST:
-            mask = mask & mainland
-        cut = mask & ~bar
-        lab, n = ndimage.label(cut)
-        if n == 0:
-            continue
-        sizes = np.bincount(lab.ravel())
-        sizes[0] = 0
-        main_id = sizes.argmax()
-        near_bar = ndimage.binary_dilation(bar, iterations=2)
-        drop = np.unique(lab[near_bar & cut])
-        drop = drop[(drop > 0) & (drop != main_id)]
-        sel = np.isin(lab, drop) | (mask & bar)
-        if sel.any():
-            out[sel] = MOUNTAINS
+            geom = f["geometry"]
+            if geom["type"] not in ("Polygon", "MultiPolygon"):
+                continue
+            polys = (geom["coordinates"] if geom["type"] == "MultiPolygon"
+                     else [geom["coordinates"]])
+            for rings in polys:
+                for i, ring in enumerate(rings):
+                    pts = [((x - META["x_min"]) / META["res"],
+                            (META["y_max"] - y) / META["res"])
+                           for x, y in ring]
+                    drw.polygon(pts, fill=1 if i == 0 else 0)
+                n_poly += 1
+    if not n_poly:
+        return
+    zone = np.asarray(img, bool)
+    sel = zone & ((out == COAST) & mainland | (out == VALLEY))
+    if sel.any():
+        out[sel] = MOUNTAINS
 
 
 def make_contiguous(out, mainland, sea, passes=2):
