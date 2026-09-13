@@ -25,7 +25,7 @@ set into a frame of the surrounding geography.
 | D6 | Print bed 256×256 mm; whole model ≤ 1000×1000 mm total | Either frame fits one bed, or frame is carved into tiles |
 | D7 | Material: PLA. Fit: snug but disassemblable | Clearance values TBD (see G3) |
 | D8 | Version control: jj (colocated git), repo = this directory | |
-| D9 | Waterways/lakes as second color on EACH piece | Requires multi-material (rivers span Z — layer swap won't work), so pieces export as multi-body 3MF (region body + water bodies). Designed in from start; prototyped P3; implemented P5. Fallback if no AMS: recessed engraving (paintable). |
+| D9 | Waterways/lakes as second color on EACH piece — **OPTIONAL** | ahl may or may not print with these; keep it a build flag. Default output = solid single-color pieces; water variant = region body minus water inlays + water bodies in one 3MF (AMS + Bambu Studio confirmed). Prototyped P3, implemented P5, final call at the end. |
 
 ## Data sources (verified accessible 2026-09-13)
 
@@ -44,6 +44,24 @@ set into a frame of the surrounding geography.
 - **State/national boundaries & coastline**: Natural Earth (10m) or US
   Census TIGER. Needed for the CA outline (piece/frame parting line is the
   state border) and for engraved/reference borders on the frame.
+
+## P0 findings (2026-09-13)
+
+- Heightfield built: ~4800 x 5650 px @ 250 m, EPSG:3310 (~1200 x 1410 km).
+- **CGS layer has 13 features, not 11**: the classic provinces PLUS
+  "Northern Coastline SubProvince" and "Southern Coastline SubProvince" —
+  i.e., CGS itself demarcates a coastal strip. Evaluate in P1 alongside
+  the elevation-threshold approach (could be the canonical Coast border,
+  or a sanity check on our threshold choice).
+- Terrarium DEM gotchas found & fixed in pipeline:
+  - isolated garbage spikes (median-despike pass added);
+  - Gulf of California is below sea level but not Pacific-connected
+    within the frame → ocean mask = sea-level cells connected to Pacific
+    OR touching map border;
+  - genuine below-sea-level land kept as land: Death Valley, Salton
+    Trough, Laguna Salada, subsided Sacramento Delta islands;
+  - Albers rectangle bulges beyond the lon/lat box at corners → tile
+    coverage must be computed from the projected rectangle.
 
 ## Gaps / open questions
 
