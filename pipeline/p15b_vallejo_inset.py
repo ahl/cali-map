@@ -8,6 +8,7 @@
 #   "matplotlib",
 #   "trimesh",
 #   "requests",
+#   "shapely",
 # ]
 # ///
 """P1.5b: engraved WINDOW inset print (Carquinez / Vallejo / San Pablo Bay /
@@ -25,10 +26,13 @@ Vallejo/Benicia, and the western Sacramento-San Joaquin Delta.
     them straight onto the print grid (~120 m ground cells at 0.12 mm/px,
     1:1e6) -- the statewide DEM is too coarse (250 m -> 0.25 mm at this
     scale) to look good zoomed in this far;
-  - region raster (for grooves) stays on the statewide 250 m grid and is
-    resampled (order=0, nearest) onto the print grid -- grooves don't
-    need hi-res, and this keeps border placement identical to the
-    full-state print;
+  - region raster (250 m) still drives elevation/land-sea for the window;
+  - GROOVES ARE VECTOR-DRAWN (same fix as p15_engraved.py): region-region
+    borders come from p15_engraved.region_border_lines() (pairwise shared
+    boundaries between the 4 mainland polygons in
+    data/p2_regions_smooth.geojson), rasterized onto THIS window's print
+    grid via p15_engraved.rasterize_lines() -- no more inheriting the
+    250 m raster's staircase steps;
   - ocean/bay as a FLAT plane at datum height (top of the 2 mm base);
   - land z uses the SAME z_scale as p15_engraved.py (5 mm at CALIFORNIA's
     max elevation, computed the same way p15 computes it) -- NOT
@@ -36,9 +40,7 @@ Vallejo/Benicia, and the western Sacramento-San Joaquin Delta.
     eventual full-state print;
   - ENGRAVED as ~0.4 mm wide x 0.4 mm deep grooves on region-region
     borders ONLY (no political borders in this window; no coastline
-    engraving -- same rule as p15). At the finer px size the groove
-    width is re-rounded to the nearest achievable pixel count (see
-    region_groove_w below);
+    engraving -- same rule as p15);
   - vertical walls on all four window edges (this is a cut window, not
     the coastline), flat bottom, watertight.
   - if the 0.12 mm/px mesh's predicted binary STL would exceed ~200 MB,
@@ -56,12 +58,12 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from scipy import ndimage
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import p1_regions as base
 import mesh_common as mc
 import p15_engraved as p15  # reuse: build_source_rasters, resample,
+                            # region_border_lines, rasterize_lines,
                             # render_preview, and the exact CA-wide
                             # z_scale computation
 import dem_hires
@@ -79,16 +81,17 @@ PRINT_MM = 160.0        # square print, side = WIN_SIDE_KM -> exactly 1:1e6
 DEM_ZOOM = 11            # terrarium zoom for THIS driver's own hi-res DEM
                          # fetch (dem_hires.py) -- p0/p15 use zoom 9/250 m,
                          # too coarse for a 1:1e6 zoomed-in inset
-PX_MM = 0.12             # heightfield px size for THIS driver only --
-                         # overrides p15's 0.2 mm/px default; ~120 m ground
-                         # cells at zoom 11 (0.12 mm * 1000 m/mm-at-1:1e6)
+PX_MM = 0.12             # heightfield px size for THIS driver, set
+                         # independently of p15's own statewide PX_MM;
+                         # ~120 m ground cells at zoom 11 (0.12 mm * 1000
+                         # m/mm-at-1:1e6)
 PX_MM_FALLBACK = 0.15    # used instead of PX_MM if the predicted binary
                          # STL at PX_MM would exceed STL_SIZE_CAP_BYTES
 STL_SIZE_CAP_BYTES = 200_000_000  # binary STL = 84 + 50*n_faces bytes
 
 BASE_MM = p15.BASE_MM              # 2.0 mm base; ocean/bay datum = top of base
 GROOVE_DEPTH_MM = p15.GROOVE_DEPTH_MM  # 0.4 mm
-GROOVE_TARGET_MM = 0.4                 # target groove WIDTH (see region_groove_w)
+GROOVE_TARGET_MM = p15.GROOVE_TARGET_MM  # 0.4 mm target groove width
 MIN_FLOOR_MM = p15.MIN_FLOOR_MM        # 1.0 mm groove-floor protection
 
 STL_NAME = "p15b_vallejo_inset.stl"
@@ -104,8 +107,8 @@ def ca_wide_z_scale(reg_s, dem_s, sea_s):
     """Replicate p15_engraved.main()'s z_scale computation EXACTLY (same
     slab window, same resample, same CA-max-elevation definition), so this
     inset's relief matches the full-state print instead of being
-    renormalized to the window's local max. Uses p15's OWN PX_MM (0.2 mm,
-    the statewide slab resolution) regardless of this driver's PX_MM."""
+    renormalized to the window's local max. Uses p15's OWN PX_MM (the
+    statewide slab resolution) regardless of this driver's PX_MM."""
     win = p15.slab_window(reg_s > 0)
     reg_w, dem_w, sea_w = reg_s[win], dem_s[win], sea_s[win]
     h_src, w_src = dem_w.shape
@@ -136,40 +139,13 @@ def window_slice():
     return slice(row0, row1), slice(col0, col1), (x0, x1, y0, y1)
 
 
-def region_groove_w(reg, px_mm):
-    """Region-border groove mask with a total width close to
-    GROOVE_TARGET_MM, at whatever px_mm this driver is using.
-
-    p15_engraved.region_groove() hardcodes a straddling seam: the border
-    falls BETWEEN two disagreeing cells, so the minimum possible groove is
-    1 px on each side = 2 px total. At p15's 0.2 mm/px that happens to be
-    0.4 mm; at this driver's finer px_mm it would be too narrow (e.g.
-    0.24 mm at 0.12 mm/px). Isotropic dilation of a symmetric seam can
-    only grow it by +2 px (1 more per side) at a time, so the achievable
-    widths are 2, 4, 6, ... px -- pick whichever is closest in mm to
-    GROOVE_TARGET_MM.
-    """
-    m = reg > 0
-    dh = m[:, :-1] & m[:, 1:] & (reg[:, :-1] != reg[:, 1:])
-    dv = m[:-1] & m[1:] & (reg[:-1] != reg[1:])
-    seam = np.zeros_like(m)
-    seam[:, :-1] |= dh
-    seam[:, 1:] |= dh
-    seam[:-1] |= dv
-    seam[1:] |= dv
-    border_mm = (int(dh.sum()) + int(dv.sum())) * px_mm
-
-    iters = min(range(4), key=lambda i: abs((2 + 2 * i) * px_mm - GROOVE_TARGET_MM))
-    groove = ndimage.binary_dilation(seam, iterations=iters) if iters else seam
-    achieved_mm = (2 + 2 * iters) * px_mm
-    return groove, border_mm, achieved_mm
-
-
-def build_print_grid(reg_s, dem_s, sea_s, z_scale, px_mm):
+def build_print_grid(reg_s, dem_s, sea_s, z_scale, px_mm, lines_region):
     """Everything from the window bbox down to the finished mesh, at
     heightfield resolution px_mm. Fetches this window's OWN hi-res DEM
-    via dem_hires (does not slice the statewide 250 m array). Returns
-    (mesh, top, sea_p, groove, reg_p, stats)."""
+    via dem_hires (does not slice the statewide 250 m array). Grooves are
+    vector-drawn from lines_region (p15_engraved.region_border_lines()),
+    clipped to this window by rasterize_lines(). Returns (mesh, top,
+    sea_p, groove, reg_p, stats)."""
     row_sl, col_sl, (x0, x1, y0, y1) = window_slice()
     reg_w = reg_s[row_sl, col_sl]
     sea_w = sea_s[row_sl, col_sl]
@@ -209,14 +185,17 @@ def build_print_grid(reg_s, dem_s, sea_s, z_scale, px_mm):
 
     top = np.where(sea_p, BASE_MM, BASE_MM + dem_p * z_scale)
 
-    groove, border_mm, groove_w_mm = region_groove_w(reg_p, px_mm)
+    width_px = max(1, round(GROOVE_TARGET_MM / px_mm))
+    groove, border_km = p15.rasterize_lines(lines_region, row_sl, col_sl,
+                                            out_h, out_w, width_px)
     gt = top[groove] - GROOVE_DEPTH_MM
     n_clamp = int((gt < MIN_FLOOR_MM).sum())
     top[groove] = np.maximum(gt, MIN_FLOOR_MM)
-    print(f"grooves: {int(groove.sum())} px lowered (region borders "
-          f"{border_mm:.0f} mm total groove length; width {groove_w_mm:.2f} mm "
-          f"vs {GROOVE_TARGET_MM} mm target); depth {GROOVE_DEPTH_MM} mm, "
-          f"floor clamped at {MIN_FLOOR_MM} mm on {n_clamp} px")
+    print(f"grooves (vector-drawn): {int(groove.sum())} px lowered "
+          f"(region borders {border_km:.1f} km ground length; width "
+          f"{width_px} px = {width_px * px_mm:.2f} mm vs {GROOVE_TARGET_MM} "
+          f"mm target); depth {GROOVE_DEPTH_MM} mm, floor clamped at "
+          f"{MIN_FLOOR_MM} mm on {n_clamp} px")
 
     # node heights: mean everywhere, min next to grooves so the groove
     # keeps its full width and depth instead of averaging to a V
@@ -231,7 +210,8 @@ def build_print_grid(reg_s, dem_s, sea_s, z_scale, px_mm):
     mesh = mc.heightfield_to_mesh(top, mask, px_mm, node_z=node_z,
                                   bottom="fan")
     stats = dict(out_h=out_h, out_w=out_w, out_res_m=out_res_m,
-                 n_tiles=n_tiles, max_elev_win=max_elev_win)
+                 n_tiles=n_tiles, max_elev_win=max_elev_win,
+                 border_km=border_km, width_px=width_px)
     return mesh, top, sea_p, groove, reg_p, stats
 
 
@@ -310,9 +290,13 @@ def main():
           "same value p15_engraved.py uses -- NOT renormalized to this "
           "window)")
 
+    lines_region = p15.region_border_lines()
+    print(f"vector groove source: {len(lines_region)} region-border line "
+          f"parts (data/p2_regions_smooth.geojson), clipped to this window")
+
     px_mm = PX_MM
     mesh, top, sea_p, groove, reg_p, stats = build_print_grid(
-        reg_s, dem_s, sea_s, z_scale, px_mm)
+        reg_s, dem_s, sea_s, z_scale, px_mm, lines_region)
 
     predicted_bytes = 84 + 50 * len(mesh.faces)
     print(f"mesh @ {px_mm} mm/px: {len(mesh.faces):,} triangles -> "
@@ -323,7 +307,7 @@ def main():
               f"{PX_MM_FALLBACK} mm/px")
         px_mm = PX_MM_FALLBACK
         mesh, top, sea_p, groove, reg_p, stats = build_print_grid(
-            reg_s, dem_s, sea_s, z_scale, px_mm)
+            reg_s, dem_s, sea_s, z_scale, px_mm, lines_region)
 
     print(f"mesh: {len(mesh.faces):,} triangles, "
           f"{len(mesh.vertices):,} vertices")
@@ -337,24 +321,16 @@ def main():
     print(f"hi-res DEM: {stats['n_tiles']} tiles @ zoom {DEM_ZOOM}; "
           f"effective ground resolution {stats['out_res_m']:.1f} m/px; "
           f"grid {stats['out_h']} x {stats['out_w']} px")
+    print(f"groove: {stats['border_km']:.1f} km ground length, "
+          f"{stats['width_px']} px wide")
 
     base.OUT.mkdir(exist_ok=True)
     stl = base.OUT / STL_NAME
     mesh.export(stl)  # .stl -> binary by default in trimesh
     print(f"wrote {stl} ({stl.stat().st_size / 1e6:.1f} MB)")
 
-    # p15.render_preview reads p15's own module-level PX_MM (its statewide
-    # 0.2 mm/px) for hillshade dx/dy, the top-down extent, and the preview
-    # decimation factor -- point it at THIS driver's px_mm for the
-    # duration of the call (ca_wide_z_scale above already ran with p15's
-    # original value, which is what it needs).
-    saved_px_mm = p15.PX_MM
-    p15.PX_MM = px_mm
-    try:
-        png = base.OUT / PNG_NAME
-        p15.render_preview(top, sea_p, groove, reg_p, mesh, png)
-    finally:
-        p15.PX_MM = saved_px_mm
+    png = base.OUT / PNG_NAME
+    p15.render_preview(top, sea_p, groove, reg_p, mesh, png, px_mm)
     print(f"wrote {png}")
 
     cmp_png = base.OUT / COMPARE_PNG_NAME

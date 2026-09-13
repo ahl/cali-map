@@ -7,6 +7,7 @@
 #   "pyproj",
 #   "matplotlib",
 #   "trimesh",
+#   "shapely",
 # ]
 # ///
 """P1.5: engraved one-piece validation print (rectangular slab).
@@ -18,28 +19,41 @@ north-south, printed as one watertight solid:
   - real terrain for CA and its neighbors (same DEM, one z scale);
   - ocean as a FLAT plane at datum height (top of the 2 mm base), so the
     Channel Islands are included, sitting on the ocean surface;
-  - ENGRAVED as ~0.4 mm wide x 0.4 mm deep grooves:
-      * the four-region borders inside California (region-region edges
-        only, regenerated via p1_regions.build_regions — no stale .npy),
-      * political borders (state lines + US-Mexico) from Natural Earth
-        10m shapefiles in data/ne_borders/;
-    the coastline itself is NOT engraved.
+  - ENGRAVED as ~0.4 mm wide x 0.4 mm deep grooves, drawn from VECTOR
+    geometry (not the raster) so curves are smooth instead of jaggy:
+      * region-region borders inside California, from the canonical P2
+        polygons (data/p2_regions_smooth.geojson) — the pairwise shared
+        boundary between each pair of the 4 mainland region polygons;
+      * political borders (state lines + US-Mexico), from
+        data/p2_borders.geojson — the same exact Census/NE-derived lines
+        P2's own vectorization uses, instead of reading the raw Natural
+        Earth shapefiles directly;
+    the coastline itself is NOT engraved (it was never a raster diff
+    against another region OR a p2_borders.geojson line, so it's
+    excluded from both sources by construction, no threshold needed).
 
 Purpose: ahl eyeballs the region borders against real terrain in hand
 before the puzzle is cut.
 
+Mesh pitch is 0.12 mm/px (statewide DEM stays 250 m/zoom-9 — at this
+slab's ~1:7.6M scale that's 0.033 mm, nowhere near the bottleneck; only
+the per-inset drivers like p15b need their own hi-res DEM fetch). Falls
+back to 0.15 mm/px if the predicted binary STL would exceed ~200 MB.
+
 Outputs:
   out/p15_ca_engraved_150mm.stl  binary STL, watertight
-  out/p15_preview.png            top-down (grooves) + oblique 3D view
+  out/p15_preview.png            top-down + oblique 3D + groove-quality
+                                 zoom crop
 """
 
-import struct
+import json
 import sys
 from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw
 from scipy import ndimage
+from shapely.geometry import shape as shp_shape
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import p1_regions as base
@@ -47,48 +61,119 @@ import mesh_common as mc
 
 # ---- print parameters (mm unless noted) -----------------------------------
 NS_MM = 150.0          # north-south extent of the slab
-PX_MM = 0.2            # heightfield pixel size
+PX_MM = 0.12           # heightfield pixel size (statewide DEM stays 250 m;
+                       # see module docstring)
+PX_MM_FALLBACK = 0.15  # used instead of PX_MM if the predicted binary STL
+                       # at PX_MM would exceed STL_SIZE_CAP_BYTES
+STL_SIZE_CAP_BYTES = 200_000_000  # binary STL = 84 + 50*n_faces bytes
 BASE_MM = 2.0          # base thickness; ocean datum plane = top of base
 RELIEF_MM = 5.0        # z_scale default: highest CA peak = this above base
-GROOVE_DEPTH_MM = 0.4  # 2 layers @ 0.2 mm
-GROOVE_W_PX = 2        # total groove width in px (~0.4 mm)
+GROOVE_DEPTH_MM = 0.4  # groove depth
+GROOVE_TARGET_MM = 0.4  # target groove WIDTH; actual px width is whatever
+                        # integer count of px is closest at this PX_MM
 MIN_FLOOR_MM = 1.0     # groove floor never goes below this (base protection)
 PAD_KM = 40.0          # slab margin beyond CA's bbox on N, E, S (not W)
 
 STL_NAME = "p15_ca_engraved_150mm.stl"
 PNG_NAME = "p15_preview.png"
-SHP_DIR = base.DATA / "ne_borders"
+REGIONS_GEOJSON = base.DATA / "p2_regions_smooth.geojson"
+BORDERS_GEOJSON = base.DATA / "p2_borders.geojson"
 OCEAN_RGB = (0.73, 0.82, 0.90)
 
 
-def read_shp_polylines(path):
-    """Minimal ESRI shapefile reader: returns the parts of every PolyLine/
-    PolyLineZ record as a list of (N, 2) lon/lat arrays. Geometry only —
-    no .dbf attributes needed, we clip by the slab window instead."""
-    buf = Path(path).read_bytes()
-    parts_out = []
-    pos = 100  # main file header
-    while pos < len(buf):
-        (clen,) = struct.unpack(">i", buf[pos + 4:pos + 8])
-        rec = buf[pos + 8:pos + 8 + 2 * clen]
-        pos += 8 + 2 * clen
-        (stype,) = struct.unpack("<i", rec[:4])
-        if stype in (3, 13, 23):  # PolyLine, Z, M
-            nparts, npts = struct.unpack("<2i", rec[36:44])
-            off = 44
-            starts = np.frombuffer(rec, "<i4", nparts, off)
-            off += 4 * nparts
-            xy = np.frombuffer(rec, "<f8", 2 * npts, off).reshape(-1, 2)
-            bounds = np.append(starts, npts)
-            for a, b in zip(bounds[:-1], bounds[1:]):
-                parts_out.append(xy[a:b])
-    return parts_out
+# ---- vector groove geometry (EPSG:3310 meters) -----------------------------
 
+def load_region_polygons():
+    """Mainland region polygons (mountains/valley/desert/coast), EPSG:3310
+    meters, from the canonical P2 vector geometry -- the Chaikin-smoothed
+    'preview flavor' (data/p2_regions_smooth.geojson), i.e. the same
+    curve a human eye judges the border by. Excludes region_id 5 (the
+    islands piece): it's a separate piece that never shares a mainland
+    border with these four."""
+    gj = json.loads(REGIONS_GEOJSON.read_text())
+    return {f["properties"]["region_id"]: shp_shape(f["geometry"])
+            for f in gj["features"] if f["properties"]["region_id"] != 5}
+
+
+def _iter_lines(geom):
+    """Flatten a shapely geometry (possibly a GeometryCollection from a
+    boundary intersection) down to its LineString parts; tangential
+    single-point touches (Point/MultiPoint) are not grooves."""
+    if geom.is_empty:
+        return
+    if geom.geom_type == "LineString":
+        yield geom
+    elif geom.geom_type in ("MultiLineString", "GeometryCollection"):
+        for g in geom.geoms:
+            yield from _iter_lines(g)
+
+
+def region_border_lines():
+    """Every pairwise shared boundary between the 4 mainland region
+    polygons -- interior region-region borders ONLY. A pair's boundary
+    intersection can only contain the stretch those two polygons
+    actually share, so the coastline (only COAST's boundary touches open
+    water) and the state-line/frame edges (none of the four polygons
+    extends past CA) never appear here -- excluded by the geometry
+    itself, no raster/threshold logic needed."""
+    polys = load_region_polygons()
+    ids = sorted(polys)
+    lines = []
+    for i in range(len(ids)):
+        for j in range(i + 1, len(ids)):
+            shared = polys[ids[i]].boundary.intersection(polys[ids[j]].boundary)
+            lines.extend(_iter_lines(shared))
+    return lines
+
+
+def political_lines():
+    """All state-line / international-border polylines in the map area,
+    EPSG:3310 meters, from data/p2_borders.geojson -- the exact geometry
+    P2's own region vectorization uses, instead of reading the raw
+    Natural Earth shapefiles directly (so frame engraving and future
+    piece edges share one source of truth)."""
+    gj = json.loads(BORDERS_GEOJSON.read_text())
+    return [shp_shape(f["geometry"]) for f in gj["features"]]
+
+
+def rasterize_lines(lines, row_sl, col_sl, out_h, out_w, width_px):
+    """Rasterize EPSG:3310-meter LineStrings onto a print grid as a
+    GROOVE_W-px-wide boolean mask with round joints/caps. row_sl/col_sl =
+    the window's slice on the 250 m source grid; out_h/out_w = the print
+    grid covering that same window (may be a different resolution).
+    Returns (mask, total_ground_length_km)."""
+    img = Image.new("L", (out_w, out_h), 0)
+    drw = ImageDraw.Draw(img)
+    res = base.META["res"]
+    x0, y1 = base.META["x_min"], base.META["y_max"]
+    h_src = row_sl.stop - row_sl.start
+    w_src = col_sl.stop - col_sl.start
+    length_km = 0.0
+    for ln in lines:
+        xs, ys = np.asarray(ln.coords).T
+        src_col = (xs - x0) / res
+        src_row = (y1 - ys) / res
+        px = (src_col - col_sl.start) * out_w / w_src
+        py = (src_row - row_sl.start) * out_h / h_src
+        inside = ((px > -width_px) & (px < out_w + width_px) &
+                  (py > -width_px) & (py < out_h + width_px))
+        if not inside.any():
+            continue
+        drw.line(list(zip(px.tolist(), py.tolist())), fill=1,
+                 width=width_px, joint="curve")
+        length_km += ln.length / 1000.0
+    return np.asarray(img, bool), length_km
+
+
+# ---- raster helpers (elevation / sea / region-fill, unchanged from before) -
 
 def build_source_rasters():
     """Regenerate regions on the 250 m grid; fill interior no-region holes
-    inside CA (CGS gaps near Suisun) so region borders are continuous.
-    Returns (reg, dem, sea, n_hole_cells) on the full source grid."""
+    inside CA (CGS gaps near Suisun) so land/sea + region-id lookups stay
+    complete. Returns (reg, dem, sea, n_hole_cells) on the full source
+    grid. (Grooves no longer come from this raster -- see
+    region_border_lines/political_lines above -- but the raster still
+    drives elevation, land/sea, and the CA-max-elevation z_scale.)"""
     dem = np.load(base.DATA / "dem_ca_albers_250m.npy")
     prov, name_id = base.rasterize_provinces()
     sea = base.ocean_mask(dem)
@@ -141,65 +226,87 @@ def resample(arr, out_h, out_w, order):
                                    order=order)
 
 
-def region_groove(reg):
-    """Groove cells + border length (mm) for edges between two DIFFERENT
-    land regions. Coastline / state line (reg==0 outside) excluded."""
-    m = reg > 0
-    dh = m[:, :-1] & m[:, 1:] & (reg[:, :-1] != reg[:, 1:])
-    dv = m[:-1] & m[1:] & (reg[:-1] != reg[1:])
-    g = np.zeros_like(m)
-    g[:, :-1] |= dh
-    g[:, 1:] |= dh
-    g[:-1] |= dv
-    g[1:] |= dv
-    return g, (int(dh.sum()) + int(dv.sum())) * PX_MM
+# ---- build + preview -------------------------------------------------------
+
+def build(px_mm, reg_s, dem_s, sea_s, win, lines_region, lines_political):
+    """Everything from the (already-sliced) slab window down to the
+    finished mesh, at heightfield resolution px_mm. Returns (mesh, top,
+    sea_p, groove, reg_p, stats)."""
+    row_sl, col_sl = win
+    reg_w, dem_w, sea_w = reg_s[win], dem_s[win], sea_s[win]
+    h_src, w_src = dem_w.shape
+
+    ns_ground_m = h_src * base.META["res"]
+    scale_den = ns_ground_m * 1000.0 / NS_MM
+    out_h = int(round(NS_MM / px_mm))
+    out_w = int(round(w_src * out_h / h_src))
+
+    # sea floor must not bleed into coastal land during bilinear resampling
+    dem_p = resample(np.where(sea_w, 0.0, dem_w), out_h, out_w, order=1)
+    reg_p = resample(reg_w, out_h, out_w, order=0)
+    sea_p = resample(sea_w.astype(np.uint8), out_h, out_w, order=0).astype(bool)
+    reg_p[sea_p] = 0
+    print(f"print grid {out_h} x {out_w} px @ {px_mm} mm/px")
+
+    ca_rows = np.nonzero((reg_p > 0).any(axis=1))[0]
+    max_elev_ca = float(dem_p[reg_p > 0].max())
+    max_elev_win = float(dem_p[~sea_p].max())
+    z_scale = RELIEF_MM / max_elev_ca            # mm per meter of elevation
+    horiz = 1000.0 / scale_den                   # mm per meter of ground
+    print(f"scale 1:{scale_den:,.0f}; slab {out_w * px_mm:.1f} mm E-W x "
+          f"{NS_MM:.0f} mm N-S; CA spans {len(ca_rows) * px_mm:.1f} mm N-S")
+    print(f"max elev: CA {max_elev_ca:.0f} m -> {RELIEF_MM} mm relief "
+          f"(window max {max_elev_win:.0f} m -> "
+          f"{max_elev_win * z_scale:.2f} mm); "
+          f"vertical exaggeration {z_scale / horiz:.1f}x")
+
+    top = np.where(sea_p, BASE_MM, BASE_MM + dem_p * z_scale)
+
+    width_px = max(1, round(GROOVE_TARGET_MM / px_mm))
+    g_reg, border_km = rasterize_lines(lines_region, row_sl, col_sl,
+                                       out_h, out_w, width_px)
+    g_pol, pol_km = rasterize_lines(lines_political, row_sl, col_sl,
+                                    out_h, out_w, width_px)
+    groove = g_reg | g_pol
+    gt = top[groove] - GROOVE_DEPTH_MM
+    n_clamp = int((gt < MIN_FLOOR_MM).sum())
+    top[groove] = np.maximum(gt, MIN_FLOOR_MM)
+    print(f"grooves (vector-drawn): {int(groove.sum())} px lowered "
+          f"(region borders {border_km:.1f} km, political {pol_km:.1f} km "
+          f"ground length; width {width_px} px = {width_px * px_mm:.2f} mm "
+          f"vs {GROOVE_TARGET_MM} mm target); depth {GROOVE_DEPTH_MM} mm, "
+          f"floor clamped at {MIN_FLOOR_MM} mm on {n_clamp} px")
+
+    # node heights: mean everywhere, min next to grooves so the groove
+    # keeps its full width and depth instead of averaging to a V
+    mask = np.ones_like(sea_p)
+    node_z = mc.node_heights(top, mask, "mean")
+    node_min = mc.node_heights(top, mask, "min")
+    gp = np.zeros((out_h + 2, out_w + 2), bool)
+    gp[1:-1, 1:-1] = groove
+    node_g = gp[:-1, :-1] | gp[:-1, 1:] | gp[1:, :-1] | gp[1:, 1:]
+    node_z = np.where(node_g, node_min, node_z)
+
+    mesh = mc.heightfield_to_mesh(top, mask, px_mm, node_z=node_z,
+                                  bottom="fan")
+    stats = dict(out_h=out_h, out_w=out_w, scale_den=scale_den,
+                 border_km=border_km, pol_km=pol_km, width_px=width_px)
+    return mesh, top, sea_p, groove, reg_p, stats
 
 
-def political_groove(win_sl, out_h, out_w):
-    """Rasterize Natural Earth state lines + international borders (clipped
-    to the slab window) as GROOVE_W_PX-wide lines on the print grid.
-    Returns (mask, approx_length_mm)."""
-    r_sl, c_sl = win_sl
-    h_src = r_sl.stop - r_sl.start
-    w_src = c_sl.stop - c_sl.start
-    lon0, lon1 = base.META["lon_range"]
-    lat0, lat1 = base.META["lat_range"]
-    img = Image.new("L", (out_w, out_h), 0)
-    drw = ImageDraw.Draw(img)
-    length_m = 0.0
-    for shp in ("ne_10m_admin_1_states_provinces_lines.shp",
-                "ne_10m_admin_0_boundary_lines_land.shp"):
-        for part in read_shp_polylines(SHP_DIR / shp):
-            if (part[:, 0].max() < lon0 - 1 or part[:, 0].min() > lon1 + 1 or
-                    part[:, 1].max() < lat0 - 1 or part[:, 1].min() > lat1 + 1):
-                continue
-            sx, sy = base.px_of(part[:, 0], part[:, 1])  # source px
-            px = (sx - c_sl.start) * out_w / w_src       # print px
-            py = (sy - r_sl.start) * out_h / h_src
-            inside = ((px > -2) & (px < out_w + 2) &
-                      (py > -2) & (py < out_h + 2))
-            if not inside.any():
-                continue
-            drw.line(list(zip(px.tolist(), py.tolist())),
-                     fill=1, width=GROOVE_W_PX)
-            seg = inside[:-1] & inside[1:]
-            length_m += np.hypot(np.diff(px), np.diff(py))[seg].sum() * PX_MM
-    return np.asarray(img, bool), length_m
-
-
-def render_preview(top, sea, groove, reg, mesh_full, out_path):
+def render_preview(top, sea, groove, reg, mesh_full, out_path, px_mm):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.colors import LightSource
 
-    fig = plt.figure(figsize=(17, 10), dpi=130)
+    fig = plt.figure(figsize=(24, 9.5), dpi=130)
     h, w = top.shape
 
     # -- panel 1: top-down, grooves visible ---------------------------------
-    ax = fig.add_subplot(1, 2, 1)
+    ax = fig.add_subplot(1, 3, 1)
     ls = LightSource(azdeg=315, altdeg=45)
-    shade = ls.hillshade(top, vert_exag=3, dx=PX_MM, dy=PX_MM)
+    shade = ls.hillshade(top, vert_exag=3, dx=px_mm, dy=px_mm)
     rgb = np.dstack([shade] * 3) * 0.6 + 0.4
     for rid, col in base.COLORS.items():
         m = reg == rid
@@ -207,8 +314,8 @@ def render_preview(top, sea, groove, reg, mesh_full, out_path):
             rgb[:, :, ch][m] = rgb[:, :, ch][m] * 0.72 + col[ch] * 0.28
     rgb[sea] = OCEAN_RGB
     rgb[groove] = (0.05, 0.05, 0.05)
-    ax.imshow(rgb, extent=[0, w * PX_MM, 0, h * PX_MM])
-    ax.set_title(f"top-down  ({w * PX_MM:.1f} x {h * PX_MM:.1f} mm slab, "
+    ax.imshow(rgb, extent=[0, w * px_mm, 0, h * px_mm])
+    ax.set_title(f"top-down  ({w * px_mm:.1f} x {h * px_mm:.1f} mm slab, "
                  "grooves black)")
     ax.set_xlabel("mm (E-W)")
     ax.set_ylabel("mm (S-N)")
@@ -217,12 +324,12 @@ def render_preview(top, sea, groove, reg, mesh_full, out_path):
     ds = 3
     mesh_d = mc.heightfield_to_mesh(top[::ds, ::ds],
                                     np.ones_like(top[::ds, ::ds], bool),
-                                    PX_MM * ds, bottom="fan")
+                                    px_mm * ds, bottom="fan")
     v, f = mesh_d.vertices, mesh_d.faces
     # drop the bottom fan: its slab-sized z=0 triangles defeat matplotlib's
     # painter-algorithm depth sort and get drawn over the terrain
     f = f[~(v[f][:, :, 2] < 1e-9).all(axis=1)]
-    ax2 = fig.add_subplot(1, 2, 2, projection="3d")
+    ax2 = fig.add_subplot(1, 3, 2, projection="3d")
     ax2.plot_trisurf(v[:, 0], v[:, 1], f, v[:, 2], cmap="gist_earth",
                      linewidth=0, antialiased=False,
                      vmin=BASE_MM - 1.5, vmax=float(top.max()))
@@ -232,6 +339,23 @@ def render_preview(top, sea, groove, reg, mesh_full, out_path):
     ax2.set_title(f"oblique (z shown 4x; real thickness {ext[2]:.1f} mm max)")
     ax2.set_xlabel("mm E")
     ax2.set_ylabel("mm N")
+
+    # -- panel 3: groove-quality zoom crop -----------------------------------
+    # crop centered on the median groove pixel (typically near a
+    # region-junction, and always ON a groove) so curve smoothness is
+    # visible at native pixel resolution
+    ax3 = fig.add_subplot(1, 3, 3)
+    gy, gx = np.nonzero(groove)
+    cy0, cx0 = (int(np.median(gy)), int(np.median(gx))) if gy.size else (h // 2, w // 2)
+    half_px = int(round(15.0 / px_mm))  # ~30x30 mm crop
+    r0, r1 = max(cy0 - half_px, 0), min(cy0 + half_px, h)
+    c0, c1 = max(cx0 - half_px, 0), min(cx0 + half_px, w)
+    ax3.imshow(rgb[r0:r1, c0:c1],
+              extent=[c0 * px_mm, c1 * px_mm, (h - r1) * px_mm, (h - r0) * px_mm])
+    ax3.set_title(f"groove-quality crop ({(c1 - c0) * px_mm:.0f} x "
+                 f"{(r1 - r0) * px_mm:.0f} mm @ {px_mm} mm/px)")
+    ax3.set_xlabel("mm (E-W)")
+    ax3.set_ylabel("mm (S-N)")
 
     fig.tight_layout()
     base.OUT.mkdir(exist_ok=True)
@@ -246,60 +370,29 @@ def main():
           f"dropped from the region raster: {n_or}")
 
     win = slab_window(reg_s > 0)
-    reg_w, dem_w, sea_w = reg_s[win], dem_s[win], sea_s[win]
-    h_src, w_src = dem_w.shape
-    print(f"slab window: {h_src} x {w_src} px @ 250 m "
-          f"({h_src * 0.25:.0f} x {w_src * 0.25:.0f} km)")
 
-    ns_ground_m = h_src * base.META["res"]
-    scale_den = ns_ground_m * 1000.0 / NS_MM
-    out_h = int(round(NS_MM / PX_MM))
-    out_w = int(round(w_src * out_h / h_src))
+    lines_region = region_border_lines()
+    lines_political = political_lines()
+    print(f"vector groove sources: {len(lines_region)} region-border line "
+          f"parts (data/p2_regions_smooth.geojson), "
+          f"{len(lines_political)} political line parts "
+          f"(data/p2_borders.geojson)")
 
-    # sea floor must not bleed into coastal land during bilinear resampling
-    dem_p = resample(np.where(sea_w, 0.0, dem_w), out_h, out_w, order=1)
-    reg_p = resample(reg_w, out_h, out_w, order=0)
-    sea_p = resample(sea_w.astype(np.uint8), out_h, out_w, order=0).astype(bool)
-    reg_p[sea_p] = 0
-    print(f"print grid {out_h} x {out_w} px @ {PX_MM} mm/px")
+    px_mm = PX_MM
+    mesh, top, sea_p, groove, reg_p, stats = build(
+        px_mm, reg_s, dem_s, sea_s, win, lines_region, lines_political)
 
-    ca_rows = np.nonzero((reg_p > 0).any(axis=1))[0]
-    max_elev_ca = float(dem_p[reg_p > 0].max())
-    max_elev_win = float(dem_p[~sea_p].max())
-    z_scale = RELIEF_MM / max_elev_ca            # mm per meter of elevation
-    horiz = 1000.0 / scale_den                   # mm per meter of ground
-    print(f"scale 1:{scale_den:,.0f}; slab {out_w * PX_MM:.1f} mm E-W x "
-          f"{NS_MM:.0f} mm N-S; CA spans {len(ca_rows) * PX_MM:.1f} mm N-S")
-    print(f"max elev: CA {max_elev_ca:.0f} m -> {RELIEF_MM} mm relief "
-          f"(window max {max_elev_win:.0f} m -> "
-          f"{max_elev_win * z_scale:.2f} mm); "
-          f"vertical exaggeration {z_scale / horiz:.1f}x")
+    predicted_bytes = 84 + 50 * len(mesh.faces)
+    print(f"mesh @ {px_mm} mm/px: {len(mesh.faces):,} triangles -> "
+          f"predicted binary STL {predicted_bytes / 1e6:.1f} MB")
+    if predicted_bytes > STL_SIZE_CAP_BYTES:
+        print(f"predicted STL exceeds the {STL_SIZE_CAP_BYTES / 1e6:.0f} MB "
+              f"cap at {px_mm} mm/px -- falling back to "
+              f"{PX_MM_FALLBACK} mm/px")
+        px_mm = PX_MM_FALLBACK
+        mesh, top, sea_p, groove, reg_p, stats = build(
+            px_mm, reg_s, dem_s, sea_s, win, lines_region, lines_political)
 
-    top = np.where(sea_p, BASE_MM, BASE_MM + dem_p * z_scale)
-
-    g_reg, border_mm = region_groove(reg_p)
-    g_pol, pol_mm = political_groove(win, out_h, out_w)
-    groove = g_reg | g_pol
-    gt = top[groove] - GROOVE_DEPTH_MM
-    n_clamp = int((gt < MIN_FLOOR_MM).sum())
-    top[groove] = np.maximum(gt, MIN_FLOOR_MM)
-    print(f"grooves: {int(groove.sum())} px lowered "
-          f"(region borders {border_mm:.0f} mm, political ~{pol_mm:.0f} mm); "
-          f"depth {GROOVE_DEPTH_MM} mm, floor clamped at {MIN_FLOOR_MM} mm "
-          f"on {n_clamp} px")
-
-    # node heights: mean everywhere, min next to grooves so the 2-px slot
-    # keeps its full 0.4 mm width and depth instead of averaging to a V
-    mask = np.ones_like(sea_p)
-    node_z = mc.node_heights(top, mask, "mean")
-    node_min = mc.node_heights(top, mask, "min")
-    gp = np.zeros((out_h + 2, out_w + 2), bool)
-    gp[1:-1, 1:-1] = groove
-    node_g = gp[:-1, :-1] | gp[:-1, 1:] | gp[1:, :-1] | gp[1:, 1:]
-    node_z = np.where(node_g, node_min, node_z)
-
-    mesh = mc.heightfield_to_mesh(top, mask, PX_MM, node_z=node_z,
-                                  bottom="fan")
     print(f"mesh: {len(mesh.faces):,} triangles, "
           f"{len(mesh.vertices):,} vertices")
     print(f"watertight={mesh.is_watertight}  "
@@ -316,7 +409,7 @@ def main():
     print(f"wrote {stl} ({stl.stat().st_size / 1e6:.1f} MB)")
 
     png = base.OUT / PNG_NAME
-    render_preview(top, sea_p, groove, reg_p, mesh, png)
+    render_preview(top, sea_p, groove, reg_p, mesh, png, px_mm)
     print(f"wrote {png}")
 
 
