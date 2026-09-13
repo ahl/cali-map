@@ -39,6 +39,12 @@ valley_absorb_km = 7.5
 # enclaves left by absorption; also absorbs Sutter Buttes).
 valley_fill_enclosed = true
 
+# Lowland (m) connected to the Great Valley floor is valley — reclaims
+# the Delta, which CGS files under its "Coastline SubProvince" and which
+# the Carquinez gate correctly keeps out of Coast. Only Mountains cells
+# are reassigned (never Coast/Desert). 0 disables.
+valley_lowland_m = 50
+
 # The shoreline band only emanates from open water at least ~2x this wide
 # (km): rivers and Delta channels don't generate coastal band, bays and
 # ocean do.

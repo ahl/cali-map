@@ -111,12 +111,9 @@ def load_streams(bbox):
     Returns (features, stats) where each feature is
     (shapely geom in EPSG:3310, name, strahler)."""
     shp = fetch("streaml010g")
-    rd = shapefile.Reader(str(shp))
+    rd = shapefile.Reader(str(shp), encoding="latin-1")
     fields = [f[0] for f in rd.fields[1:]]
     print(f"streams: {rd.numRecords} records, fields: {fields}")
-    i_str = fields.index("Strahler")
-    i_name = fields.index("Name")
-    i_feat = fields.index("Feature")
 
     kept, n_pass, n_exc, feats_seen = [], 0, 0, {}
     for sr in rd.iterShapeRecords(fields=["Strahler", "Name", "Feature"]):
@@ -153,7 +150,7 @@ def load_waterbodies(bbox):
     """Filtered, clipped, reprojected waterbodies.
     Each feature: (geom EPSG:3310, name, area_sq_mi)."""
     shp = fetch("wtrbdyp010g")
-    rd = shapefile.Reader(str(shp))
+    rd = shapefile.Reader(str(shp), encoding="latin-1")
     fields = [f[0] for f in rd.fields[1:]]
     print(f"waterbodies: {rd.numRecords} records, fields: {fields}")
 
@@ -218,11 +215,17 @@ ICONIC_RIVERS = ["Sacramento River", "San Joaquin River", "Colorado River",
 N_LAKE_LABELS = 15
 
 
+# label nudges (points) to break known collisions
+LABEL_OFFSET = {"Lake Almanor": (-14, 10, "right"),
+                "Honey Lake": (8, -3, "left"),
+                "Shasta Lake": (5, 6, "left")}
+
+
 def stream_lw(strahler):
-    """Line width scaled by Strahler order (sentinel/named -> thinnest)."""
-    if strahler < 1:
-        return 0.5
-    return 0.35 * (strahler - 2)  # 4->0.7, 5->1.05, 6->1.4, 7->1.75
+    """Line width scaled by Strahler order (named exceptions -> thinnest)."""
+    if strahler < STRAHLER_MIN:
+        return 1.0
+    return 1.3 + 0.6 * (strahler - STRAHLER_MIN)  # 4->1.3, 5->1.9, 6->2.5
 
 
 def render_preview(streams, waterbodies):
@@ -282,10 +285,11 @@ def render_preview(streams, waterbodies):
     for name in ordered[:N_LAKE_LABELS]:
         geom, area = by_name[name]
         pt = geom.representative_point()
+        dx, dy, ha = LABEL_OFFSET.get(name, (4, 4, "left"))
         ax.annotate(name, (pt.x / 1000, pt.y / 1000),
-                    xytext=(4, 4), textcoords="offset points",
+                    xytext=(dx, dy), textcoords="offset points",
                     fontsize=7.5, color="#0a3d7a", fontweight="bold",
-                    zorder=6,
+                    ha=ha, zorder=6,
                     path_effects=_halo())
 
     # --- labels: rivers, at the midpoint of each river's longest arc ---

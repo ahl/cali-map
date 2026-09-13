@@ -170,7 +170,7 @@ def heightfield_to_mesh(top, mask, px, node_z=None, bottom="grid"):
             node_id[H, 0:W + 1],            # south edge, west -> east
             node_id[H - 1::-1, W],          # east edge, south -> north
             node_id[0, W - 1::-1],          # north edge, east -> west
-            node_id[H - 1:0:-1, 0],         # west edge, north -> south
+            node_id[1:H, 0],                # west edge, north -> south
         ]) + o
         center = np.array([[W * px / 2.0, H * px / 2.0, 0.0]])
         verts = np.vstack([verts, center])

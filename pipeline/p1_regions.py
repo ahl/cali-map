@@ -245,14 +245,50 @@ def build_regions(dem, prov, name_id, coast_threshold_m, coast_from=None,
     out[valley] = VALLEY
     out[desert] = DESERT
     out[coast] = COAST
+    # Lowland connected to the valley floor is valley (reclaims the Delta,
+    # which CGS assigns to a Coastline SubProvince; the gate keeps it out
+    # of Coast, which would otherwise leave it Mountains). Only Mountains
+    # cells flip — Coast and Desert are never stolen.
+    vlow = CFG.get("valley_lowland_m", 0)
+    if vlow:
+        lowv = ~sea & mainland & (dem <= vlow)
+        barv = gate_barrier(dem.shape)
+        if barv is not None:
+            lowv = lowv & ~barv
+        lv, _ = ndimage.label(lowv)
+        vids = np.unique(lv[valley & lowv])
+        sel = np.isin(lv, vids[vids > 0]) & (out == MOUNTAINS)
+        out[sel] = VALLEY
+        valley = valley | sel
+
     # No-region land enclosed by the map (CGS province gaps near Suisun,
     # and the Delta datum-land created by the ocean gate) -> nearest
     # region. Cured properly in P2 when the Census polygon defines land.
     gaps = ndimage.binary_fill_holes((out > 0) | sea) & (out == 0) & ~sea
     if gaps.any():
-        _, (ir, ic) = ndimage.distance_transform_edt(
-            out == 0, return_indices=True)
-        out[gaps] = out[ir[gaps], ic[gaps]]
+        # per-BLOB majority-of-border assignment (per-cell nearest painted
+        # the reclaimed Delta as Mountains via the strait-side hills; its
+        # perimeter is overwhelmingly Valley, which is the right answer)
+        glab, gn = ndimage.label(gaps)
+        gsl = ndimage.find_objects(glab)
+        for i in range(1, gn + 1):
+            sl = gsl[i - 1]
+            sl = (slice(max(sl[0].start - 1, 0), min(sl[0].stop + 1, out.shape[0])),
+                  slice(max(sl[1].start - 1, 0), min(sl[1].stop + 1, out.shape[1])))
+            comp = glab[sl] == i
+            ring = ndimage.binary_dilation(comp) & ~comp
+            vals = out[sl][ring]
+            vals = vals[vals != SEA]
+            if not len(vals):
+                continue
+            # lowland gaps touching the valley ARE valley (the CGS Great
+            # Valley polygon has a huge hole over the Delta; its perimeter
+            # is majority-Mountains via the Diablo Range, so a plain
+            # majority vote paints the Delta magenta — wrong)
+            if (vals == VALLEY).any() and np.median(dem[sl][comp]) < 50.0:
+                out[sl][comp] = VALLEY
+            else:
+                out[sl][comp] = np.bincount(vals).argmax()
 
     if CFG.get("enforce_contiguous"):
         make_contiguous(out, mainland, sea)
