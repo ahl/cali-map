@@ -1,0 +1,28 @@
+# California topo puzzle — build configuration
+# All geometry parameters live here; scripts in pipeline/ read this file.
+
+[regions]
+# Coast piece = shoreline-contiguous land at/below this elevation (meters),
+# excluding the Great Valley. THE knob for the coast/mountains border.
+# Candidates rendered side-by-side by p1_regions.py; pick at P1 check-in.
+coast_threshold_m = 300
+coast_candidates_m = [200, 300, 400]
+
+# Minimum shoreline band (km): mainland within this distance of the ocean
+# is Coast regardless of elevation, keeping the strip continuous where
+# mountains meet the sea (Big Sur, Lost Coast). 0 disables.
+coast_band_km = 5.0
+
+# Offshore islands below this latitude belong to Mexico (Coronados, Todos
+# Santos), not the Coast piece. Interim rule until the Census state
+# polygon is wired in (P2).
+island_min_lat = 32.6
+
+# Morphological smoothing radius applied to region masks (km). Keeps the
+# puzzle borders printable; final per-scale min-width pass comes later.
+smooth_radius_km = 2.0
+
+# CGS province -> region grouping (RANGE_NAME values)
+valley_provinces = ["Great Valley"]
+desert_provinces = ["Mojave Desert", "Colorado Desert", "Basin and Range"]
+# everything else in CA defaults to Mountains; Coast is carved by elevation

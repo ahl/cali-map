@@ -25,6 +25,8 @@ set into a frame of the surrounding geography.
 | D6 | Print bed 256×256 mm; whole model ≤ 1000×1000 mm total | Either frame fits one bed, or frame is carved into tiles |
 | D7 | Material: PLA. Fit: snug but disassemblable | Clearance values TBD (see G3) |
 | D8 | Version control: jj (colocated git), repo = this directory | |
+| D10 | Map area may be REDUCED in the final crop | ahl intentionally over-cropped the reference area. End-stage parameter; affects only the frame, never the pieces. Only reductions. |
+| D11 | Physical scale decided at the END; possibly multiple scales | Geometry/borders in map meters; scale, Z-exaggeration, clearance applied at mesh export. Per-scale border min-width pass required (printable width is fixed in mm). |
 | D9 | Waterways/lakes as second color on EACH piece — **OPTIONAL** | ahl may or may not print with these; keep it a build flag. Default output = solid single-color pieces; water variant = region body minus water inlays + water bodies in one 3MF (AMS + Bambu Studio confirmed). Prototyped P3, implemented P5, final call at the end. |
 
 ## Data sources (verified accessible 2026-09-13)
@@ -77,6 +79,12 @@ set into a frame of the surrounding geography.
   - *Mountains* = everything else.
   - **Remaining decision**: pick the coast elevation threshold from
     side-by-side rendered candidates (Phase 1 check-in).
+  - P1 renders done (out/p1_coast_candidates.png): 200/300/400 m plus
+    "300 m + 5 km shoreline band" (band keeps the strip continuous at
+    Big Sur / Lost Coast; islands always Coast). CGS's own Coastline
+    SubProvinces rendered too but far skinnier (3% of CA) than ahl's
+    reference images. **Recommendation: 300 m + 5 km band.** Config knobs:
+    coast_threshold_m, coast_band_km in config.toml. Awaiting ahl's pick.
 - **G2 — Vertical exaggeration factor**: TBD (typical 3–8× at this scale).
   Also: base thickness value.
 - **G3 — Clearances**: PLA-on-PLA puzzle fit; likely ~0.15–0.25 mm/side,
