@@ -252,6 +252,18 @@ until its inputs are signed off. Every phase is a jj commit.
   invisibly fragments the coast band; the Census state polygon becomes
   the land authority in P2.
 
+## DEM resolution strategy (2026-09-13, after ahl noticed inset softness)
+
+- Global heightfield: zoom-9 terrarium, 250 m — sufficient wherever
+  250 m <= ~0.12 mm in print (all full-map scales: 1:7.5M slab 0.03 mm,
+  420 mm build 0.10 mm).
+- 1:1M INSETS are data-limited at 250 m (0.25 mm): use zoom-11 (~60 m)
+  window fetches via pipeline/dem_hires.py + finer heightfield
+  (~0.12 mm/px). Grooves/regions stay on the 250 m raster (borders don't
+  need hi-res).
+- Slicer never smooths; nozzle physics low-passes anything < ~0.2 mm.
+  Deliberate border smoothing lives in the P2 vector stage.
+
 ## Toolchain
 
 - **Mesh generation**: Python via `uv` (rasterio/shapely/pyproj/trimesh) —

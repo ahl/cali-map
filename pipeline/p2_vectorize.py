@@ -54,7 +54,9 @@ from pathlib import Path
 import numpy as np
 import shapely
 from scipy import ndimage
-from shapely.geometry import LineString, mapping
+from shapely.geometry import LineString, Point, mapping
+from shapely.geometry import shape as shp_shape
+from shapely.ops import substring
 from shapely.strtree import STRtree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -284,6 +286,120 @@ def arc_coords(path, CW):
     return np.column_stack([x, y])
 
 
+# ------------------------------------------- political / natural split --
+
+MIN_RUN_EDGES = 8  # < 2 km flag jitter merged into the neighboring run
+
+
+def edge_flags(path, P, S, CW):
+    """Per raw edge: True if POLITICAL — the edge's zero-label (outside-CA)
+    side is LAND per the P2 land authority (state line / Mexico border);
+    False if NATURAL (coastline against sea, or interior region-region)."""
+    flags = []
+    for k in range(len(path) - 1):
+        a, b = path[k], path[k + 1]
+        ra, ca_ = divmod(a, CW)
+        rb, cb = divmod(b, CW)
+        if ra == rb:                      # horizontal edge
+            c = min(ca_, cb)
+            pix = [(ra - 1, c), (ra, c)]  # above, below
+        else:                             # vertical edge
+            r = min(ra, rb)
+            pix = [(r, ca_ - 1), (r, ca_)]  # left, right
+        l1, l2 = P[pix[0]], P[pix[1]]
+        if l1 and l2:
+            flags.append(False)
+        else:
+            flags.append(bool(S[pix[0] if l1 == 0 else pix[1]]))
+    return flags
+
+
+def _merge_short_runs(runs, min_edges):
+    runs = [list(r) for r in runs]
+    while len(runs) > 1:
+        i = min(range(len(runs)), key=lambda k: runs[k][1])
+        if runs[i][1] >= min_edges:
+            break
+        j = i - 1 if i > 0 else i + 1
+        runs[j][1] += runs[i][1]
+        runs.pop(i)
+        k = 1
+        while k < len(runs):  # coalesce equal-flag neighbors
+            if runs[k][0] == runs[k - 1][0]:
+                runs[k - 1][1] += runs[k][1]
+                runs.pop(k)
+            else:
+                k += 1
+    return runs
+
+
+def classify_split(paths, cycles, CW, R, land_mask):
+    """Split every arc into maximal POLITICAL/NATURAL stretches (new
+    endpoints at the transitions, e.g. where the 42N line meets the
+    Pacific). Returns [(node path, is_cycle, is_political), ...]."""
+    h, w = R.shape
+    P = np.zeros((h + 2, w + 2), np.uint8)
+    P[1:-1, 1:-1] = R
+    S = np.zeros((h + 2, w + 2), bool)
+    S[1:-1, 1:-1] = land_mask
+    out = []
+    for path, cyc in zip(paths, cycles):
+        fl = edge_flags(path, P, S, CW)
+        if all(f == fl[0] for f in fl):
+            out.append((path, cyc, fl[0]))
+            continue
+        if cyc:  # rotate the ring to start at a transition, then split
+            k = next(i for i in range(1, len(fl)) if fl[i] != fl[i - 1])
+            ring = path[:-1]
+            path = ring[k:] + ring[:k] + [ring[k]]
+            fl = fl[k:] + fl[:k]
+            cyc = False
+        runs = [[fl[0], 0]]
+        for f in fl:
+            if f == runs[-1][0]:
+                runs[-1][1] += 1
+            else:
+                runs.append([f, 1])
+        runs = _merge_short_runs(runs, MIN_RUN_EDGES)
+        if len(runs) == 1:
+            out.append((path, cyc, runs[0][0]))
+            continue
+        s = 0
+        for flag, n in runs:
+            out.append((path[s:s + n + 1], False, bool(flag)))
+            s += n
+    return out
+
+
+def political_reference():
+    """Reference border polylines (data/p2_borders.geojson, EPSG:3310):
+    the lines that bound California against land. Census pairwise lines
+    merge into one continuous chain (42N + 120W + diagonal + Colorado
+    River); the NE-derived US-Mexico line stays its own part."""
+    gj = json.loads((DATA / "p2_borders.geojson").read_text())
+    keep = ("California-Oregon", "California-Nevada", "Arizona-California",
+            "US-Mexico")
+    lines = [shp_shape(f["geometry"]) for f in gj["features"]
+             if f["properties"]["pair"] in keep]
+    merged = shapely.line_merge(shapely.union_all(lines))
+    parts = list(merged.geoms) if hasattr(merged, "geoms") else [merged]
+    parts.sort(key=lambda g: -g.length)  # deterministic; Census chain first
+    return parts
+
+
+def census_ne_corner(parts):
+    """The exact 42N/120W corner vertex: the reference-chain vertex
+    nearest to (lon -120, lat 42)."""
+    tx, ty = base.TO_ALB.transform(-120.0, 42.0)
+    best, bd = None, np.inf
+    for prt in parts:
+        for x, y in prt.coords:
+            d = (x - tx) ** 2 + (y - ty) ** 2
+            if d < bd:
+                best, bd = (x, y), d
+    return best
+
+
 def check_arrangement(lines):
     """Indices of arcs that self-intersect or cross another arc anywhere
     but a shared endpoint."""
@@ -314,25 +430,33 @@ def check_arrangement(lines):
     return bad
 
 
-def simplify_arcs(raw):
-    """DP-simplify every arc, then back off tolerance on any arc involved
-    in a cross- or self-intersection until the arrangement is clean.
-    Raw pixel arcs only meet at shared endpoints, so tol=0 always passes."""
+def simplify_arcs(raw, fixed):
+    """DP-simplify every non-fixed arc, then back off tolerance on any
+    arc involved in a cross- or self-intersection until the arrangement
+    is clean. `fixed` maps arc index -> exact geometry (political arcs,
+    never DP'd); as a last resort a bad fixed arc reverts to its raw
+    pixel form (raw arcs only meet at shared endpoints, so that passes)."""
     ladder = [SIMPLIFY_M, SIMPLIFY_M / 2, SIMPLIFY_M / 4, 0.0]
     tol_i = [0] * len(raw)
-    lines = [LineString(a).simplify(ladder[0], preserve_topology=True)
-             for a in raw]
-    for _ in range(len(ladder)):
+    lines = [fixed[i] if i in fixed
+             else LineString(a).simplify(ladder[0], preserve_topology=True)
+             for i, a in enumerate(raw)]
+    for round_ in range(len(ladder) + 1):
         bad = check_arrangement(lines)
         if not bad:
             return lines, tol_i
         for i in bad:
-            if tol_i[i] < len(ladder) - 1:
+            if i in fixed:
+                if round_ == len(ladder) - 1:  # last resort only
+                    lines[i] = LineString(raw[i])
+                    print(f"  WARNING: political arc {i} reverted to "
+                          f"raster form (crossed another arc)")
+            elif tol_i[i] < len(ladder) - 1:
                 tol_i[i] += 1
                 lines[i] = LineString(raw[i]).simplify(
                     ladder[tol_i[i]], preserve_topology=True)
         print(f"  simplification back-off on {len(bad)} arcs")
-    return lines, tol_i
+    raise RuntimeError("could not build a clean arrangement")
 
 
 def chaikin(coords, iters, cyclic):
@@ -357,11 +481,14 @@ def chaikin(coords, iters, cyclic):
     return c
 
 
-def smooth_arcs(dp_lines, cycles):
-    """Chaikin the DP arcs; any arc that breaks the arrangement reverts
-    to its DP form (endpoints never move, so borders stay shared)."""
-    sm = [LineString(chaikin(np.asarray(g.coords), CHAIKIN_ITERS, cyc))
-          for g, cyc in zip(dp_lines, cycles)]
+def smooth_arcs(dp_lines, cycles, political):
+    """Chaikin the NATURAL DP arcs only — political arcs keep their exact
+    straight-line geometry (no corner cutting on the state border). Any
+    arc that breaks the arrangement reverts to its DP form (endpoints
+    never move, so borders stay shared)."""
+    sm = [g if pol else
+          LineString(chaikin(np.asarray(g.coords), CHAIKIN_ITERS, cyc))
+          for g, cyc, pol in zip(dp_lines, cycles, political)]
     reverted = 0
     for _ in range(4):
         bad = check_arrangement(sm)
@@ -497,17 +624,79 @@ def main():
           f"{len(islands_mp.geoms[0].exterior.coords)} vertices")
 
     print("\nextracting boundary arcs...")
-    paths, cycles, CW = extract_arcs(R)
+    paths0, cycles0, CW = extract_arcs(R)
+    subs = classify_split(paths0, cycles0, CW, R, ~sea)
+    paths = [s[0] for s in subs]
+    cycles = [s[1] for s in subs]
+    political = [s[2] for s in subs]
     raw = [arc_coords(p, CW) for p in paths]
-    print(f"  {len(raw)} arcs, {sum(len(a) for a in raw)} raw vertices")
+    print(f"  {len(paths0)} arcs -> {len(subs)} after political/natural "
+          f"split ({sum(political)} political), "
+          f"{sum(len(a) for a in raw)} raw vertices")
 
-    dp_lines, tol_i = simplify_arcs(raw)
+    # political arcs: exact border-line geometry (no corner cutting)
+    parts = political_reference()
+    print(f"  border reference: {len(parts)} polyline part(s), "
+          f"{[f'{p.length / 1000:.0f} km' for p in parts]}")
+    part_of = {}
+    for i, pol in enumerate(political):
+        if not pol:
+            continue
+        pts = shapely.points(raw[i][::max(1, len(raw[i]) // 25)])
+        dm = [float(shapely.distance(prt, pts).mean()) for prt in parts]
+        k = int(np.argmin(dm))
+        if dm[k] > 1500.0:
+            print(f"  WARNING: political arc {i} is {dm[k]:.0f} m from any "
+                  f"border line; keeping it natural")
+            political[i] = False
+        else:
+            part_of[i] = k
+    node_pos = {}  # node id -> ((x, y), part index) — moved onto the line
+    max_shift = 0.0
+    for i, k in part_of.items():
+        for node, xy in ((paths[i][0], raw[i][0]), (paths[i][-1], raw[i][-1])):
+            if node in node_pos and node_pos[node][1] <= k:
+                continue
+            q = parts[k].interpolate(parts[k].project(Point(xy)))
+            node_pos[node] = ((q.x, q.y), k)
+            max_shift = max(max_shift, float(np.hypot(q.x - xy[0],
+                                                      q.y - xy[1])))
+    for i, p in enumerate(paths):  # every arc touching a moved node follows
+        if cycles[i]:
+            continue
+        if p[0] in node_pos:
+            raw[i][0] = node_pos[p[0]][0]
+        if p[-1] in node_pos:
+            raw[i][-1] = node_pos[p[-1]][0]
+    fixed = {}
+    for i, k in part_of.items():
+        prt = parts[k]
+        seg = substring(prt, prt.project(Point(raw[i][0])),
+                        prt.project(Point(raw[i][-1])))
+        cc = np.asarray(seg.coords, float)
+        cc[0], cc[-1] = raw[i][0], raw[i][-1]  # nodes shared bit-exactly
+        fixed[i] = LineString(cc)
+    pol_len = sum(g.length for g in fixed.values()) / 1000
+    print(f"  political arcs: {len(fixed)}, {pol_len:.0f} km total, "
+          f"replaced by exact border segments "
+          f"(max node shift onto line {max_shift:.0f} m)")
+
+    dp_lines, tol_i = simplify_arcs(raw, fixed)
     n_backed = sum(1 for t in tol_i if t > 0)
-    print(f"  DP {SIMPLIFY_M:.0f} m -> {sum(len(g.coords) for g in dp_lines)}"
+    print(f"  DP {SIMPLIFY_M:.0f} m (natural arcs only) -> "
+          f"{sum(len(g.coords) for g in dp_lines)}"
           f" vertices ({n_backed} arcs needed reduced tolerance)")
-    sm_lines = smooth_arcs(dp_lines, cycles)
-    print(f"  chaikin x{CHAIKIN_ITERS} -> "
+    sm_lines = smooth_arcs(dp_lines, cycles, political)
+    print(f"  chaikin x{CHAIKIN_ITERS} (natural arcs only) -> "
           f"{sum(len(g.coords) for g in sm_lines)} vertices")
+
+    # the 42N/120W corner must survive verbatim in BOTH flavors
+    corner = census_ne_corner(parts)
+    for nm, lines in (("canonical", dp_lines), ("smooth", sm_lines)):
+        hit = any(corner in {(c[0], c[1]) for c in g.coords}
+                  for i, g in enumerate(lines) if political[i])
+        print(f"  42N/120W Census corner vertex in {nm} arcs: "
+              f"{'PRESENT (exact)' if hit else 'MISSING - CHECK'}")
 
     print()
     regions_dp = assemble(dp_lines, R, "canonical DP")
@@ -525,10 +714,10 @@ def main():
     write_geojson(DATA / "p2_regions.geojson", regions_dp, islands_mp)
     write_geojson(DATA / "p2_regions_smooth.geojson", regions_sm, islands_mp)
 
-    render_qa(dem, sea, regions_sm, islands_mp)
+    render_qa(dem, sea, regions_sm, islands_mp, parts, corner)
 
 
-def render_qa(dem, sea, regions, islands_mp):
+def render_qa(dem, sea, regions, islands_mp, border_parts, ne_corner):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -566,14 +755,19 @@ def render_qa(dem, sea, regions, islands_mp):
     geoms_cols = [(g, base.COLORS[rid]) for rid, g in regions.items()]
     geoms_cols.append((islands_mp, ISLANDS_COLOR))
 
-    fig, (ax1, ax2) = plt.subplots(
-        1, 2, figsize=(17, 12), dpi=150, width_ratios=[2.05, 1])
+    fig = plt.figure(figsize=(17, 12), dpi=150)
+    gs = fig.add_gridspec(2, 2, width_ratios=[2.05, 1])
+    ax1 = fig.add_subplot(gs[:, 0])
+    ax2 = fig.add_subplot(gs[0, 1])
+    ax3 = fig.add_subplot(gs[1, 1])
+
     backdrop(ax1, -420, 560, -660, 470, 3)
     draw(ax1, geoms_cols, 0.6)
     ax1.set_xlim(-420, 560), ax1.set_ylim(-660, 470)
-    ax1.set_title("P2 regions, smooth flavor (DP 500 m + Chaikin x2)\n"
-                  "yellow=Coast, magenta=Mountains, green=Valley, "
-                  "orange=Desert, blue=Islands piece", fontsize=12)
+    ax1.set_title("P2 regions, smooth flavor (Chaikin x2 on natural arcs; "
+                  "political borders exact)\nyellow=Coast, "
+                  "magenta=Mountains, green=Valley, orange=Desert, "
+                  "blue=Islands piece", fontsize=12)
 
     backdrop(ax2, -260, -120, -80, 95, 1)
     draw(ax2, geoms_cols, 1.2)
@@ -591,7 +785,19 @@ def render_qa(dem, sea, regions, islands_mp):
     ax2.set_xlim(-260, -120), ax2.set_ylim(-80, 95)
     ax2.set_title("Vallejo corridor inset\n(dashed = ahl's override edges)",
                   fontsize=12)
-    for ax in (ax1, ax2):
+
+    # NE corner: sharp 42N/120W corner, straight lines, no smoothing
+    cxk, cyk = ne_corner[0] / 1000, ne_corner[1] / 1000
+    backdrop(ax3, cxk - 95, cxk + 95, cyk - 95, cyk + 95, 1)
+    for prt in border_parts:  # reference border under the polygons
+        arr = np.asarray(prt.coords) / 1000.0
+        ax3.plot(arr[:, 0], arr[:, 1], "--", color="#cc2222", linewidth=1.6)
+    draw(ax3, geoms_cols, 1.2)
+    ax3.plot([cxk], [cyk], "o", mfc="none", mec="#cc2222", ms=14, mew=1.6)
+    ax3.set_xlim(cxk - 95, cxk + 95), ax3.set_ylim(cyk - 95, cyk + 95)
+    ax3.set_title("NE corner inset (dashed red = Census border lines;\n"
+                  "region edge must sit exactly on them)", fontsize=12)
+    for ax in (ax1, ax2, ax3):
         ax.set_xticks([]), ax.set_yticks([])
 
     fig.tight_layout()
