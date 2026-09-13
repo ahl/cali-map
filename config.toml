@@ -17,7 +17,8 @@ enforce_contiguous = true
 # Minimum shoreline band (km): mainland within this distance of the ocean
 # is Coast regardless of elevation, keeping the strip continuous where
 # mountains meet the sea (Big Sur, Lost Coast). 0 disables.
-coast_band_km = 5.0
+# 13 km = current best guess (ahl narrowing on 25 m + ~12.5-13 km).
+coast_band_km = 13.0
 
 # Offshore islands below this latitude belong to Mexico (Coronados, Todos
 # Santos), not the Coast piece. Interim rule until the Census state
@@ -42,6 +43,11 @@ valley_fill_enclosed = true
 # (km): rivers and Delta channels don't generate coastal band, bays and
 # ocean do.
 band_source_min_width_km = 1.5
+
+# "Coastal water" = Pacific + SF Bay + San Pablo Bay, CUT at the
+# Carquinez Strait (ahl, 2026-09-13): water east of this barrier line
+# ([lon, lat] endpoints across the strait) generates no coastal band.
+coastal_water_gate = [[-122.20, 38.02], [-122.20, 38.10]]
 
 # Desert cells north of this line (km, CA Albers y) become Mountains:
 # the northern Basin and Range (Modoc country) reads as mountains, not

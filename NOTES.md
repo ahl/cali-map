@@ -168,14 +168,18 @@ until its inputs are signed off. Every phase is a jj commit.
   (G5), minimum piece widths, projection sanity.
   *Check-in: dimensioned 2D layout drawing.*
 - **P1.5 — Engraved one-piece validation print (ahl, 2026-09-13).** Once
-  region borders are settled: print CALIFORNIA AS ONE CONTIGUOUS PIECE,
-  150 mm NORTH-SOUTH (E-W follows the real aspect, ~134 mm; ~1:7M scale),
-  with region borders engraved as narrow recesses: <0.5 mm wide, 1-2
-  layers deep at 0.2 mm layer height (0.2-0.4 mm). Validates borders
+  region borders are settled: print a RECTANGULAR SLAB, 150 mm N-S —
+  California plus ~40 km beyond the state line (N/E/S) and Pacific as
+  flat datum (Channel Islands included on it) — with engraved recesses
+  (<0.5 mm wide, 1-2 layers deep at 0.2 mm layer height, 0.2-0.4 mm) for
+  BOTH the four-region borders inside CA AND political borders (state
+  lines + US-Mexico, from Natural Earth). Validates borders
   physically + first topo print + early read on vertical exaggeration,
   before any puzzle cutting. (The model is NOT square — 150 mm is the
   N-S dimension; likewise the final frame's 1000 mm cap applies to the
-  long edge.)
+  long edge.) Purpose per ahl: EYEBALL the piece boundaries against real
+  terrain in hand — e.g. catch a "valley" that includes obviously
+  mountainous ground — not an automated check.
 - **P3 — 3D prototype.** Generate STL for ONE piece + matching frame
   corner at 2–3 vertical exaggerations; base height proposal (G2).
   Include a waterway body on the prototype piece to validate the

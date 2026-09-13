@@ -82,13 +82,48 @@ def rasterize_provinces():
     return np.asarray(img), name_id
 
 
+def gate_barrier(shape):
+    """Raster line across the Carquinez Strait (config coastal_water_gate),
+    or None if unconfigured. Water/lowland beyond it is NOT sea."""
+    gate = CFG.get("coastal_water_gate")
+    if not gate:
+        return None
+    (lon0, lat0), (lon1, lat1) = gate
+    h, w = shape
+    img = Image.new("L", (w, h), 0)
+    x0, y0 = px_of(lon0, lat0)
+    x1, y1 = px_of(lon1, lat1)
+    ImageDraw.Draw(img).line([(float(x0), float(y0)), (float(x1), float(y1))],
+                             fill=1, width=5)
+    return np.asarray(img, bool)
+
+
 def ocean_mask(dem):
+    """Sea = at/below sea level AND reachable from the Pacific (or map
+    border, for the Gulf of California) WITHOUT crossing the Carquinez
+    gate. The Delta's subsided below-sea-level farmland and Suisun waters
+    east of the gate are treated as LAND at datum height (their water
+    depiction, if any, comes from the optional waterway color layer, D9)."""
     low = dem <= 0
+    bar = gate_barrier(dem.shape)
+    if bar is not None:
+        low = low & ~bar
     lab, _ = ndimage.label(low)
     border = np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))
     keep = set(border[border > 0].tolist())
     keep.add(int(lab[dem.shape[0] // 2, 5]))
     return np.isin(lab, list(keep))
+
+
+def coastal_water(sea):
+    """Sea cells that count as COASTAL: connected to the Pacific without
+    passing the Carquinez gate. (With ocean_mask also gated this is
+    nearly the whole sea; kept as a safety net.)"""
+    bar = gate_barrier(sea.shape)
+    if bar is None:
+        return sea
+    lab, _ = ndimage.label(sea & ~bar)
+    return lab == lab[sea.shape[0] // 2, 5]  # Pacific-connected side
 
 
 def ca_islands(sea, mainland):
@@ -139,19 +174,25 @@ def build_regions(dem, prov, name_id, coast_threshold_m, coast_from=None,
         coast = (coast_from & ca & ~valley & ~desert) | islands
     else:
         low = ca & mainland & (dem <= coast_threshold_m) & ~valley & ~desert
+        bar = gate_barrier(dem.shape)
+        if bar is not None:
+            low = low & ~bar  # strait banks don't leak coast into the Delta
         lab, _ = ndimage.label(low)
         shore = ndimage.binary_dilation(sea, iterations=2)
         seeds = np.unique(lab[shore & low])
         coast = np.isin(lab, seeds[seeds > 0]) | islands
         if band_km > 0:
-            # band emanates from OPEN water only: morphologically open the
-            # sea so river-width channels (Delta) don't generate band
+            # band emanates from OPEN COASTAL water only: morphologically
+            # open the sea so river-width channels (Delta) don't generate
+            # band, and cut at the Carquinez gate (Pacific + SF Bay + San
+            # Pablo Bay count; Suisun/Delta don't)
             rw = CFG.get("band_source_min_width_km", 0) * 1000 / META["res"]
             open_sea = sea
             if rw > 0:
                 core = ndimage.distance_transform_edt(sea) > rw
                 open_sea = ndimage.distance_transform_edt(~core) <= rw
                 open_sea &= sea
+            open_sea &= coastal_water(sea)
             d = ndimage.distance_transform_edt(~open_sea)
             band = (d <= band_km * 1000 / META["res"]) & ca \
                    & mainland & ~valley & ~desert
@@ -204,6 +245,15 @@ def build_regions(dem, prov, name_id, coast_threshold_m, coast_from=None,
     out[valley] = VALLEY
     out[desert] = DESERT
     out[coast] = COAST
+    # No-region land enclosed by the map (CGS province gaps near Suisun,
+    # and the Delta datum-land created by the ocean gate) -> nearest
+    # region. Cured properly in P2 when the Census polygon defines land.
+    gaps = ndimage.binary_fill_holes((out > 0) | sea) & (out == 0) & ~sea
+    if gaps.any():
+        _, (ir, ic) = ndimage.distance_transform_edt(
+            out == 0, return_indices=True)
+        out[gaps] = out[ir[gaps], ic[gaps]]
+
     if CFG.get("enforce_contiguous"):
         make_contiguous(out, mainland, sea)
     return out, sea
@@ -228,17 +278,27 @@ def make_contiguous(out, mainland, sea, passes=2):
             sizes = np.bincount(lab.ravel())
             sizes[0] = 0
             main_id = sizes.argmax()
+            slices = ndimage.find_objects(lab)
             for i in range(1, n + 1):
                 if i == main_id:
                     continue
-                comp = lab == i
+                sl = slices[i - 1]
+                if sl is None:
+                    continue
+                # work on the fragment's padded bounding box, not the
+                # full 27M-cell grid (contiguity pass was minutes; now ms)
+                sl = (slice(max(sl[0].start - 1, 0),
+                            min(sl[0].stop + 1, out.shape[0])),
+                      slice(max(sl[1].start - 1, 0),
+                            min(sl[1].stop + 1, out.shape[1])))
+                comp = lab[sl] == i
                 ring = ndimage.binary_dilation(comp) & ~comp
-                if rid == COAST and (ring & sea).any():
+                if rid == COAST and (ring & sea[sl]).any():
                     continue  # shelf-connected (D2)
-                vals = out[ring]
+                vals = out[sl][ring]
                 vals = vals[(vals != rid) & (vals != SEA)]
                 if len(vals):
-                    out[comp] = np.bincount(vals).argmax()
+                    out[sl][comp] = np.bincount(vals).argmax()
                     changed += 1
         if not changed:
             break
