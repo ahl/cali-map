@@ -35,7 +35,9 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 OUT = ROOT / "out"
 
-CFG = tomllib.loads((ROOT / "config.toml").read_text())["regions"]
+_TOML = tomllib.loads((ROOT / "config.toml").read_text())
+CFG = _TOML["regions"]
+OVR = _TOML.get("overrides", {})
 META = json.loads((DATA / "dem_meta.json").read_text())
 TO_ALB = Transformer.from_crs("EPSG:4326", META["crs"], always_xy=True)
 
@@ -290,9 +292,60 @@ def build_regions(dem, prov, name_id, coast_threshold_m, coast_from=None,
             else:
                 out[sl][comp] = np.bincount(vals).argmax()
 
+    apply_mountain_edges(out, sea, mainland)
+
     if CFG.get("enforce_contiguous"):
         make_contiguous(out, mainland, sea)
     return out, sea
+
+
+def apply_mountain_edges(out, sea, mainland):
+    """Hand-drawn barrier lines (ahl markups, config [overrides]): cut the
+    coast and valley masks along each line; fragments severed from their
+    region's main body -> Mountains; the line footprint itself ->
+    Mountains. Endpoints auto-seal to the nearest sea/mountains cell."""
+    files = OVR.get("mountain_edges", [])
+    if not files:
+        return
+    h, w = out.shape
+    img = Image.new("L", (w, h), 0)
+    drw = ImageDraw.Draw(img)
+    endpoints = []
+    for fp in files:
+        gj = json.loads((ROOT / fp).read_text())
+        for f in gj["features"]:
+            pts = [((x - META["x_min"]) / META["res"],
+                    (META["y_max"] - y) / META["res"])
+                   for x, y in f["geometry"]["coordinates"]]
+            drw.line(pts, fill=1, width=3)
+            endpoints += [pts[0], pts[-1]]
+    stop = sea | (out == MOUNTAINS) | (out == 0)
+    _, (ir, ic) = ndimage.distance_transform_edt(~stop, return_indices=True)
+    for cx, cy in endpoints:
+        c, r = int(round(cx)), int(round(cy))
+        if 0 <= r < h and 0 <= c < w:
+            tr, tc = int(ir[r, c]), int(ic[r, c])
+            if np.hypot(tr - r, tc - c) * META["res"] <= 20000:
+                drw.line([(cx, cy), (float(tc), float(tr))], fill=1, width=3)
+    bar = np.asarray(img, bool)
+
+    for rid in (COAST, VALLEY):
+        mask = out == rid
+        if rid == COAST:
+            mask = mask & mainland
+        cut = mask & ~bar
+        lab, n = ndimage.label(cut)
+        if n == 0:
+            continue
+        sizes = np.bincount(lab.ravel())
+        sizes[0] = 0
+        main_id = sizes.argmax()
+        near_bar = ndimage.binary_dilation(bar, iterations=2)
+        drop = np.unique(lab[near_bar & cut])
+        drop = drop[(drop > 0) & (drop != main_id)]
+        sel = np.isin(lab, drop) | (mask & bar)
+        if sel.any():
+            out[sel] = MOUNTAINS
 
 
 def make_contiguous(out, mainland, sea, passes=2):

@@ -65,6 +65,14 @@ valley_provinces = ["Great Valley"]
 desert_provinces = ["Mojave Desert", "Colorado Desert", "Basin and Range"]
 # everything else in CA defaults to Mountains; Coast is carved by elevation
 
+[overrides]
+# Hand-drawn region-edge barriers (extracted from ahl's markups; EPSG:3310
+# LineStrings). Each line CUTS the coast and valley masks; fragments
+# severed from their region's main body become Mountains, and the line's
+# own footprint goes to Mountains. Endpoints are auto-sealed to the
+# nearest sea/mountains cell (<=20 km).
+mountain_edges = ["overrides/vallejo_mountain_edges.geojson"]
+
 [islands]
 # Channel Islands = ONE separate puzzle piece (ahl, 2026-09-13): convex
 # hull of all eight islands + buffer, printed with two-color ocean; sits
