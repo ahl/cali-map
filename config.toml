@@ -28,6 +28,15 @@ smooth_radius_km = 2.0
 # valley region"). 0 disables.
 valley_absorb_km = 7.5
 
+# Land fully enclosed by the valley region becomes valley (fills Delta
+# enclaves left by absorption; also absorbs Sutter Buttes).
+valley_fill_enclosed = true
+
+# The shoreline band only emanates from open water at least ~2x this wide
+# (km): rivers and Delta channels don't generate coastal band, bays and
+# ocean do.
+band_source_min_width_km = 1.5
+
 # Desert cells north of this line (km, CA Albers y) become Mountains:
 # the northern Basin and Range (Modoc country) reads as mountains, not
 # desert (ahl, 2026-09-13, marked on p0_map_area_relief).

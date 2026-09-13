@@ -87,11 +87,33 @@ set into a frame of the surrounding geography.
   - ahl's direction (2026-09-13): TWO live candidates —
     (1) p1d = RAW p1b image-derived coast strip + CGS valley/desert;
     (2) p1c family = very low threshold (<50 m) + 12.5 km band.
-    Plus global rules, both in config.toml:
-    - valley_absorb_km = 7.5 — coast near the Great Valley is absorbed
-      into the valley (kills the Delta curl toward Sacramento);
+    Global rules (config.toml), all ahl-requested:
+    - valley_absorb_km = 7.5 — coast near the Great Valley absorbed into
+      valley (kills the Delta curl toward Sacramento); also absorbs
+      Delta islets (island components near valley are valley, not Coast);
+    - valley_fill_enclosed — non-valley mainland pockets cut off from the
+      main landmass join the valley (Delta fringes, Sutter Buttes);
+      connectivity-based, since water corridors defeat plain hole-fill;
+    - band_source_min_width_km = 1.5 — shoreline band emanates only from
+      open water (ocean/bays), not river-width Delta channels;
     - desert_north_limit_km = 100 — Desert north of Albers y=+100 km
       becomes Mountains (northern Basin & Range = Modoc country).
+  - Agent finals (first p1a look was mid-iteration; finals are better):
+    - p1a: 8.2% of CA, ONE mainland component, 20k->4k boundary vertices
+      (open 3 km/close 6 km with sea+provinces as solid support, 50 km
+      shore cap + 60 km geodesic cap, DP 3 km + Chaikin). Found CGS
+      polygons miss the 250 m coastline (prov==0 slivers — patch with
+      Census state polygon in P2). Contiguity via a real ~0.5-1 km
+      Coast Ranges corridor east of Suisun.
+    - p1b: IoU 0.971; per-report the scan is ~plate carrée (shear -0.01
+      deg); forced-one-component variant used 218 km of shore corridors —
+      p1d instead keeps shore-connected segments joined by the ocean
+      shelf (D2), per ahl's preference for the raw strip.
+  - **P2 cleanup contract** (applies to whichever coast wins): global
+    no-exclave rule — every region's parts must connect to its piece
+    (in-plane or via its printed shelf); sub-printable specks (Delta
+    levee islets, coastal rocks) dropped at vectorization; per-scale
+    min-width enforcement (D11).
 - **G2 — Vertical exaggeration factor**: TBD (typical 3–8× at this scale).
   Also: base thickness value.
 - **G3 — Clearances**: PLA-on-PLA puzzle fit; likely ~0.15–0.25 mm/side,

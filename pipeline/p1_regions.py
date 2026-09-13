@@ -143,8 +143,17 @@ def build_regions(dem, prov, name_id, coast_threshold_m, coast_from=None,
         shore = ndimage.binary_dilation(sea, iterations=2)
         seeds = np.unique(lab[shore & low])
         coast = np.isin(lab, seeds[seeds > 0]) | islands
-        if band_km > 0 and shore_dist is not None:
-            band = (shore_dist <= band_km * 1000 / META["res"]) & ca \
+        if band_km > 0:
+            # band emanates from OPEN water only: morphologically open the
+            # sea so river-width channels (Delta) don't generate band
+            rw = CFG.get("band_source_min_width_km", 0) * 1000 / META["res"]
+            open_sea = sea
+            if rw > 0:
+                core = ndimage.distance_transform_edt(sea) > rw
+                open_sea = ndimage.distance_transform_edt(~core) <= rw
+                open_sea &= sea
+            d = ndimage.distance_transform_edt(~open_sea)
+            band = (d <= band_km * 1000 / META["res"]) & ca \
                    & mainland & ~valley & ~desert
             coast |= band
 
@@ -165,6 +174,30 @@ def build_regions(dem, prov, name_id, coast_threshold_m, coast_from=None,
         grabbed = coast & near_valley & mainland
         valley = valley | grabbed
         coast = coast & ~grabbed
+        # Delta islets: island components near the valley are valley,
+        # not Coast (the ocean-island rule is for the Channel Islands)
+        isl_lab, ni = ndimage.label(coast & ~mainland)
+        if ni:
+            ids = np.unique(isl_lab[(isl_lab > 0) & near_valley])
+            if len(ids):
+                isl_grab = np.isin(isl_lab, ids)
+                valley = valley | isl_grab
+                coast = coast & ~isl_grab
+
+    # land enclosed by the valley is valley (Delta islands/fringes, Sutter
+    # Buttes). Connectivity-based: any non-valley mainland pocket that is
+    # cut off from the main coast/mountains/desert landmass — including
+    # pockets sealed by valley + water together — joins the valley.
+    if CFG.get("valley_fill_enclosed"):
+        nonval = ca & mainland & ~valley
+        lab2, n2 = ndimage.label(nonval)
+        if n2 > 1:
+            sizes2 = np.bincount(lab2.ravel())
+            sizes2[0] = 0
+            pockets = nonval & (lab2 != sizes2.argmax())
+            valley = valley | pockets
+            coast = coast & ~valley
+            desert = desert & ~valley
 
     out = np.zeros(dem.shape, dtype=np.uint8)
     out[ca] = MOUNTAINS

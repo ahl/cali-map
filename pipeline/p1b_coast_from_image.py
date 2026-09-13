@@ -291,15 +291,21 @@ def disk_close(mask, r_px):
     return disk_erode(disk_dilate(mask, r_px), r_px)
 
 
-def bridge_components(coast, allowed, half_w_px, min_keep_px):
+def bridge_components(coast, allowed, sea, half_w_px, min_keep_px):
     """One mainland component: drop scan-noise blobs (< min_keep_px), then
-    join the remaining genuine strip segments with minimal-length geodesic
-    corridors through `allowed` land, one source-pixel wide."""
+    join the remaining genuine strip segments with geodesic corridors
+    through `allowed` land, one source-pixel wide."""
     from skimage import graph
 
-    cost = np.where(allowed, 1.0, np.inf)
+    # base cost grows with distance from the water so corridors hug the
+    # shoreline (reads as coast) instead of beelining across land
+    shore_km = ndimage.distance_transform_edt(~sea) * META["res"] / 1000
+    base = 1.0 + shore_km / 5.0
     n_bridged = 0
     while True:
+        # near-zero cost on existing coast: the route hugs the strip and
+        # only the genuinely new land along the gap is added
+        cost = np.where(coast, 0.01, np.where(allowed, base, np.inf))
         lab, n = ndimage.label(coast)
         if n <= 1:
             return coast, n_bridged
@@ -343,23 +349,47 @@ def build_coast(cls_map, ca, sea, mainland, islands, valley, desert, px_m):
     allowed = ca & mainland & ~valley & ~desert
     shore_dist = ndimage.distance_transform_edt(~sea) * META["res"]
     pink_dist = ndimage.distance_transform_edt(cls_map != COAST) * META["res"]
-    ribbon = (shore_dist <= px_m) & (pink_dist <= 2 * px_m)
+    ribbon = (shore_dist <= px_m) & (pink_dist <= 4 * px_m)
     coast = ((cls_map == COAST) | ribbon) & allowed
 
     # light smoothing (project-standard radius) — the scan is inherently
     # smooth at map scale, this only cleans warp jaggies. Smooth the union
     # with the sea so the ocean side is supported (never eroded): only the
     # inland border is cleaned, and shoreline connectivity is preserved.
+    # Warped pink is ground truth (already smooth at source resolution),
+    # so it is re-added after the opening: where misregistration leaves
+    # the one-source-px strip inland, off the sea support, the opening
+    # must not erase it (the closing then fuses strip and shore ribbon).
     r = CFG["smooth_radius_km"] * 1000 / META["res"]
     if r > 0:
-        u = disk_close(disk_open(coast | sea, r), r)
+        u = disk_open(coast | sea, r)
+        u = disk_close(u | ((cls_map == COAST) & allowed), r)
         coast = u & allowed & ~sea
 
     coast, n_bridged = bridge_components(
-        coast, allowed, half_w_px=0.5 * px_m / META["res"],
-        min_keep_px=int(500e6 / META["res"] ** 2))  # noise = < 500 km2
-    n_after = ndimage.label(coast)[1]
+        coast, allowed, sea, half_w_px=0.5 * px_m / META["res"],
+        min_keep_px=int(200e6 / META["res"] ** 2))  # noise = < 200 km2
 
+    # absorb pure-mountain enclaves fully enclosed by the strip: an
+    # exclave of the Mountains piece inside the Coast piece could never
+    # be assembled. (Enclosures containing sea, valley or desert — e.g.
+    # everything inside the Delta ring — are kept. River-cut off-mainland
+    # slivers or province-gap pixels inside an enclosure don't protect
+    # it: they'd be just as stranded.)
+    inv_lab, n_inv = ndimage.label(~coast)
+    edge = np.unique(np.concatenate(
+        [inv_lab[0], inv_lab[-1], inv_lab[:, 0], inv_lab[:, -1]]))
+    keep_out = sea | valley | desert
+    ids = np.arange(1, n_inv + 1)
+    impure = np.unique(inv_lab[keep_out])
+    fill = np.setdiff1d(ids, np.union1d(edge, impure))
+    if len(fill):
+        m = np.isin(inv_lab, fill)
+        print(f"absorbing {len(fill)} enclosed mountain enclave(s) "
+              f"({m.sum() * META['res'] ** 2 / 1e6:.0f} km2)")
+        coast |= m
+
+    n_after = ndimage.label(coast)[1]
     return coast | islands, n_after
 
 

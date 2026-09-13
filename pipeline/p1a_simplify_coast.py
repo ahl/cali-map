@@ -16,12 +16,13 @@ atlas-style puzzle-piece shape.
 Rules (per ahl's review of out/p1_coast_candidates.png):
   1. Contiguity: inland blobs that only touch the strip through thin necks
      (Clear Lake basin, upper Russian River valleys, Eureka-area scraps)
-     revert to Mountains.  NOTE the mainland strip itself is topologically
-     TWO land components: SF Bay + Carquinez Strait + Delta channels reach
-     the Great Valley province (verified: sea mask touches Valley), so no
-     land path connects Marin to San Francisco without circling the whole
-     Central Valley.  The two halves are joined by the piece's printed
-     bay/ocean shelf (D2), exactly like the Channel Islands.
+     revert to Mountains.  The mainland strip ends up ONE land component:
+     north and south of the bay connect through a real Coast Ranges
+     corridor east of Suisun Bay, threaded between the Delta waters and
+     the Great Valley province border.  That corridor is locally only
+     ~0.5-1 km wide (the piece is additionally joined by its printed
+     bay/ocean shelf, D2); widening it is the per-scale min-width pass
+     deferred by D11.
   2. The Coast/Mountains border is dramatically simplified -- flowing,
      children's-atlas curves.  Losing fine fidelity is OK.
   3. Borders that are NOT ours to smooth stay exact: the ocean coastline,
@@ -78,10 +79,15 @@ OPEN_KM = 3.0
 # Morphological closing radius (km) after opening: fills notches where
 # Mountains poke into the strip, keeping the band plump and continuous.
 CLOSE_KM = 6.0
-# Cap on distance from the sea (km): coast cells farther than this revert
-# to Mountains before smoothing.  Shortens the Salinas Valley spur; also
-# the outer limit of the "15-50 km wide band" spec.  0 disables.
+# Cap on straight-line distance from the sea (km): coast cells farther
+# than this revert to Mountains before smoothing.  The outer limit of the
+# "15-50 km wide band" spec.  0 disables.
 MAX_SHORE_KM = 50.0
+# Cap on GEODESIC distance from the shore, traveling within the strip
+# (km): cuts spurs that run far inland behind a ridge even though they
+# stay near the sea as the crow flies (Salinas Valley, upper Napa).
+# 0 disables.
+GEO_CAP_KM = 60.0
 # Douglas-Peucker tolerance (km) for the Coast/Mountains boundary.
 SIMPLIFY_KM = 3.0
 # Chaikin corner-cutting iterations after simplification (flowing curves).
@@ -178,7 +184,12 @@ def ca_islands(sea, mainland):
 
 
 def build_regions(dem, prov, name_id, coast_threshold_m, coast_from=None,
-                  band_km=0.0, shore_dist=None):
+                  band_km=0.0, shore_dist=None, smooth_radius_km=None):
+    """Copied from p1_regions.py; one addition: smooth_radius_km overrides
+    the config preview-smoothing radius.  P1a starts refinement from the
+    RAW rule (smooth_radius_km=0) because the preview opening (no sea
+    support) erases the band where cliffs meet the sea (Lost Coast,
+    Gaviota) and breaks the strip."""
     sea = ocean_mask(dem)
     ids = {n: i for n, i in name_id.items()}
 
@@ -203,7 +214,9 @@ def build_regions(dem, prov, name_id, coast_threshold_m, coast_from=None,
                    & mainland & ~valley & ~desert
             coast |= band
 
-    r = int(round(CFG["smooth_radius_km"] * 1000 / RES))
+    if smooth_radius_km is None:
+        smooth_radius_km = CFG["smooth_radius_km"]
+    r = int(round(smooth_radius_km * 1000 / RES))
     if r > 0:
         st = ndimage.iterate_structure(ndimage.generate_binary_structure(2, 1), r)
         coast_sm = ndimage.binary_closing(
@@ -358,6 +371,15 @@ def claim_slivers(m, prov, sea, mainland):
     return out
 
 
+def geodesic_shore_px(m, sea):
+    """Distance from the shoreline traveling WITHIN the strip (px)."""
+    from skimage.graph import MCP_Geometric
+    costs = np.where(m, 1.0, np.inf)
+    starts = np.argwhere(ndimage.binary_dilation(sea, iterations=1) & m)
+    d, _ = MCP_Geometric(costs).find_costs(starts)
+    return d
+
+
 def offshore_islands(sea, mainland, prov, vd_ids):
     """ca_islands minus Delta scraps: island components whose majority
     province is Valley/Desert are not Channel Islands."""
@@ -396,13 +418,30 @@ def refine_coast(reg, sea, prov, name_id, shore_dist):
     # 2) cut necks, drop what disconnects
     m = open_supported(m, open_support, km_px(OPEN_KM))
     m = keep_shore_connected(m, sea)
-    # 3) band-width cap: shorten deep inland spurs (Salinas)
+    # 3) band-width caps: straight-line, then geodesic along the strip
+    #    (shortens the Salinas Valley / upper Napa spurs)
     if MAX_SHORE_KM > 0:
         m &= shore_dist <= km_px(MAX_SHORE_KM)
         m = keep_shore_connected(m, sea)
-    # 4) fill notches + interior mountain enclaves
+    if GEO_CAP_KM > 0:
+        m &= geodesic_shore_px(m, sea) <= km_px(GEO_CAP_KM)
+        m = keep_shore_connected(m, sea)
+    # 4) fill notches + interior enclaves
     m = close_supported(m, close_support, km_px(CLOSE_KM)) & allowed
-    m = ndimage.binary_fill_holes(m | sea) & ~sea & allowed
+    filled = ndimage.binary_fill_holes(m | sea) & ~sea
+    # prov==0 CGS coverage holes fully enclosed by the strip (Suisun area)
+    # would be region-less voids in the piece: absorb the ones that never
+    # touch Valley/Desert, leave the rest unassigned for P2.
+    hole0 = filled & ~m & mainland & (prov == 0)
+    lab_h, n_h = ndimage.label(hole0)
+    if n_h:
+        vd_edge = ndimage.binary_dilation(valley | desert, iterations=1)
+        bad = np.unique(lab_h[vd_edge & hole0])
+        hole0 &= ~np.isin(lab_h, bad[bad > 0])
+        claim = claim | hole0
+        allowed = allowed | hole0
+        fixed = ~allowed
+    m = filled & allowed
     m = keep_shore_connected(m, sea)
     m = drop_small(m, MIN_COMP_KM2)
 
@@ -485,8 +524,12 @@ def main():
     ca_px = (reg > 0).sum()
     pct0 = 100 * (reg == COAST).sum() / ca_px
 
+    # refinement starts from the RAW rule (no preview smoothing) so the
+    # band is continuous under the Lost Coast / Gaviota cliffs
+    reg_raw, _ = build_regions(dem, prov, name_id, t, band_km=b,
+                               shore_dist=shore_dist, smooth_radius_km=0)
     final_main, islands, claim, final_vec, raw_v, smooth_v = \
-        refine_coast(reg, sea, prov, name_id, shore_dist)
+        refine_coast(reg_raw, sea, prov, name_id, shore_dist)
     final = final_main | islands
 
     # safety checks
@@ -495,7 +538,10 @@ def main():
         "coast overlaps valley/desert"
     assert not (final & ~((reg > 0) | claim)).any(), "coast outside CA"
     _, n_main = ndimage.label(final_main)
-    _, n_piece = ndimage.label(final_main | sea)
+    # piece connectivity: land + the Pacific shelf it sits on (the frame
+    # also contains the disconnected Gulf of California "sea" -- ignore it)
+    lab_ps, _ = ndimage.label(final | sea)
+    n_piece = len(np.unique(lab_ps[final]))
     pct1 = 100 * final.sum() / ca_px
 
     # region raster for the "after" panel (delta islands revert to Valley)
@@ -527,8 +573,8 @@ def main():
     print(f"wrote {DATA / 'p1a_coast_boundary.geojson'}")
 
     print(f"coast before: {pct0:.1f}% of CA;  after: {pct1:.1f}% of CA")
-    print(f"mainland land components: {n_main} "
-          "(2 expected: bay/delta water splits north from south)")
+    print(f"mainland land components: {n_main} (must be 1; N-S connect via "
+          "the Coast Ranges corridor east of Suisun Bay)")
     print(f"components incl. printed water shelf: {n_piece} (must be 1)")
     print(f"boundary vertices: raw {raw_v} -> simplified+smoothed {smooth_v}")
     md = shore_dist[final_main].max() * RES / 1000
@@ -536,9 +582,9 @@ def main():
 
     panels = [
         (f"current: {t} m + {b:.0f} km band  ({pct0:.0f}% of CA)", reg),
-        (f"simplified: open {OPEN_KM:.0f} km / close {CLOSE_KM:.0f} km / "
-         f"cap {MAX_SHORE_KM:.0f} km / DP {SIMPLIFY_KM:.0f} km + Chaikin  "
-         f"({pct1:.0f}% of CA)", reg2),
+        (f"simplified: open {OPEN_KM:.0f} / close {CLOSE_KM:.0f} / "
+         f"caps {MAX_SHORE_KM:.0f}|geo {GEO_CAP_KM:.0f} km / "
+         f"DP {SIMPLIFY_KM:.0f} km + Chaikin  ({pct1:.0f}% of CA)", reg2),
     ]
     render(dem, panels, sea)
 
