@@ -96,10 +96,23 @@ set into a frame of the surrounding geography.
 - **G9 — Multi-material capability**: RESOLVED 2026-09-13 — printer has an
   AMS; slicer is Bambu Studio. True second-color waterways via multi-body
   3MF, colors assigned per body in Bambu Studio.
-- **G10 — Waterway selection & width**: which rivers/lakes make the cut
-  (NHD is exhaustive; Natural Earth has just the majors), and how much to
-  exaggerate river width (true width is sub-nozzle at this scale;
-  ~0.8–1.0 mm printed minimum).
+- **G10 — Waterway selection & width**: SOURCE RESOLVED 2026-09-13
+  (researched, URLs verified): primary = **USGS Small-Scale (National
+  Atlas) 1:1,000,000 hydrography** — already generalized to ~our print
+  scale, public domain, Strahler stream-order attribute for filtering:
+  - streams: `prd-tnm.s3.amazonaws.com/StagedProducts/Small-scale/data/Hydrography/streaml010g.shp_nt00885.tar.gz` (240 MB)
+  - waterbodies: `.../wtrbdyp010g.shp_nt00886.tar.gz` (35 MB)
+  - filter: streams Strahler >= 4–5 (drop -999/-998 sentinels), plus
+    hand-picked iconic names (Owens, Salinas); waterbodies
+    Feature in (Lake, Reservoir) and Area >= ~1.5 sq mi; clip by
+    geometry, NOT State attr (keeps Tahoe, Mead, Havasu).
+  Backup: Natural Earth 10m rivers/lakes + North America supplements
+  (naciscdn.org, ~2 MB each; merged-set scalerank quirks).
+  Avoid NHDPlus HR / 3DHP (too detailed; NHD frozen since 2024).
+  Gotchas: SF Bay is "ocean" in every dataset — take it from our own
+  coastline/DEM mask; Delta = main stems only; Colorado River is a
+  centerline (buffer >= ~650 m ground width, union with Havasu/Mead
+  polygons). Remaining: tune Strahler threshold + width function (P3/P5).
 
 ## Plan (phases with check-ins)
 
