@@ -64,3 +64,11 @@ desert_north_limit_km = 100
 valley_provinces = ["Great Valley"]
 desert_provinces = ["Mojave Desert", "Colorado Desert", "Basin and Range"]
 # everything else in CA defaults to Mountains; Coast is carved by elevation
+
+[islands]
+# Channel Islands = ONE separate puzzle piece (ahl, 2026-09-13): convex
+# hull of all eight islands + buffer, printed with two-color ocean; sits
+# in its own frame cavity. Farallones skipped. Mainland Coast piece no
+# longer carries the islands (D2 revised).
+mode = "one_piece_hull"
+buffer_km = 10.0

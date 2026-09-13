@@ -127,16 +127,14 @@ set into a frame of the surrounding geography.
 - **G7 — Two-color strategy for the coast piece**: layer-swap at the ocean
   datum Z (easy, works on any printer) vs. multi-material. Layer-swap
   favors ocean-below/land-above color split.
-- **G11 — Channel Islands piece design** (revised 2026-09-13): the
-  islands become their OWN puzzle piece(s), separate from the mainland
-  Coast piece, set into the frame's ocean. Two candidates under study
-  (renders: out/p1f_islands_two_pieces.png, out/p1f_islands_one_piece.png):
-  (2a) TWO pieces — northern chain {San Miguel, Santa Rosa, Santa Cruz,
-  Anacapa} + 10 km water; southern {San Nicolas, Santa Barbara, Santa
-  Catalina, San Clemente} + ~25 km water (needs ~25 for contiguity);
-  (2b) ONE piece — convex hull of all eight + 10 km.
-  Farallones: SKIPPED (ahl). Terminal Island artifact: mainland (P2).
-  Bay islands (Angel, Alcatraz): inside the coast band, not affected.
+- **G11 — RESOLVED 2026-09-13: Channel Islands = ONE separate piece**,
+  convex hull of all eight + 10 km ocean (out/p1f_islands_one_piece.png;
+  config [islands]). Two-color print (ocean/land); own cavity in the
+  frame. D2 revised: the mainland Coast piece no longer carries islands
+  or an ocean shelf — the islands piece owns its ocean. Farallones
+  SKIPPED. Terminal Island artifact -> mainland (P2). Bay islands stay
+  inside the coast band. (Sizes: piece is 49x36 mm @235 final,
+  88x64 mm @420.)
 - **Decisions from ahl's 2026-09-13 review round**: waterways DEFERRED —
   baseline build assumes NO waterways (D9 stays optional, revisit at
   end); 3MF Bambu packaging VALIDATED in Bambu Studio (no print needed);
