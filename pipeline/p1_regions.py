@@ -305,19 +305,23 @@ def apply_mountain_edges(out, sea, mainland):
     and valley cells become Mountains — the polygon is built from ahl's
     drawn edge lines, so its boundary IS the new region border there.
     (LineString features in the same files are provenance only.)"""
-    files = OVR.get("mountain_edges", [])
-    if not files:
+    sources = [(fp, "mountains") for fp in OVR.get("mountain_edges", [])] \
+        + [(fp, None) for fp in OVR.get("region_marks", [])]
+    if not sources:
         return
     h, w = out.shape
-    img = Image.new("L", (w, h), 0)
-    drw = ImageDraw.Draw(img)
+    imgs = {"mountains": Image.new("L", (w, h), 0),
+            "coast": Image.new("L", (w, h), 0)}
     n_poly = 0
-    for fp in files:
+    for fp, forced_target in sources:
         gj = json.loads((ROOT / fp).read_text())
         for f in gj["features"]:
             geom = f["geometry"]
             if geom["type"] not in ("Polygon", "MultiPolygon"):
                 continue
+            target = forced_target or f["properties"].get("target",
+                                                          "mountains")
+            drw = ImageDraw.Draw(imgs[target])
             polys = (geom["coordinates"] if geom["type"] == "MultiPolygon"
                      else [geom["coordinates"]])
             for rings in polys:
@@ -329,10 +333,14 @@ def apply_mountain_edges(out, sea, mainland):
                 n_poly += 1
     if not n_poly:
         return
-    zone = np.asarray(img, bool)
-    sel = zone & ((out == COAST) & mainland | (out == VALLEY))
+    zone_m = np.asarray(imgs["mountains"], bool)
+    sel = zone_m & ((out == COAST) & mainland | (out == VALLEY))
     if sel.any():
         out[sel] = MOUNTAINS
+    zone_c = np.asarray(imgs["coast"], bool)
+    sel = zone_c & mainland & ~sea & np.isin(out, [MOUNTAINS, VALLEY])
+    if sel.any():
+        out[sel] = COAST
 
 
 def make_contiguous(out, mainland, sea, passes=2):

@@ -72,6 +72,10 @@ desert_provinces = ["Mojave Desert", "Colorado Desert", "Basin and Range"]
 # own footprint goes to Mountains. Endpoints are auto-sealed to the
 # nearest sea/mountains cell (<=20 km).
 mountain_edges = ["overrides/vallejo_mountain_edges.geojson"]
+# Polygon marks with a per-feature "target" property ("mountains" or
+# "coast"): the area's coast/valley/mountains cells are reassigned to the
+# target (ahl's p1_final markup: red=mountains, orange=coast).
+region_marks = ["overrides/p1final_marks.geojson"]
 
 [islands]
 # Channel Islands = ONE separate puzzle piece (ahl, 2026-09-13): convex
