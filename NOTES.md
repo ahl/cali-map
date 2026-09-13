@@ -177,11 +177,12 @@ until its inputs are signed off. Every phase is a jj commit.
 - **P0 — Data & pipeline skeleton.** [DONE 2026-09-13] Fetch DEM tiles,
   CGS provinces, state borders; reproject to CA Albers (EPSG:3310);
   heightfield built. Extent approved (final crop may REDUCE it, D10).
-- **P1 — Region boundaries.** [PARAMETERS SETTLED; ahl markup review in
-  progress] 25 m + 13.5 km band + all rules; islands = one hull piece
-  (G11). Definitive artifact: out/p1_final.png (+ Vallejo inset
-  out/p1_final_vallejo_inset.png). Remaining: ahl's annotated concerns,
-  then final sign-off.
+- **P1 — Region boundaries.** [SIGNED OFF by ahl 2026-09-13] 25 m +
+  13.5 km band + all rules + ahl's markup overrides (Vallejo mountain
+  corridor; p1_final red->mountains / orange->coast marks — overrides/
+  *.geojson, applied by build_regions [overrides]). Definitive artifact:
+  out/p1_final.png. Markup->extract->apply is a standing loop for any
+  future tweak (red=mountains, orange=coast on any render).
 - **P1.5 — Engraved one-piece validation print (ahl, 2026-09-13).**
   [BUILT, print on hold until P1 signs off] RECTANGULAR SLAB, 150 mm N-S
   — California plus ~40 km beyond the state line (N/E/S), Pacific as
