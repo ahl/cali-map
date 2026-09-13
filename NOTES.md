@@ -206,9 +206,11 @@ until its inputs are signed off. Every phase is a jj commit.
   multi-body 3MF approach (D9).
   *Check-in: Blender screenshots + STLs to open in slicer; pick
   exaggeration & base.*
-- **P4 — Fit coupon.** Small test print: one small real boundary segment
-  as plug + socket at 2–3 clearances (G3), plus wall draft experiment
-  (G4). *Check-in: user prints and reports fit.*
+- **P4 — Fit coupon.** Bay Area window pieces at both candidate scales
+  (built speculatively 2026-09-13; out/p4_bay_235mm/, out/p4_bay_420mm/)
+  PLUS a 10 mm frame rim per variant (ahl: tests the outer frame too;
+  pieces get edge clearance to drop into the frame opening). Print HOLD
+  until regions finalized. *Check-in: ahl prints and reports fit (G3/G4).*
 - **P5 — Full generation.** All four pieces + frame tiles + ocean datum;
   two-color coast piece split at ocean Z (G7); watertight/manifold
   verification on every STL.
