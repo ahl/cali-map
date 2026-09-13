@@ -174,46 +174,50 @@ set into a frame of the surrounding geography.
 Each phase ends with a check-in deliverable; nothing downstream starts
 until its inputs are signed off. Every phase is a jj commit.
 
-- **P0 — Data & pipeline skeleton.** Fetch DEM tiles for the map area,
-  CGS provinces, state borders; reproject everything to CA Albers
-  (EPSG:3310); build the mosaicked heightfield.
-  *Check-in: shaded-relief PNG of the full map area → confirm extent/crop
-  (settles G6 scale too).*
-- **P1 — Region boundaries.** Implement the hybrid G1 rule; render 3–4
-  coast-threshold candidates as colored overlays on the relief.
-  *Check-in: pick the threshold; sign off all four region borders.*
-- **P2 — Layout & scale.** Fix overall physical size, frame tiling plan
-  (G5), minimum piece widths, projection sanity.
-  *Check-in: dimensioned 2D layout drawing.*
-- **P1.5 — Engraved one-piece validation print (ahl, 2026-09-13).** Once
-  region borders are settled: print a RECTANGULAR SLAB, 150 mm N-S —
-  California plus ~40 km beyond the state line (N/E/S) and Pacific as
-  flat datum (Channel Islands included on it) — with engraved recesses
-  (<0.5 mm wide, 1-2 layers deep at 0.2 mm layer height, 0.2-0.4 mm) for
-  BOTH the four-region borders inside CA AND political borders (state
-  lines + US-Mexico, from Natural Earth). Validates borders
-  physically + first topo print + early read on vertical exaggeration,
-  before any puzzle cutting. (The model is NOT square — 150 mm is the
-  N-S dimension; likewise the final frame's 1000 mm cap applies to the
-  long edge.) Purpose per ahl: EYEBALL the piece boundaries against real
-  terrain in hand — e.g. catch a "valley" that includes obviously
-  mountainous ground — not an automated check.
-- **P3 — 3D prototype.** Generate STL for ONE piece + matching frame
-  corner at 2–3 vertical exaggerations; base height proposal (G2).
-  Include a waterway body on the prototype piece to validate the
-  multi-body 3MF approach (D9).
-  *Check-in: Blender screenshots + STLs to open in slicer; pick
-  exaggeration & base.*
-- **P4 — Fit coupon.** Bay Area window pieces at both candidate scales
-  (built speculatively 2026-09-13; out/p4_bay_235mm/, out/p4_bay_420mm/)
-  PLUS a 10 mm frame rim per variant (ahl: tests the outer frame too;
-  pieces get edge clearance to drop into the frame opening). Print HOLD
-  until regions finalized. *Check-in: ahl prints and reports fit (G3/G4).*
-- **P5 — Full generation.** All four pieces + frame tiles + ocean datum;
-  two-color coast piece split at ocean Z (G7); watertight/manifold
-  verification on every STL.
-  *Check-in: full set of STLs + assembled render.*
-- **P6 — Print & iterate.** Slice, print, adjust from reality.
+- **P0 — Data & pipeline skeleton.** [DONE 2026-09-13] Fetch DEM tiles,
+  CGS provinces, state borders; reproject to CA Albers (EPSG:3310);
+  heightfield built. Extent approved (final crop may REDUCE it, D10).
+- **P1 — Region boundaries.** [PARAMETERS SETTLED; ahl markup review in
+  progress] 25 m + 13.5 km band + all rules; islands = one hull piece
+  (G11). Definitive artifact: out/p1_final.png (+ Vallejo inset
+  out/p1_final_vallejo_inset.png). Remaining: ahl's annotated concerns,
+  then final sign-off.
+- **P1.5 — Engraved one-piece validation print (ahl, 2026-09-13).**
+  [BUILT, print on hold until P1 signs off] RECTANGULAR SLAB, 150 mm N-S
+  — California plus ~40 km beyond the state line (N/E/S), Pacific as
+  flat datum (Channel Islands on it) — engraved recesses (<0.5 mm wide,
+  1-2 layers deep at 0.2 mm layer height) for BOTH the four-region
+  borders AND political borders (state lines + US-Mexico). First topo
+  print + early read on vertical exaggeration (built at 9.3x). Purpose
+  per ahl: EYEBALL piece boundaries against real terrain in hand.
+  Artifacts: out/p15_ca_engraved_150mm.stl, out/p15_preview.png.
+  - **P1.5b — Vallejo inset** [BUILT]: 120x120 mm @1:1M engraved slab of
+    the Carquinez junction (out/p15b_vallejo_inset.stl, p15b_preview.png)
+    — for eyeballing the messiest region interactions.
+- **P2 — Layout & scale.** [PARTIAL] Done: Census land authority
+  (p2_land.py) + topological vectorization with shared snapped borders
+  (p2_vectorize.py; zero gaps/overlaps) — BUT v1 predates 13.5 km, the
+  islands piece, and ahl's markup; re-run after P1 signs off (also fold
+  in: Terminal Island -> mainland, Oregon sea stack fix, islands hull
+  piece + its frame cavity). Remaining: physical size decision
+  (scale-at-end per D11 — supports multiple), frame tiling plan (G5),
+  per-scale min-width smoothing, dimensioned layout drawing.
+- **P3 — 3D prototype.** [NOT STARTED; foundations ready] Generate ONE
+  real puzzle piece + matching frame corner at 2–3 vertical
+  exaggerations; base height proposal (G2). Waterway multi-body deferred
+  (D9: baseline = no waterways; 3MF packaging already validated).
+  Mesh foundations exist (mesh_common.py, p15/p4 drivers).
+  *Check-in: previews + STLs in slicer; pick exaggeration & base.*
+- **P4 — Fit coupon.** [BUILT, print on hold until P1 signs off] Bay
+  Area window pieces at both candidate scales + 10 mm frame rim
+  (out/p4_bay_235mm/, out/p4_bay_420mm/, incl. frame.stl; pieces carry
+  edge clearance for the frame opening). Geometry-level fit verified to
+  <0.01 mm of nominal. *Check-in: ahl prints and reports fit (G3/G4).*
+- **P5 — Full generation.** [NOT STARTED] All pieces (4 regions +
+  islands piece) + frame tiles + ocean datum; two-color islands piece
+  (G7/G11); watertight verification on every mesh.
+  *Check-in: full set + assembled render.*
+- **P6 — Print & iterate.** [NOT STARTED] Slice, print, adjust.
 
 ## Viewing workflow
 
