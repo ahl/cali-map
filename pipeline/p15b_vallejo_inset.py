@@ -48,12 +48,15 @@ import p15_engraved as p15  # reuse: build_source_rasters, resample,
                             # exact CA-wide z_scale computation
 
 # ---- window definition (CA Albers, km) -------------------------------------
+# Bay Area window (ahl 2026-09-13: cover the larger Bay Area, not just
+# Vallejo): Santa Rosa / Sonoma coast down past San Jose, ocean to the
+# western Delta.
 WIN_CX_KM = -185.0
-WIN_CY_KM = 15.0
-WIN_SIDE_KM = 120.0
+WIN_CY_KM = -5.0
+WIN_SIDE_KM = 160.0
 
 # ---- print parameters (mm unless noted) ------------------------------------
-PRINT_MM = 120.0        # square print, side = WIN_SIDE_KM -> exactly 1:1e6
+PRINT_MM = 160.0        # square print, side = WIN_SIDE_KM -> exactly 1:1e6
 PX_MM = p15.PX_MM        # 0.2 mm/px heightfield, same as p15
 BASE_MM = p15.BASE_MM    # 2.0 mm base; ocean/bay datum = top of base
 GROOVE_DEPTH_MM = p15.GROOVE_DEPTH_MM  # 0.4 mm
