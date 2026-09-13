@@ -1,2 +1,5 @@
 # downloaded/derived data caches (large; regenerable via pipeline/)
 data/
+# meshes are large and regenerable; renders/reports stay in history
+*.stl
+*.3mf

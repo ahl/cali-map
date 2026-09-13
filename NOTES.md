@@ -126,6 +126,17 @@ set into a frame of the surrounding geography.
 - **G7 — Two-color strategy for the coast piece**: layer-swap at the ocean
   datum Z (easy, works on any printer) vs. multi-material. Layer-swap
   favors ocean-below/land-above color split.
+- **G11 — Coast piece ocean-shelf outline** (Channel Islands): how much
+  flat ocean rides with the Coast piece so the islands connect (D2).
+  Study: out/p1e_island_buffers.png (union rings 10/20/30/40 km around
+  the islands). Reading: 10 km = 5 separate clusters, no mainland
+  contact; ~20 km merges the southern islands; ~30 km joins nearly
+  everything and touches the mainland; 40 km = one shelf attached from
+  Ventura to Dana Point. Options: single N-km union, or tight ~10 km
+  hugs + hand-drawn connecting corridors. Also affects piece stiffness.
+  **Needs ahl's pick.** Note: a Terminal Island (LA harbor) artifact
+  shows as its own small ring — nearshore man-made land counts as
+  "island"; will be folded into the mainland in P2.
 - **G8 — Map projection**: need one that keeps "to scale" honest across
   ~11° of latitude (likely a local transverse Mercator or CA Albers,
   EPSG:3310). CA Albers is equal-area and the state standard — probable
