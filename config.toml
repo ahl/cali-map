@@ -17,8 +17,8 @@ enforce_contiguous = true
 # Minimum shoreline band (km): mainland within this distance of the ocean
 # is Coast regardless of elevation, keeping the strip continuous where
 # mountains meet the sea (Big Sur, Lost Coast). 0 disables.
-# 13 km = current best guess (ahl narrowing on 25 m + ~12.5-13 km).
-coast_band_km = 13.0
+# 13.5 km — ahl's final pick (2026-09-13): "a nice balance".
+coast_band_km = 13.5
 
 # Offshore islands below this latitude belong to Mexico (Coronados, Todos
 # Santos), not the Coast piece. Interim rule until the Census state

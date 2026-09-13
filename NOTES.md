@@ -77,8 +77,9 @@ set into a frame of the surrounding geography.
     Carquinez Strait — must be excluded explicitly). Morphological
     smoothing + minimum-width enforcement so the piece is printable.
   - *Mountains* = everything else.
-  - **Remaining decision**: pick the coast elevation threshold from
-    side-by-side rendered candidates (Phase 1 check-in).
+  - **SETTLED 2026-09-13: coast = 25 m threshold + 13.5 km band**, with
+    all rules (absorb, enclosure, lowland-valley, Carquinez gate,
+    contiguity). ahl reviewed out/p1c_band_fine.png and picked 13.5.
   - P1 exploration history (all figures in out/): threshold sweeps
     150-450 m; band sweeps 5-12.5 km; low thresholds 50-200 m; agent
     explorations p1a (morphological simplify + polygon smoothing — came
@@ -126,17 +127,25 @@ set into a frame of the surrounding geography.
 - **G7 — Two-color strategy for the coast piece**: layer-swap at the ocean
   datum Z (easy, works on any printer) vs. multi-material. Layer-swap
   favors ocean-below/land-above color split.
-- **G11 — Coast piece ocean-shelf outline** (Channel Islands): how much
-  flat ocean rides with the Coast piece so the islands connect (D2).
-  Study: out/p1e_island_buffers.png (union rings 10/20/30/40 km around
-  the islands). Reading: 10 km = 5 separate clusters, no mainland
-  contact; ~20 km merges the southern islands; ~30 km joins nearly
-  everything and touches the mainland; 40 km = one shelf attached from
-  Ventura to Dana Point. Options: single N-km union, or tight ~10 km
-  hugs + hand-drawn connecting corridors. Also affects piece stiffness.
-  **Needs ahl's pick.** Note: a Terminal Island (LA harbor) artifact
-  shows as its own small ring — nearshore man-made land counts as
-  "island"; will be folded into the mainland in P2.
+- **G11 — Channel Islands piece design** (revised 2026-09-13): the
+  islands become their OWN puzzle piece(s), separate from the mainland
+  Coast piece, set into the frame's ocean. Two candidates under study
+  (renders: out/p1f_islands_two_pieces.png, out/p1f_islands_one_piece.png):
+  (2a) TWO pieces — northern chain {San Miguel, Santa Rosa, Santa Cruz,
+  Anacapa} + 10 km water; southern {San Nicolas, Santa Barbara, Santa
+  Catalina, San Clemente} + ~25 km water (needs ~25 for contiguity);
+  (2b) ONE piece — convex hull of all eight + 10 km.
+  Farallones: SKIPPED (ahl). Terminal Island artifact: mainland (P2).
+  Bay islands (Angel, Alcatraz): inside the coast band, not affected.
+- **Decisions from ahl's 2026-09-13 review round**: waterways DEFERRED —
+  baseline build assumes NO waterways (D9 stays optional, revisit at
+  end); 3MF Bambu packaging VALIDATED in Bambu Studio (no print needed);
+  P1.5 slab print and P4 coupon prints ON HOLD until regions finalized;
+  NEW deliverable P1.5b — an engraved INSET print (coupon-style window)
+  of the Carquinez/Vallejo area, where the regions interact messily;
+  raster-jaggy borders (delta zoom) to be cured by vector smoothing in
+  the per-scale pass, with specific spots escalated to ahl if automation
+  isn't enough.
 - **G8 — Map projection**: need one that keeps "to scale" honest across
   ~11° of latitude (likely a local transverse Mercator or CA Albers,
   EPSG:3310). CA Albers is equal-area and the state standard — probable
