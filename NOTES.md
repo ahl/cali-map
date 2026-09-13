@@ -46,16 +46,18 @@ set into a frame of the surrounding geography.
 
 ## Gaps / open questions
 
-- **G1 — Region borders**: CGS Note 36 defines 11 geomorphic provinces; the
-  four-region scheme is a grouping of them. Proposed mapping (needs review):
-  - *Central Valley* = Great Valley
-  - *Desert* = Mojave Desert + Colorado Desert + Basin and Range (CA part)
-  - *Mountains* = Sierra Nevada + Cascade Range + Klamath Mtns + Modoc
-    Plateau + Transverse Ranges + Peninsular Ranges (+ Coast Ranges?)
-  - *Coast* = coastal strip — but CGS has no "coast strip" province; the
-    school-map yellow band is a curriculum invention. Options: derive a
-    fixed-width coastal band, use Coast Ranges province as "Coast," or use
-    EPA ecoregions instead. **Needs a decision.**
+- **G1 — Region borders**: hybrid approach agreed 2026-09-13:
+  - *Central Valley* = CGS Great Valley province
+  - *Desert* = CGS Mojave Desert + Colorado Desert + Basin and Range
+    (desert is a rainfall concept — elevation can't draw this line)
+  - *Coast* = **elevation-derived**: land contiguous with the shoreline
+    below a threshold (~150–400 m, tunable), MINUS Great Valley (the
+    valley is near sea level and connects to the ocean via the Delta /
+    Carquinez Strait — must be excluded explicitly). Morphological
+    smoothing + minimum-width enforcement so the piece is printable.
+  - *Mountains* = everything else.
+  - **Remaining decision**: pick the coast elevation threshold from
+    side-by-side rendered candidates (Phase 1 check-in).
 - **G2 — Vertical exaggeration factor**: TBD (typical 3–8× at this scale).
   Also: base thickness value.
 - **G3 — Clearances**: PLA-on-PLA puzzle fit; likely ~0.15–0.25 mm/side,
@@ -72,6 +74,42 @@ set into a frame of the surrounding geography.
   ~11° of latitude (likely a local transverse Mercator or CA Albers,
   EPSG:3310). CA Albers is equal-area and the state standard — probable
   choice.
+
+## Plan (phases with check-ins)
+
+Each phase ends with a check-in deliverable; nothing downstream starts
+until its inputs are signed off. Every phase is a jj commit.
+
+- **P0 — Data & pipeline skeleton.** Fetch DEM tiles for the map area,
+  CGS provinces, state borders; reproject everything to CA Albers
+  (EPSG:3310); build the mosaicked heightfield.
+  *Check-in: shaded-relief PNG of the full map area → confirm extent/crop
+  (settles G6 scale too).*
+- **P1 — Region boundaries.** Implement the hybrid G1 rule; render 3–4
+  coast-threshold candidates as colored overlays on the relief.
+  *Check-in: pick the threshold; sign off all four region borders.*
+- **P2 — Layout & scale.** Fix overall physical size, frame tiling plan
+  (G5), minimum piece widths, projection sanity.
+  *Check-in: dimensioned 2D layout drawing.*
+- **P3 — 3D prototype.** Generate STL for ONE piece + matching frame
+  corner at 2–3 vertical exaggerations; base height proposal (G2).
+  *Check-in: Blender screenshots + STLs to open in slicer; pick
+  exaggeration & base.*
+- **P4 — Fit coupon.** Small test print: one small real boundary segment
+  as plug + socket at 2–3 clearances (G3), plus wall draft experiment
+  (G4). *Check-in: user prints and reports fit.*
+- **P5 — Full generation.** All four pieces + frame tiles + ocean datum;
+  two-color coast piece split at ocean Z (G7); watertight/manifold
+  verification on every STL.
+  *Check-in: full set of STLs + assembled render.*
+- **P6 — Print & iterate.** Slice, print, adjust from reality.
+
+## Viewing workflow
+
+- 2D check-ins: pipeline emits shaded-relief/overlay PNGs, sent into the
+  conversation directly.
+- 3D check-ins: STLs imported to Blender (MCP bridge) → viewport
+  screenshots; user can also Quick Look STLs in Finder or open in slicer.
 
 ## Toolchain
 
