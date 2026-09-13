@@ -62,7 +62,11 @@ import p1_regions as base
 VARIANTS = {"235mm": 235.0, "420mm": 420.0}
 WINDOW_MM = 80.0          # square coupon window, print mm, both variants
 # window center in CA Albers km, per variant (triple junction ~(-190, +5))
-CENTER_KM = {"235mm": (-165.0, 5.0), "420mm": (-170.0, 5.0)}
+# 235mm: window reaches around the valley's north tip (y~302 km) so the
+# western Coast Range mountains stay connected to the Sierra in-window and
+# the real coast/mountains band border is part of the coupon; Carquinez
+# triple junction sits near the south edge. 420mm: junction-centered.
+CENTER_KM = {"235mm": (-165.0, 130.0), "420mm": (-170.0, 5.0)}
 PX_MM = 0.05              # print-space raster resolution (mm/px)
 CLEARANCE_MM = 0.15       # shrink per piece side; assembled gap = 2x this
 PAD_MM = 3.0              # analysis pad beyond the window (edge-replicated)
