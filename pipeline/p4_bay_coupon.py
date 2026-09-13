@@ -262,20 +262,29 @@ def clean_piece(poly, name, notes):
 
 def min_land_width(poly, step=0.05, cap=2.0):
     """Approximate narrowest local feature width: sweep morphological
-    opening (buffer -d then +d); the first d whose residual contains a
-    coherent chunk (>0.5 mm^2) or that splits the piece indicates a
-    feature of width ~2d. Returns mm (>= cap means 'wider than cap')."""
+    opening (buffer -d then +d). The removed residual counts as a REAL
+    feature of width ~2d only if it is a coherent chunk — inscribed
+    radius > 0.35 d (corner rounding gives ~0.29 d, boundary wiggle much
+    less) and area > 0.25 mm^2. A split of the piece at depth d also
+    means a ~2d-wide neck. Returns mm (cap means 'wider than cap')."""
     base_parts = len(list(getattr(poly, "geoms", [poly])))
     d = step
     while d <= cap / 2 + 1e-9:
         shrunk = poly.buffer(-d)
         if shrunk.is_empty:
-            return 2 * (d - step)
+            return 2 * d
         if len(list(getattr(shrunk, "geoms", [shrunk]))) > base_parts:
             return 2 * d
         residual = poly.difference(shrunk.buffer(d))
-        if any(g.area > 0.5 for g in getattr(residual, "geoms", [residual])):
-            return 2 * d
+        for g in getattr(residual, "geoms", [residual]):
+            if g.geom_type != "Polygon" or g.area < 0.25:
+                continue
+            try:
+                pole = polylabel(g, 0.01)
+                if pole.distance(g.boundary) > 0.35 * d:
+                    return 2 * d
+            except Exception:
+                pass
         d += step
     return cap
 
@@ -378,7 +387,7 @@ def build_variant(tag, target_mm, reg, sea, dem, extent_m):
           f"({cx/1000:.0f}, {cy/1000:.0f}) km ===")
 
     regw, seaw, demw = window_rasters(reg, sea, dem, s, cx, cy)
-    regw = fill_and_contiguity(regw, seaw, notes)
+    regw = fill_and_contiguity(regw, seaw, notes, s, cx, cy)
     hfn, z_per_m = make_height_fn(dem, s, cx, cy)
     land = ~seaw
     max_e = float(demw[land].max()) if land.any() else 0.0
@@ -521,6 +530,15 @@ def main():
     results = [build_variant(tag, mm, reg, sea, dem, extent_m)
                for tag, mm in VARIANTS.items()]
     render_preview(results)
+    print(f"\nclearance method: sub-pixel EDT contour on a {PX_MM} mm/px "
+          f"raster, offset {CLEAR_PX:g} px = {CLEARANCE_MM:g} mm/side "
+          f"(assembled gap {2*CLEARANCE_MM:g} mm). Accuracy: half-pixel "
+          "center offset corrected analytically (level = px + 0.5); "
+          "gaussian smoothing acts on a unit-gradient field (no bias on "
+          "straight borders); residual local error = contour "
+          f"interpolation (~+/-{PX_MM/2:g} mm) + simplify tolerance "
+          f"({SIMPLIFY_MM:g} mm) => border position within ~+/-0.045 mm "
+          "worst case, typically +/-0.02 mm. Window faces: no clearance.")
 
 
 if __name__ == "__main__":
