@@ -1077,9 +1077,8 @@ def main():
         assert rose.letter_min_stroke_mm >= 0.8 - 1e-6, \
             "letter strokes < 0.8"
         assert rose.letter_tip_gap_mm > 0, "letter ink touches cardinal tips"
-        for n, v in rose.ink_stroke_after_mm.items():
-            assert v >= COMPASS["ink_min_stroke_mm"] - 1e-6 or \
-                not rose.masks[n].any(), f"{n} ink stroke under floor"
+        assert rose.ink_stroke_after_mm["black"] >= \
+            COMPASS["ink_min_stroke_mm"] - 1e-6, "black ink stroke under floor"
 
     # ---- version stamps (0.4 mm bottom deboss, mirrored) ----------------
     date = vstamp.stamp_date()

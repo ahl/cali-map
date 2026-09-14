@@ -130,10 +130,16 @@ letter_font = "Georgia Bold"
 letter_cap_mm = 4.0           # was 6.0; scaled toward the smaller rose
                               # (kept above proportional so letters stay
                               # crisp after min-stroke thickening)
-letter_radius_frac = 1.45     # letter anchor radius / ring outer radius.
+letter_radius_frac = 1.65     # letter anchor radius / ring outer radius.
                               # MUST exceed 1.30 (cardinal tips reach 30%
                               # past the ring): ahl 2026-09-14, points
-                              # must not touch the letters.
+                              # must not touch the letters. Measured (not
+                              # just asserted): at dia 25 the actual
+                              # rasterized letter glyph ink came within
+                              # -1.97 mm of the (ink-dilated) cardinal
+                              # tips at 1.45 -- moved out to 1.65 for a
+                              # positive measured gap (build-time assert
+                              # in compass_art.py).
 ink_min_stroke_mm = 0.45      # dilate artwork ink classes to at least
                               # this printed width (at dia 25 the black
                               # outlines are ~0.19 mm raw — sub-nozzle)
