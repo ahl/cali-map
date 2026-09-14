@@ -382,72 +382,59 @@ def piece_polygon(mask, other_mask, c_frame_px, c_pair_px, clip=None):
     masks). T1 print finding: 0.15 mm/side vs the frame is the calibrated
     friction fit, but the same 0.15/side between two pieces doubles to a
     loose 0.30 mm total gap -- piece-piece borders get their own
-    (smaller) [print].clearance_pair_per_side_mm instead.
+    (smaller) [print].clearance_pair_per_side_mm instead (and the
+    ENCLOSED_PIECE may use 0 on its own piece-facing walls entirely --
+    see ENCLOSED_ZERO_CLEARANCE).
 
-    Two EDT fields, each a direct generalization of mask_polygon's single
-    field (distance to the nearest non-piece pixel):
+    Two-STAGE construction (an earlier one-shot version that combined a
+    single continuous field via min(d_frame - c_frame_px, d_other -
+    c_pair_px) and contoured its own zero crossing had a real bug: the
+    field could dip NEGATIVE at pixels hugging the piece's own true edge
+    whenever an offset was small (e.g. c_pair_px=0 for the enclosed
+    piece), which collides with the fixed 0.0 assigned to background --
+    mask_polygon's single-EDT field is never negative, so its 0-vs-
+    positive floor is unambiguous, but ours could invert it, and it
+    measurably corrupted the extracted contour: verified the valley
+    piece grew ~28 mm^2 INTO the mountains' own nominal territory in the
+    coupon. Fixed by never touching the continuous EDT arithmetic at
+    all -- instead THRESHOLD each obstacle type into a plain binary
+    raster (the same sub-pixel convention mask_polygon uses: keep a
+    piece pixel only if its EDT distance to that obstacle is >=
+    offset + 0.5), AND the two thresholded survivorships together, then
+    hand the resulting (already correctly eroded) raster to the
+    existing, proven mask_polygon(., 0.0) for the final sub-pixel
+    contour/smooth/simplify pass -- so background is a plain False and
+    interior is a plain non-negative EDT field again, exactly
+    mask_polygon's own invariant.
       d_frame = EDT(mask | other_mask) -- distance to the nearest FRAME
                 pixel, computed with siblings folded into the foreground
-                so a nearby sibling never shortens it (the frame distance
-                "sees past" siblings to the real frame territory beyond);
-      d_other = EDT(~other_mask)       -- distance to the nearest sibling
-                pixel (0 on the siblings themselves).
-    field = min(d_frame - c_frame_px, d_other - c_pair_px) - 0.5 (the
-    same half-pixel EDT-to-pixel-center correction as mask_polygon's
-    erode_px + 0.5, folded into the offsets so the contour is taken at
-    the literal zero level), zeroed outside `mask` (matches mask_polygon:
-    background is exactly 0, so no spurious contour appears near a
-    SIBLING's own far boundary elsewhere in the raster); same gaussian
-    smoothing / contour / simplify as mask_polygon.
-
-    Where a stretch borders ONLY the frame, d_other is large so the
-    min() always resolves to the frame term (behaves exactly like
-    mask_polygon(mask, c_frame_px)); where a stretch borders ONLY a
-    sibling, d_frame is large (it sees past the sibling) so the min()
-    resolves to the pair term. At a piece-piece-frame triple point the
-    min() blends the two offsets continuously (no seam/discontinuity).
-    Since d_frame and d_other partition all non-piece pixels by type,
-    min(d_frame, d_other) == the single-field distance-to-nearest-non-
-    piece-pixel used by mask_polygon; at c_frame_px == c_pair_px == 0
-    this function is therefore identical to mask_polygon(mask, 0.0,
-    clip=clip)."""
-    if clip is None:
-        clip = box(0, 0, WINDOW_MM, WINDOW_MM)
-    span = mask.shape[0] * PX_MM
-    piece_p = np.pad(mask, PAD_PX, mode="constant", constant_values=False)
-    other_p = np.pad(other_mask, PAD_PX, mode="constant",
-                     constant_values=False)
-    d_frame = ndimage.distance_transform_edt(piece_p | other_p)
-    d_other = ndimage.distance_transform_edt(~other_p)
-    field = np.minimum(d_frame - c_frame_px, d_other - c_pair_px) - 0.5
-    field = np.where(piece_p, field, 0.0)
-    if EDT_SMOOTH_PX > 0:
-        field = ndimage.gaussian_filter(field, EDT_SMOOTH_PX)
-    rings = []
-    for lp in measure.find_contours(field, 0.0):
-        if len(lp) < 4:
-            continue
-        xs = (lp[:, 1] - PAD_PX + 0.5) * PX_MM
-        ys = span - (lp[:, 0] - PAD_PX + 0.5) * PX_MM
-        ring = Polygon(np.column_stack([xs, ys]))
-        if not ring.is_valid:
-            ring = ring.buffer(0)
-        if ring.is_empty or ring.area < 0.02:
-            continue
-        rings.append(ring)
-    if not rings:
-        return None
-    rings.sort(key=lambda r: r.area, reverse=True)
-    geom = rings[0]
-    for r in rings[1:]:                        # even-odd nesting
-        geom = geom.symmetric_difference(r)
-    geom = geom.intersection(clip)
-    geom = geom.simplify(SIMPLIFY_MM, preserve_topology=True)
-    parts = [g for g in getattr(geom, "geoms", [geom])
-             if g.geom_type == "Polygon" and g.area > 1e-6]
-    if not parts:
-        return None
-    return MultiPolygon(parts) if len(parts) > 1 else parts[0]
+                so a nearby sibling never shortens it (the frame
+                threshold "sees past" siblings to the real frame
+                territory beyond);
+      d_other = EDT(~other_mask)       -- distance to the nearest
+                sibling pixel (0 on the siblings themselves).
+    A pixel survives (stays in the effective mask) iff d_frame >=
+    c_frame_px + 0.5 AND d_other >= c_pair_px + 0.5 -- an AND of two
+    independent erosions, the discrete equivalent of the min() blend:
+    where a stretch borders ONLY the frame, d_other is always large so
+    only the frame threshold ever removes pixels there (behaves exactly
+    like mask_polygon(mask, c_frame_px)); where a stretch borders ONLY a
+    sibling, d_frame is large (it sees past the sibling) so only the
+    pair threshold matters. At a piece-piece-frame triple point the two
+    erosions blend through the AND with no seam/discontinuity. At
+    c_frame_px == c_pair_px == 0 no pixel is ever removed (both
+    thresholds are >= 0.5, and the closest a piece pixel can be to any
+    non-piece pixel is exactly 1.0), so this is identical to
+    mask_polygon(mask, 0.0, clip=clip)."""
+    eff = mask
+    if c_frame_px > 0:
+        frame_bg = ~(mask | other_mask)
+        d_frame = ndimage.distance_transform_edt(~frame_bg)
+        eff = eff & (d_frame >= c_frame_px + 0.5)
+    if c_pair_px > 0:
+        d_other = ndimage.distance_transform_edt(~other_mask)
+        eff = eff & (d_other >= c_pair_px + 0.5)
+    return mask_polygon(eff, 0.0, clip=clip)
 
 
 def clean_piece(poly, name, notes):

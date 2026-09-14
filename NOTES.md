@@ -36,7 +36,43 @@ set into a frame of the surrounding geography.
 | D11 | Physical scale decided at the END; possibly multiple scales | Geometry/borders in map meters; scale, Z-exaggeration, clearance applied at mesh export. Per-scale border min-width pass required (printable width is fixed in mm). |
 | D9 | Waterways/lakes as second color on EACH piece — **OPTIONAL** | ahl may or may not print with these; keep it a build flag. Default output = solid single-color pieces; water variant = region body minus water inlays + water bodies in one 3MF (AMS + Bambu Studio confirmed). Prototyped P3, implemented P5, final call at the end. |
 
-## Data sources (verified accessible 2026-09-13)
+## Data provenance (complete download inventory)
+
+Everything below is public domain (US Gov) or Natural Earth public
+domain; no attribution required for the printed object. All caches live
+under data/ (gitignored, regenerable). Fetched 2026-09-13/14.
+
+1. **Elevation**: AWS Terrain Tiles ("terrarium" encoding, Mapzen/
+   Nextzen dataset on AWS Open Data), anonymous:
+   `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png`
+   - zoom 9 (~250 m) statewide mosaic -> data/dem_ca_albers_250m.npy
+     (pipeline/p0_build_dem.py; 550 tiles)
+   - zoom 11 (~120 m) Bay Area window fetches (pipeline/dem_hires.py;
+     ~150 tiles) for the 1:1M inset
+2. **Region basis**: California Geological Survey Note 36 geomorphic
+   provinces, via the CA Dept of Conservation ArcGIS server:
+   `https://gis.conservation.ca.gov/server/rest/services/CGS/GeoGems/MapServer/2/query`
+   (f=geojson) -> data/cgs_geomorphic_provinces.geojson (13 features
+   incl. Coastline SubProvinces)
+3. **Political boundaries / land authority**:
+   - US Census cartographic boundary states 1:500k (2023):
+     `https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_us_state_500k.zip`
+     -> data/census/ (CA polygon = THE land/CA authority; state lines)
+   - Natural Earth 10m (naciscdn.org/naturalearth/10m/):
+     `cultural/ne_10m_admin_1_states_provinces_lines.zip`,
+     `cultural/ne_10m_admin_0_boundary_lines_land.zip` (US-Mexico line),
+     `cultural/ne_10m_admin_0_countries.zip` (Mexico land)
+     -> data/ne_borders/, data/ne_countries/
+4. **Hydrography** (deferred waterways option, G10): USGS National
+   Atlas / Small-Scale 1:1,000,000:
+   `https://prd-tnm.s3.amazonaws.com/StagedProducts/Small-scale/data/Hydrography/streaml010g.shp_nt00885.tar.gz`
+   `https://prd-tnm.s3.amazonaws.com/StagedProducts/Small-scale/data/Hydrography/wtrbdyp010g.shp_nt00886.tar.gz`
+   -> data/hydro/, filtered to data/p2_waterways.geojson
+5. **ahl-authored inputs** (tracked in jj, NOT downloads): overrides/
+   *.geojson (extracted from his markups; marked source images at repo
+   root), assets/compass.svg + compass.ai (his artwork).
+
+## Original source-vetting notes (2026-09-13)
 
 - **Region boundaries (candidate canonical source)**: California Geological
   Survey *Note 36* geomorphic provinces — 11 provinces as GIS polygons,
