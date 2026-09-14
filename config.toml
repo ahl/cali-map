@@ -107,10 +107,17 @@ clearance_per_side_mm = 0.15  # piece shrink vs the FRAME (frame = nominal;
                               # total piece-frame gap = this value).
                               # T1 verdict: mountains "pretty locked in"
                               # at 0.15 -- the calibrated friction fit.
-clearance_pair_per_side_mm = 0.075  # piece shrink along PIECE-PIECE shared
-                              # borders (total gap = 2x = 0.15, matching
-                              # the frame fit; was 0.15/side = 0.30 total,
-                              # which made the valley loose -- T1 finding)
+clearance_pair_per_side_mm = 0.08   # piece shrink along PIECE-PIECE shared
+                              # borders (was 0.15/side = 0.30 total ->
+                              # loose valley, T1 finding)
+enclosed_piece_zero_clearance = true  # ahl 2026-09-14: a piece FULLY
+                              # ENCLOSED by another (touching no frame —
+                              # i.e. the valley) takes ZERO clearance and
+                              # is the exact nominal region shape; its
+                              # enclosing neighbor's 0.08 does all the
+                              # work -> valley-mountains total gap 0.08.
+                              # Tight press-fit; walk back in 0.02 steps
+                              # if T2 binds.
 base_mm = 3.0                 # water surface height above print bottom
 floor_mm = 1.2                # tray floor under everything (D16)
 bottom_chamfer_mm = 0.0       # 45-deg chamfer at piece bottom edges

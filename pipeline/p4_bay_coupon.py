@@ -89,7 +89,7 @@ import trimesh
 import triangle as tr
 from scipy import ndimage
 from shapely.geometry import MultiPolygon, Point, Polygon, box
-from shapely.ops import polylabel
+from shapely.ops import polylabel, unary_union
 from shapely import affinity
 from skimage import measure
 
@@ -155,6 +155,9 @@ BASE_MM = _PRINT_CFG["base_mm"]           # water surface above bottom
 FLOOR_MM = _PRINT_CFG["floor_mm"]         # tray floor (D16)
 CHAMFER_MM = _PRINT_CFG["bottom_chamfer_mm"]  # 45-deg piece bottom edge
 POKE_D_MM = _PRINT_CFG["poke_hole_d_mm"]
+RIB_INTERFERENCE_MM = _PRINT_CFG.get("rib_interference_mm", 0.0)
+RIB_RADIUS_MM = _PRINT_CFG.get("rib_radius_mm", 0.4)
+RIB_SPACING_MM = _PRINT_CFG.get("rib_spacing_mm", 50.0)
 LAND_MIN_MM = _PRINT_CFG["land_min_mm"]
 COMPASS = _CFG_ALL.get("compass", {"enabled": False})
 ROSE_STYLE = COMPASS.get("style", "raised")   # "flush" | "raised"
@@ -704,6 +707,90 @@ def poke_points(nom_poly, n=2):
             break                    # too crowded for another hole
         chosen.append(best)
     return chosen
+
+
+def seam_hole(nom_a, nom_b, cav_union, allowed, min_len_mm=None):
+    """A poke-hole CENTER straddling the shared border of two adjacent
+    NOMINAL (pre-clearance) piece footprints -- ahl 2026-09-14: poke-
+    holes are now the disassembly mechanism and finger-sized, and one
+    hole spanning a piece-piece seam undermines both pieces at once.
+    Nominal footprints are exactly contiguous (no clearance cut yet), so
+    `cav_union` (their union) has NO boundary along the seam itself --
+    only its outer edge is a real frame wall -- meaning a hole centered
+    on the seam is legitimately entirely 'under removable pieces' even
+    though its circle crosses two different piece rasters.
+    `allowed` = cav_union already buffered in by the wall margin (hole
+    radius + POKE_MARGIN_MM); candidates are scored by distance to
+    cav_union's OWN boundary (not the individual pieces' boundaries, so
+    the seam itself costs nothing). Returns None if the shared border is
+    shorter than min_len_mm (default: 1.5x the hole diameter, so the
+    full circle plausibly fits along it) or no sampled point clears the
+    wall margin."""
+    if min_len_mm is None:
+        min_len_mm = 1.5 * POKE_D_MM
+    shared = nom_a.exterior.intersection(nom_b.exterior)
+    segs = [g for g in getattr(shared, "geoms", [shared])
+            if g.geom_type == "LineString" and g.length >= min_len_mm]
+    if not segs:
+        return None
+    seg = max(segs, key=lambda g: g.length)
+    outer = cav_union.boundary
+    cands = [seg.interpolate(t, normalized=True)
+             for t in np.linspace(0.05, 0.95, 37)]
+    cands = [p for p in cands if allowed.contains(p)]
+    if not cands:
+        return None
+    return max(cands, key=lambda p: outer.distance(p))
+
+
+def plan_poke_holes(nom, target_n, seam_min_len_mm=None):
+    """Plans finger-sized poke-hole CENTERS (config [print].poke_hole_d_mm
+    = 18 mm, ahl 2026-09-14: THE disassembly mechanism) through the frame
+    floor under the union of all removable pieces.  `nom`: {name:
+    nominal piece polygon}.  One SHARED hole per adjacent pair of pieces
+    whose common border is long enough (seam_hole) -- serves both
+    flanking pieces at once; then per-piece deep-interior holes
+    (poke_points, unchanged) top each piece up to target_n[name] holes
+    credited to it, with at least 1 own hole even when seam holes
+    already reach the target (a piece must never depend SOLELY on a
+    hole centered mostly under its neighbor).  Every center clears the
+    cavity-union boundary (the real frame cavity wall) by >= hole_radius
+    + POKE_MARGIN_MM and every other hole by >= poke_hole_d_mm + 2 mm.
+    Returns (centers, credit) -- credit[name] is the sublist of centers
+    whose circle overlaps that piece's own nominal footprint (a seam
+    hole appears in both flanking pieces' lists)."""
+    names = list(nom)
+    cav_union = unary_union(list(nom.values()))
+    margin = POKE_D_MM / 2 + POKE_MARGIN_MM
+    allowed = cav_union.buffer(-margin)
+    centers, credit = [], {n: [] for n in names}
+
+    def add(pt):
+        if pt is None or any(pt.distance(c) < POKE_D_MM + 2.0
+                             for c in centers):
+            return False
+        centers.append(pt)
+        for n in names:
+            if nom[n].distance(pt) < 1e-6:
+                credit[n].append(pt)
+        return True
+
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            a, b = names[i], names[j]
+            add(seam_hole(nom[a], nom[b], cav_union, allowed,
+                         seam_min_len_mm))
+
+    for n in names:
+        want = max(target_n.get(n, 2), 1)
+        if len(credit[n]) >= want and credit[n]:
+            continue                            # target met via seam(s)
+        need = max(want - len(credit[n]), 1)    # never zero own holes
+        for pt in poke_points(nom[n], n=need + len(credit[n])):
+            if len(credit[n]) >= want:
+                break
+            add(pt)
+    return centers, credit
 
 
 # --------------------------------------------------------------- 3MF writer
