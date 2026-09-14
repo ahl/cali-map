@@ -26,7 +26,7 @@ set into a frame of the surrounding geography.
 | D7 | Material: PLA. Fit: snug but disassemblable | Clearance values TBD (see G3) |
 | D8 | Version control: jj (colocated git), repo = this directory | |
 | D12 | Automation contract: change a region aspect -> `uv run pipeline/regen_all.py` rebuilds the whole chain (p1 render, land, vectors, slabs, coupons) in dependency order | ahl 2026-09-13, after print validation |
-| D13 | Slab/final-map aspect: ahl likes the P1.5 aspect (CA bbox + 40 km N/E/S) with MORE ocean west — WEST_PAD_KM = 50 added. Candidate template for the final frame crop (D10) | |
+| D13 | **Final-map aspect = the P1.5 slab at 135 x 150** (CA bbox + 40 km N/E/S + 67.5 km ocean west; 0.9 aspect). ahl 2026-09-13: "we're going to use that aspect ratio for the final map" | |
 | D10 | Map area may be REDUCED in the final crop | ahl intentionally over-cropped the reference area. End-stage parameter; affects only the frame, never the pieces. Only reductions. |
 | D11 | Physical scale decided at the END; possibly multiple scales | Geometry/borders in map meters; scale, Z-exaggeration, clearance applied at mesh export. Per-scale border min-width pass required (printable width is fixed in mm). |
 | D9 | Waterways/lakes as second color on EACH piece — **OPTIONAL** | ahl may or may not print with these; keep it a build flag. Default output = solid single-color pieces; water variant = region body minus water inlays + water bodies in one 3MF (AMS + Bambu Studio confirmed). Prototyped P3, implemented P5, final call at the end. |
@@ -203,9 +203,9 @@ until its inputs are signed off. Every phase is a jj commit.
   print + early read on vertical exaggeration (built at 9.3x). Purpose
   per ahl: EYEBALL piece boundaries against real terrain in hand.
   Artifacts: out/p15_ca_engraved_150mm.stl, out/p15_preview.png.
-  - **P1.5b — Vallejo inset** [BUILT]: 120x120 mm @1:1M engraved slab of
-    the Carquinez junction (out/p15b_vallejo_inset.stl, p15b_preview.png)
-    — for eyeballing the messiest region interactions.
+  - **P1.5b — Bay Area inset** [SKIPPED per ahl 2026-09-13 — not needed;
+    the statewide slab print validated the regions. Artifacts remain in
+    out/ and regenerate with the chain; also spawned dem_hires.py.]
 - **P2 — Layout & scale.** [VECTORIZATION DONE on signed-off geometry
   2026-09-13] data/p2_regions.geojson (canonical, DP 500 m) +
   data/p2_regions_smooth.geojson (Chaikin x2 preview flavor) — both with

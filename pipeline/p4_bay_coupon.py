@@ -101,9 +101,17 @@ def load_regions(dem):
     """Regenerate the region raster from config + p1_regions (cached in the
     system temp dir, keyed on the [regions] config, so iteration is fast;
     a cold run always regenerates from source)."""
-    key = hashlib.md5((json.dumps(base.CFG, sort_keys=True)
-                       + json.dumps(base.META, sort_keys=True)
-                       + "p4v1").encode()).hexdigest()[:12]
+    # key covers the FULL config plus the override files' bytes — the
+    # region raster depends on overrides/*.geojson content, not just the
+    # [regions] section (stale-cache bug ahl caught 2026-09-13)
+    h = hashlib.md5()
+    h.update(json.dumps(base._TOML, sort_keys=True).encode())
+    h.update(json.dumps(base.META, sort_keys=True).encode())
+    for f in sorted((base.ROOT / "overrides").glob("*.geojson")):
+        h.update(f.name.encode())
+        h.update(f.read_bytes())
+    h.update(b"p4v2")
+    key = h.hexdigest()[:12]
     cache = Path(tempfile.gettempdir()) / f"p4_regions_{key}.npz"
     if cache.exists():
         z = np.load(cache)

@@ -73,8 +73,8 @@ GROOVE_TARGET_MM = 0.4  # target groove WIDTH; actual px width is whatever
                         # integer count of px is closest at this PX_MM
 MIN_FLOOR_MM = 1.0     # groove floor never goes below this (base protection)
 PAD_KM = 40.0          # slab margin beyond CA's bbox on N, E, S
-WEST_PAD_KM = 50.0     # extra open Pacific west of CA (ahl 2026-09-13:
-                       # "a bit more space to the west showing more ocean")
+WEST_PAD_KM = 67.5     # extra open Pacific west of CA -> slab 135 x 150 mm
+                       # (ahl 2026-09-13: final-map aspect ratio template)
 
 STL_NAME = "p15_ca_engraved_150mm.stl"
 PNG_NAME = "p15_preview.png"
