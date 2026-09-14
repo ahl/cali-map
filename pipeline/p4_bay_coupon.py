@@ -54,11 +54,17 @@ p15_engraved.py does), VERTICAL walls (G4: no draft — slice with
 elephant-foot compensation ON), CLEARANCE_MM per side against the cavity
 walls and against each other.
 
+VERSION STAMPS (version_stamp.py): every part's bottom layer carries a
+mirrored debossed tag (0.4 mm deep) -- frame: "<tag> <date> <1:scale>
+c<clearance>", pieces: "<tag> <date> MTN|VAL" -- so printed iterations
+are identifiable in hand.  Tag = config [output].build_tag.
+
 Outputs:
   out/p4_mini/frame.3mf      3 bodies, filaments pre-assigned (Bambu)
   out/p4_mini/mountains.stl  binary STL, watertight
   out/p4_mini/valley.stl     binary STL, watertight
   out/p4_preview.png         assembled + exploded + cavity-edge zoom
+                             + mirrored bottom view (version stamps)
 (out/p4_bay_235mm and out/p4_bay_420mm are SUPERSEDED by this build.)
 """
 
@@ -82,6 +88,7 @@ from skimage import measure
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import p1_regions as base
+import version_stamp as vstamp
 
 # ------------------------------------------------------------------ params
 WINDOW_MM = 100.0        # inner window (pieces + cavities), print mm
@@ -132,8 +139,9 @@ DATA = base.DATA
 OUT = ROOT / "out"
 OUT_DIR = OUT / "p4_mini"
 
-TOTAL_NS_MM = tomllib.loads(
-    (ROOT / "config.toml").read_text())["output"]["total_ns_mm"]
+_OUTPUT_CFG = tomllib.loads((ROOT / "config.toml").read_text())["output"]
+TOTAL_NS_MM = _OUTPUT_CFG["total_ns_mm"]
+BUILD_TAG = _OUTPUT_CFG.get("build_tag", "T0")
 
 
 # ------------------------------------------------------- region generation
@@ -408,12 +416,15 @@ def triangulate(poly, flags):
     return B["vertices"], B["triangles"]
 
 
-def solid_mesh(poly, top_fn, z_bottom=0.0, quality=True):
+def solid_mesh(poly, top_fn, z_bottom=0.0, quality=True, stamp=None):
     """Watertight solid over a (Multi)Polygon: top from top_fn(xy)->z,
     flat bottom at z_bottom, vertical walls. quality=False -> boundary-
-    only CDT (flat prisms need no interior refinement)."""
+    only CDT (flat prisms need no interior refinement). stamp: optional
+    version_stamp.Stamp debossed into the bottom of the part containing
+    its rectangle (bottom rebuilt via version_stamp.stamped_bottom)."""
     flags = f"pq25a{MAX_TRI_AREA_MM2:.6f}" if quality else "p"
     bodies = []
+    stamped = False
     for part in getattr(poly, "geoms", [poly]):
         v2, f = triangulate(part, flags)
         a = v2[f[:, 0]]
@@ -422,19 +433,44 @@ def solid_mesh(poly, top_fn, z_bottom=0.0, quality=True):
         f[cross < 0] = f[cross < 0][:, ::-1]
         nv = len(v2)
         ztop = top_fn(v2)
-        verts = np.vstack([np.column_stack([v2, ztop]),
-                           np.column_stack([v2, np.full(nv, z_bottom)])])
         edges = np.vstack([f[:, [0, 1]], f[:, [1, 2]], f[:, [2, 0]]])
         und = np.sort(edges, axis=1)
         _, inv, cnt = np.unique(und, axis=0, return_inverse=True,
                                 return_counts=True)
         be = edges[cnt[inv] == 1]
+        if stamp is not None and part.contains(stamp.rect):
+            # bottom rebuilt with the deboss; walls end on the same
+            # boundary vertex chain the CDT reuses, then weld
+            stamped = True
+            bidx = np.unique(be)
+            bmap = np.full(nv, -1, np.int64)
+            bmap[bidx] = nv + np.arange(len(bidx))
+            verts = np.vstack([
+                np.column_stack([v2, ztop]),
+                np.column_stack([v2[bidx],
+                                 np.full(len(bidx), float(z_bottom))])])
+            P, Q = be[:, 0], be[:, 1]
+            walls = np.vstack([np.stack([P, bmap[P], bmap[Q]], 1),
+                               np.stack([P, bmap[Q], Q], 1)])
+            bverts, bfaces = vstamp.stamped_bottom(part, v2, be, stamp,
+                                                   z_bottom)
+            faces = np.vstack([f, walls, bfaces + len(verts)])
+            verts, faces = vstamp.weld(np.vstack([verts, bverts]), faces)
+            mesh = trimesh.Trimesh(vertices=verts, faces=faces,
+                                   process=False)
+            if mesh.volume < 0:
+                mesh.invert()
+            bodies.append(mesh)
+            continue
+        verts = np.vstack([np.column_stack([v2, ztop]),
+                           np.column_stack([v2, np.full(nv, z_bottom)])])
         walls = np.vstack([
             np.column_stack([be[:, 0], be[:, 0] + nv, be[:, 1] + nv]),
             np.column_stack([be[:, 0], be[:, 1] + nv, be[:, 1]])])
         faces = np.vstack([f, f[:, ::-1] + nv, walls])
         bodies.append(trimesh.Trimesh(vertices=verts, faces=faces,
                                       process=False))
+    assert stamp is None or stamped, "stamp rect not inside any part"
     return trimesh.util.concatenate(bodies) if len(bodies) > 1 else bodies[0]
 
 
@@ -606,16 +642,16 @@ def add_poly(ax, geom, color, ec="none", lw=0.0, alpha=1.0, z=1):
                                alpha=alpha, zorder=z))
 
 
-def render_preview(geo, s, tj, holes):
+def render_preview(geo, s, tj, holes, stamps):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     water_vis = geo["water_visible"]
     cav_floor = {n: geo[f"{n}_nom"] for n in ("mountains", "valley")}
-    fig, axes = plt.subplots(1, 3, figsize=(19, 7.2), dpi=200)
+    fig, axes = plt.subplots(1, 4, figsize=(25.5, 7.2), dpi=200)
 
-    for col, ax in enumerate(axes):
+    for col, ax in enumerate(axes[:3]):
         ax.set_facecolor("#1c1c22")
         explode = col == 1
         add_poly(ax, water_vis, WATER_RGB)
@@ -667,6 +703,41 @@ def render_preview(geo, s, tj, holes):
                          f"{2 * CLEARANCE_MM:g} mm", fontsize=10)
         ax.set_aspect("equal")
         ax.set_xticks([]), ax.set_yticks([])
+
+    # panel 4: BOTTOM view, mirrored (x flipped) so the debossed version
+    # stamps read the way they do on the flipped printed parts
+    ax = axes[3]
+    ax.set_facecolor("#1c1c22")
+    add_poly(ax, water_vis, WATER_RGB)
+    add_poly(ax, geo["gray"], GRAY_RGB, z=2)
+    add_poly(ax, geo["coast_nom"], base.COLORS[base.COAST], z=2)
+    for name in ("mountains", "valley"):
+        rid = {v: k for k, v in REGION_NAME.items()}[name]
+        add_poly(ax, geo[f"{name}_piece"], base.COLORS[rid], z=3)
+    for pts in holes.values():
+        for pt in pts:
+            ax.add_patch(plt.Circle((pt.x, pt.y), POKE_D_MM / 2,
+                                    facecolor="#1c1c22",
+                                    edgecolor="black", lw=0.6, zorder=5))
+    from matplotlib.transforms import Affine2D
+    for st in stamps.values():
+        w, h = st.size_mm
+        rgba = np.zeros(st.mask.shape + (4,))
+        rgba[st.mask] = (0.05, 0.05, 0.05, 1.0)
+        im = ax.imshow(rgba, extent=(-w / 2, w / 2, -h / 2, h / 2),
+                       origin="lower", interpolation="nearest", zorder=6)
+        im.set_transform(Affine2D().rotate_deg(st.angle)
+                         .translate(*st.center) + ax.transData)
+        xr, yr = st.rect.exterior.xy
+        ax.plot(xr, yr, color="black", lw=0.5, linestyle=":", zorder=6)
+    ax.set_xlim(WINDOW_MM + RIM_MM + 2, -RIM_MM - 2)   # mirrored view
+    ax.set_ylim(-RIM_MM - 2, WINDOW_MM + RIM_MM + 2)
+    ax.set_title("BOTTOM view (mirrored) — version stamps, "
+                 f"{vstamp.DEPTH_MM:g} mm deboss into the bottom layer",
+                 fontsize=10)
+    ax.set_aspect("equal")
+    ax.set_xticks([]), ax.set_yticks([])
+
     fig.suptitle(
         "P4 v2 mini-frame — miniature of the final product  "
         f"(tray frame: floor {FLOOR_MM:g} mm, water surface {BASE_MM:g} mm,"
@@ -821,6 +892,48 @@ def main():
     print(f"  floor: one connected body, {len(floor_poly.interiors)} "
           "poke-holes")
 
+    # ---- version stamps (0.4 mm bottom deboss, mirrored) ----------------
+    date = vstamp.stamp_date()
+    stamp_texts = {
+        "frame": (f"{BUILD_TAG} {date} 1:{1 / s / 1e6:.2f}M "
+                  f"c{CLEARANCE_MM:g}"),
+        "mountains": f"{BUILD_TAG} {date} MTN",
+        "valley": f"{BUILD_TAG} {date} VAL",
+    }
+    # frame: floor-only clear area -- away from cavity outlines and
+    # poke-holes, off the footprint edge
+    allowed_frame = footprint.buffer(-2.0).difference(cavities.buffer(1.5))
+    for c in circles:
+        allowed_frame = allowed_frame.difference(c.buffer(1.5))
+    stamps = {"frame": vstamp.make_stamp(stamp_texts["frame"],
+                                         allowed_frame)}
+    for name in ("mountains", "valley"):
+        piece = geo[f"{name}_piece"]
+        stamps[name] = vstamp.make_stamp(
+            stamp_texts[name], piece.buffer(-0.8),
+            anchor=polylabel(piece, 0.05))
+    print(f"\nversion stamps ({vstamp.DEPTH_MM:g} mm deboss, mirrored, "
+          "into each bottom layer):")
+    for name, st in stamps.items():
+        host = floor_poly if name == "frame" else geo[f"{name}_piece"]
+        assert st.rect.within(host), f"stamp {name} outside its bottom"
+        if name == "frame":
+            d_cav = st.rect.distance(cavities)
+            d_poke = min(st.rect.distance(c) for c in circles)
+            assert d_cav > 1.0 and d_poke > 1.0
+            extra = (f"; {d_cav:.1f} mm to cavities, {d_poke:.1f} mm to "
+                     "poke-holes")
+        else:
+            extra = (f"; {st.rect.distance(host.boundary):.1f} mm to "
+                     "piece wall")
+        w, h = st.size_mm
+        print(f"  {name:9s} '{st.text}' as {len(st.lines)} line(s), cap "
+              f"{st.cap_mm:.1f} mm, min stroke >= {st.min_stroke_mm:.2f} "
+              f"mm (dil {st.dilated_px} px)\n"
+              f"            rect {w:.1f} x {h:.1f} mm at "
+              f"({st.center[0]:.1f}, {st.center[1]:.1f}), rotated "
+              f"{st.angle:+.0f} deg{extra}")
+
     # ---- meshes ---------------------------------------------------------
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     terrain_piece = make_terrain_fn(dem, s, cx, cy, z_per_m, PIECE_SLAB_MM)
@@ -830,11 +943,25 @@ def main():
     ok = True
     print("\nframe bodies (frame.3mf):")
     m_floor = solid_mesh(floor_poly, lambda v: np.full(len(v), FLOOR_MM),
-                         0.0, quality=False)
+                         0.0, quality=False, stamp=stamps["frame"])
     m_upper = solid_mesh(upper_water, lambda v: np.full(len(v), BASE_MM),
                          FLOOR_MM - OVERLAP_MM, quality=False)
     water_mesh = trimesh.util.concatenate([m_floor, m_upper])
     ok &= report_mesh("water(+floor)", water_mesh)
+    zok, zlev = vstamp.verify_stamp_levels(water_mesh, stamps["frame"])
+    ok &= zok
+    print(f"    stamp z-levels {zlev} mm -> depth exactly "
+          f"{vstamp.DEPTH_MM:g}: {zok} (floor left above stamp: "
+          f"{FLOOR_MM - vstamp.DEPTH_MM:g} mm)")
+    # independent deboss-volume check on the uniform-thickness floor
+    fs = stamps["frame"]
+    glyph_vol = fs.mask.sum() * fs.pitch ** 2 * fs.depth
+    exp_vol = floor_poly.area * FLOOR_MM - glyph_vol
+    dv = abs(m_floor.volume - exp_vol) / exp_vol
+    ok &= dv < 2e-3
+    print(f"    floor volume {m_floor.volume:.1f} mm^3 vs expected "
+          f"{exp_vol:.1f} (glyph void {glyph_vol:.1f} mm^3, err "
+          f"{dv * 100:.3f}%)")
     coast_mesh = solid_mesh(geo["coast_nom"], terrain_coast, BASE_MM)
     ok &= report_mesh("coast", coast_mesh)
     gray_mesh = solid_mesh(geo["gray"], terrain_coast, BASE_MM)
@@ -864,10 +991,14 @@ def main():
     print("\nremovable pieces:")
     for name in ("mountains", "valley"):
         piece = geo[f"{name}_piece"]
-        mesh = solid_mesh(piece, terrain_piece, 0.0)
+        mesh = solid_mesh(piece, terrain_piece, 0.0, stamp=stamps[name])
         path = OUT_DIR / f"{name}.stl"
         mesh.export(path)
         ok &= report_mesh(name, mesh)
+        zok, zlev = vstamp.verify_stamp_levels(mesh, stamps[name])
+        ok &= zok
+        print(f"    stamp z-levels {zlev} mm -> depth exactly "
+              f"{vstamp.DEPTH_MM:g}: {zok}")
         mlw = min_land_width(piece)
         gap_frame = piece.distance(upper_water)
         other = geo["valley_piece" if name == "mountains"
@@ -882,7 +1013,7 @@ def main():
         print(f"  note: {n}")
 
     tj = triple_junction_mm(regw)
-    render_preview(geo, s, tj, holes)
+    render_preview(geo, s, tj, holes, stamps)
     print(f"\nall bodies/pieces watertight: {ok}")
     print("canonical Makefile output for this stage: out/p4_mini/frame.3mf "
           "(replaces out/p4_bay_420mm/frame.stl; old p4_bay_* dirs are "
