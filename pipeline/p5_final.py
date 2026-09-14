@@ -236,7 +236,7 @@ def main():
         rose = compass_art.load_rose(
             base.ROOT / COMPASS["svg"], COMPASS["diameter_mm"],
             COMPASS["letter_font"], COMPASS["letter_cap_mm"],
-            COMPASS["letter_radius_frac"])
+            COMPASS["letter_radius_frac"], COMPASS["ink_min_stroke_mm"])
         rose_c = tuple(COMPASS["center_mm"])
         # every ink cell (any class) must lie over open sea: the raised
         # bodies stand on the water datum surface
@@ -271,11 +271,22 @@ def main():
               f"{COMPASS['letter_cap_mm']:g} mm at r {rose.letter_r_mm:g}"
               f" mm, min stroke {rose.letter_min_stroke_mm:.2f} mm, "
               f"font {Path(rose.font_file).name}\n"
+              f"  ink min stroke (target {COMPASS['ink_min_stroke_mm']:g} "
+              "mm): " + ", ".join(
+                  f"{n} {rose.ink_stroke_before_mm[n]:.2f}->"
+                  f"{rose.ink_stroke_after_mm[n]:.2f} mm"
+                  for n in rose.ink_stroke_after_mm) +
+              f"\n  letter/tip gap {rose.letter_tip_gap_mm:+.3f} mm "
+              f"(cardinal tips to r {rose.cardinal_tip_r_mm:.2f} mm)\n"
               f"  open-water check: all ink over sea; ink-hull margins "
               f"-- coast {d_coast:.1f} mm, gray {d_gray:.1f} mm, "
               f"cavities {d_cav:.1f} mm")
         assert rose.letter_min_stroke_mm >= 0.8 - 1e-6, \
             "letter strokes < 0.8"
+        assert rose.letter_tip_gap_mm > 0, "letter ink touches cardinal tips"
+        for n, v in rose.ink_stroke_after_mm.items():
+            assert v >= COMPASS["ink_min_stroke_mm"] - 1e-6 or \
+                not rose.masks[n].any(), f"{n} ink stroke under floor"
 
     # ---- version stamps -------------------------------------------------
     date = vstamp.stamp_date()
@@ -519,7 +530,7 @@ def render_preview(geo, s, holes, stamps, rose, rose_c, ew_mm):
         ax.add_patch(plt.Circle((cx, cy), r, fill=False, lw=0.6,
                                 edgecolor="#666", linestyle="--",
                                 zorder=6))
-        half = max(rose.size_mm) / 2 + 6
+        half = max(rose.size_mm) / 2 + 2   # tight: judge ink dilation
         ax.set_xlim(cx - half, cx + half)
         ax.set_ylim(cy - half, cy + half)
         ax.set_title(f"rose close-up — ring dia {2 * r:g} mm, "

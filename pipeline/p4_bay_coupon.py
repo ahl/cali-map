@@ -850,7 +850,7 @@ def render_preview(geo, s, tj, holes, stamps, rose=None, rose_c=None):
         ax.add_patch(plt.Circle(rose_c, r, fill=False, lw=0.6,
                                 edgecolor="#666", linestyle="--",
                                 zorder=6))
-        half = max(rose.size_mm) / 2 + 5
+        half = max(rose.size_mm) / 2 + 2   # tight: judge ink dilation
         ax.set_xlim(rose_c[0] - half, rose_c[0] + half)
         ax.set_ylim(rose_c[1] - half, rose_c[1] + half)
         ax.set_title(f"rose close-up — ring dia {2 * r:g} mm, "
@@ -1028,7 +1028,7 @@ def main():
         rose = compass_art.load_rose(
             ROOT / COMPASS["svg"], COMPASS["coupon_diameter_mm"],
             COMPASS["letter_font"], COMPASS["letter_cap_mm"],
-            COMPASS["letter_radius_frac"])
+            COMPASS["letter_radius_frac"], COMPASS["ink_min_stroke_mm"])
         rose_c = tuple(COMPASS["coupon_center_mm"])
         xi, yi = rose.cell_centers(rose_c)
         assert (xi.min() > -RIM_MM + 0.5 and yi.min() > -RIM_MM + 0.5
@@ -1064,11 +1064,22 @@ def main():
               f"  black artwork strokes {rose.black_stroke_mm:.2f} mm"
               f"{stroke_flag}; letter min stroke "
               f"{rose.letter_min_stroke_mm:.2f} mm\n"
+              f"  ink min stroke (target {COMPASS['ink_min_stroke_mm']:g} "
+              "mm): " + ", ".join(
+                  f"{n} {rose.ink_stroke_before_mm[n]:.2f}->"
+                  f"{rose.ink_stroke_after_mm[n]:.2f} mm"
+                  for n in rose.ink_stroke_after_mm) +
+              f"\n  letter/tip gap {rose.letter_tip_gap_mm:+.3f} mm "
+              f"(cardinal tips to r {rose.cardinal_tip_r_mm:.2f} mm)\n"
               f"  open-water check: all ink over sea; ink-hull margins "
               f"-- coast {d_coast:.1f} mm, gray {d_gray:.1f} mm, "
               f"cavities {d_cav:.1f} mm")
         assert rose.letter_min_stroke_mm >= 0.8 - 1e-6, \
             "letter strokes < 0.8"
+        assert rose.letter_tip_gap_mm > 0, "letter ink touches cardinal tips"
+        for n, v in rose.ink_stroke_after_mm.items():
+            assert v >= COMPASS["ink_min_stroke_mm"] - 1e-6 or \
+                not rose.masks[n].any(), f"{n} ink stroke under floor"
 
     # ---- version stamps (0.4 mm bottom deboss, mirrored) ----------------
     date = vstamp.stamp_date()

@@ -34,6 +34,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+from scipy import ndimage
 
 import mesh_common
 import version_stamp as vstamp
@@ -57,6 +58,12 @@ class RoseArt:
     black_stroke_mm: float       # artwork outline stroke width
     letter_min_stroke_mm: float
     font_file: str
+    cardinal_tip_r_mm: float     # max radius of artwork ink (no letters),
+                                  # AFTER ink_min_stroke_mm dilation
+    letter_tip_gap_mm: float     # letter glyph ink clearance past the tip
+    ink_stroke_before_mm: dict   # per-class min stroke, raw classification
+    ink_stroke_after_mm: dict    # per-class min stroke, after dilation
+    ink_dilated_px: dict         # per-class dilation iterations applied
 
     @property
     def size_mm(self):
@@ -115,6 +122,38 @@ def _clear_pinches(m):
         m[1:, :-1] &= ~p2
 
 
+def _stroke_mm(mask, pitch, lo=0.05, hi=1.20, step=0.025):
+    """Min stroke width (mm), via the SAME morphological-opening test
+    version_stamp uses for letters (vstamp._stroke_ok), swept over a
+    range fine/wide enough for both raw sub-mm artwork ink and the
+    dilated target width. Empty mask -> 0.0 (nothing to measure)."""
+    if not mask.any():
+        return 0.0
+    ok = 0.0
+    for half in np.arange(lo, hi, step):
+        if vstamp._stroke_ok(mask, half, pitch):
+            ok = max(ok, half)
+    return round(2 * ok, 6)
+
+
+def _dilate_to_stroke(mask, pitch, min_stroke_mm, claimed=None, max_iter=24):
+    """Binary-dilate `mask` (vstamp's disk primitive, same as letters)
+    until its min stroke width >= min_stroke_mm, never growing into
+    `claimed` cells (higher-priority ink already locked in) -- this
+    keeps ink classes disjoint BY CONSTRUCTION rather than relying on a
+    later priority pass. Returns (mask, iterations_applied)."""
+    m = mask.copy()
+    if claimed is not None:
+        m &= ~claimed
+    dil = 0
+    while not vstamp._stroke_ok(m, min_stroke_mm / 2, pitch) and dil < max_iter:
+        m = ndimage.binary_dilation(m, structure=vstamp._disk(1.0))
+        if claimed is not None:
+            m &= ~claimed
+        dil += 1
+    return m, dil
+
+
 def _font_file(name):
     for p in (f"/System/Library/Fonts/Supplemental/{name}.ttf",
               f"/Library/Fonts/{name}.ttf",
@@ -127,7 +166,7 @@ def _font_file(name):
 
 
 def load_rose(svg_path, diameter_mm, letter_font, letter_cap_mm,
-              letter_radius_frac, pitch=PITCH_MM):
+              letter_radius_frac, ink_min_stroke_mm, pitch=PITCH_MM):
     import cairosvg
     from PIL import Image, ImageDraw, ImageFont
 
@@ -158,6 +197,40 @@ def load_rose(svg_path, diameter_mm, letter_font, letter_cap_mm,
     cls[rgba[..., 3] < 128] = 0
     masks = {"coast": cls == 2, "gray": cls == 3, "black": cls == 4}
 
+    # ink_min_stroke_mm (D17): dilate each ink class, in the same
+    # black > coast > gray priority the disjointness pass below uses,
+    # until its printed min stroke width clears the floor. Each class
+    # is grown only into cells not already `claimed` by a higher class,
+    # so classes stay disjoint by construction (no later overlap to
+    # resolve for THIS reason -- the pinch-removal pass below still
+    # runs for diagonal pinches and the separate letter overlap).
+    ink_stroke_before_mm = {n: _stroke_mm(masks[n], pitch) for n in _ORDER}
+    claimed = np.zeros_like(masks["black"])
+    ink_dilated_px = {}
+    for n in _ORDER:
+        masks[n], ink_dilated_px[n] = _dilate_to_stroke(
+            masks[n], pitch, ink_min_stroke_mm, claimed)
+        claimed |= masks[n]
+    ink_stroke_after_mm = {n: _stroke_mm(masks[n], pitch) for n in _ORDER}
+    print(f"  [compass] ink min stroke (target {ink_min_stroke_mm:g} mm): "
+          + ", ".join(f"{n} {ink_stroke_before_mm[n]:.2f}->"
+                      f"{ink_stroke_after_mm[n]:.2f} mm "
+                      f"(+{ink_dilated_px[n]} dilation step(s))"
+                      for n in _ORDER))
+    for n in _ORDER:
+        assert ink_stroke_after_mm[n] >= ink_min_stroke_mm - 1e-6 or \
+            not masks[n].any(), \
+            (f"{n} ink stroke {ink_stroke_after_mm[n]:.2f} mm still under "
+             f"{ink_min_stroke_mm:g} mm after {ink_dilated_px[n]} "
+             "dilation step(s)")
+
+    # cardinal-tip max radius AFTER ink dilation -- the real printed
+    # footprint (artwork only, no letters yet) the letters must clear
+    tip_mask = masks["coast"] | masks["gray"] | masks["black"]
+    jt, it = np.nonzero(tip_mask)
+    cardinal_tip_r_mm = float(np.hypot((it + 0.5 - ccol) * pitch,
+                                       (jt + 0.5 - crow) * pitch).max())
+
     # pipeline lettering (black, drawn y-down: N at the image top)
     ff = _font_file(letter_font)
     probe = ImageFont.truetype(ff, 100)
@@ -174,6 +247,24 @@ def load_rose(svg_path, diameter_mm, letter_font, letter_cap_mm,
     # auto-dilate like the version stamps (N/E/S/W have no counters)
     lm, lm_dil, _ = vstamp._ensure_stroke(lm, pitch, vstamp.MIN_STROKE_MM)
     letter_stroke = vstamp.measure_min_stroke(lm, pitch)
+
+    # D17 letter/tip clearance: the letter GLYPH ink -- the actual
+    # rasterized (post-dilation, what prints) pixels, not just the
+    # radial anchor -- must keep a POSITIVE gap from the cardinal tips
+    # (which reach cardinal_tip_r_mm, ~1.30x the ring radius by design).
+    jl, il = np.nonzero(lm)
+    letter_min_r_mm = float(np.hypot((il + 0.5 - ccol) * pitch,
+                                     (jl + 0.5 - crow) * pitch).min())
+    letter_tip_gap_mm = letter_min_r_mm - cardinal_tip_r_mm
+    print(f"  [compass] letter/tip gap: {letter_tip_gap_mm:+.3f} mm "
+          f"(tips to r {cardinal_tip_r_mm:.3f} mm, letter ink from r "
+          f"{letter_min_r_mm:.3f} mm)")
+    assert letter_tip_gap_mm > 0, (
+        f"letter ink touches/overlaps the cardinal tips: gap "
+        f"{letter_tip_gap_mm:.3f} mm (tips to r {cardinal_tip_r_mm:.3f} "
+        f"mm, letter ink from r {letter_min_r_mm:.3f} mm) -- increase "
+        "[compass].letter_radius_frac to move the letters outward")
+
     masks["black"] |= lm
     masks["coast"] &= ~lm
     masks["gray"] &= ~lm
@@ -229,7 +320,12 @@ def load_rose(svg_path, diameter_mm, letter_font, letter_cap_mm,
                    tip_r_mm=tip_r,
                    letter_r_mm=letter_radius_frac * diameter_mm / 2,
                    black_stroke_mm=sw_u * k,
-                   letter_min_stroke_mm=letter_stroke, font_file=ff)
+                   letter_min_stroke_mm=letter_stroke, font_file=ff,
+                   cardinal_tip_r_mm=cardinal_tip_r_mm,
+                   letter_tip_gap_mm=letter_tip_gap_mm,
+                   ink_stroke_before_mm=ink_stroke_before_mm,
+                   ink_stroke_after_mm=ink_stroke_after_mm,
+                   ink_dilated_px=ink_dilated_px)
 
 
 def relief_meshes(rose, center_mm, base_mm, depth_mm, style="raised"):
