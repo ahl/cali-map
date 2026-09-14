@@ -134,8 +134,8 @@ set into a frame of the surrounding geography.
 - **G6 — Overall scale: RESOLVED 2026-09-13.** Final product = 254 mm
   total N-S (10 inches; config [output].total_ns_mm), scale 1:4.469M,
   footprint 228.6 x 254.0 mm, CA ~236 mm N-S. Single-plate frame fits
-  the 256 mm bed with ~2 mm margin (verify in slicer; D10 reductions
-  are the fallback). 420 mm variant SET ASIDE. Frame tiling (G5) likely
+  the 256 mm bed with ~2 mm margin (CONFIRMED by ahl: he has printed
+  full edge-to-edge 256 mm parts on this machine; no fit test needed). 420 mm variant SET ASIDE. Frame tiling (G5) likely
   moot at this size.
 - **G7 — Two-color strategy for the coast piece**: layer-swap at the ocean
   datum Z (easy, works on any printer) vs. multi-material. Layer-swap
