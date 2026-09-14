@@ -453,15 +453,18 @@ def main():
                                                    extra=(p4.CHAMFER_MM,))
             ok &= zok
             szn = f"stamp z {zlev} exact: {zok}; "
-        gap = piece.distance(upper_water)
+        gmin, fmin, fmed, nfar = p4.wall_gap_stats(piece, other_nom,
+                                                   upper_water)
         ring = geo[f"{name}_nom"].exterior
         site_str = ", ".join(
             f"{kind}@({p.x:.1f},{p.y:.1f})"
             for (d, kind), p in zip(sites, [ring.interpolate(d)
                                             for d, _ in sites]))
         print(f"    {szn}min width "
-              f"~{p4.min_land_width(piece):.2f} mm; gap vs frame "
-              f"{gap:.3f} (nom {p4.CLEARANCE_MM:g}); crush ribs: "
+              f"~{p4.min_land_width(piece):.2f} mm; gap vs frame: "
+              f"global min {gmin:.3f} mm, away from any sibling seam "
+              f"(n={nfar}) min {fmin:.3f} median {fmed:.3f} mm "
+              f"(nom {p4.CLEARANCE_MM:g}); crush ribs: "
               f"{len(sites)} x r{p4.RIB_RADIUS_MM:g} mm crest "
               f"+{p4.RIB_INTERFERENCE_MM:g} mm past nominal: {site_str}"
               f"  -> {path}")

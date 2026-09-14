@@ -632,6 +632,43 @@ def min_land_width(poly, step=0.05, cap=2.0):
     return cap
 
 
+def wall_gap_stats(piece, transition_nom, reference, n=400,
+                   near_tol=0.5):
+    """Sample `piece`'s (clearance-cut) boundary and measure distance to
+    `reference` (upper_water for the frame gap; another piece for a pair
+    gap), split into samples NEAR a clearance-type transition (within
+    near_tol mm of `transition_nom` -- e.g. a sibling piece's nominal
+    footprint, when measuring the FRAME gap) and the rest (the general
+    wall). ahl 2026-09-14 T2-vs-T1 verification: where two different
+    per-stretch offsets meet (frame-facing vs piece-facing clearance on
+    the SAME piece), the AND-of-two-independent-erosions can legitimately
+    pinch toward zero at that single corner -- the same class of
+    singularity any offset-curve construction has at a reflex vertex,
+    confirmed by isolating it: mountains' and valley's global-minimum
+    frame gap each sat within 0.06 mm of the OTHER piece's nominal
+    boundary, while every sample >= near_tol mm from it measured within
+    a few hundredths of a mm of nominal (0.13-0.15 mm here for a 0.15 mm
+    target). Reporting the raw global minimum ALONE is misleadingly
+    pessimistic for a piece with mixed interfaces -- report both.
+    Returns (global_min, far_min, far_median, n_far); if `transition_nom`
+    is None/empty or every/no sample is 'near', far_* falls back to all
+    samples."""
+    ring = piece.exterior
+    length = ring.length
+    pts = [ring.interpolate(t) for t in np.linspace(0, length, n,
+                                                     endpoint=False)]
+    global_min = float(piece.distance(reference))
+    near = None
+    if transition_nom is not None and not transition_nom.is_empty:
+        near = np.array([transition_nom.distance(p) < near_tol
+                         for p in pts])
+    d = np.array([p.distance(reference) for p in pts])
+    far_d = d[~near] if (near is not None and near.any()
+                        and not near.all()) else d
+    return global_min, float(far_d.min()), float(np.median(far_d)), \
+        len(far_d)
+
+
 # ------------------------------------------------------------------ meshes
 def triangulate(poly, flags):
     """Constrained Delaunay of a shapely Polygon (holes ok)."""
@@ -1691,18 +1728,21 @@ def main():
             print(f"    stamp z-levels {zlev} mm -> depth exactly "
                   f"{vstamp.DEPTH_MM:g}: {zok}")
         mlw = min_land_width(piece)
-        gap_frame = piece.distance(upper_water)
         other = geo[f"{other_name}_piece"]
         gap_piece = piece.distance(other)
         nom_pp = pair_gap_nominal_mm(name, other_name)
+        gmin, fmin, fmed, nfar = wall_gap_stats(
+            piece, geo[f"{other_name}_nom"], upper_water)
         ring = geo[f"{name}_nom"].exterior
         site_pts = [ring.interpolate(d) for d, _ in sites]
         site_str = ", ".join(
             f"{kind}@({p.x:.1f},{p.y:.1f})"
             for (d, kind), p in zip(sites, site_pts))
-        print(f"    min width ~{mlw:.2f} mm; gap vs frame "
-              f"{gap_frame:.3f} mm (nominal {CLEARANCE_MM:g}); vs other "
-              f"piece {gap_piece:.3f} mm (nominal {nom_pp:g})\n"
+        print(f"    min width ~{mlw:.2f} mm; gap vs frame: global min "
+              f"{gmin:.3f} mm, away from the {other_name} seam (n={nfar}) "
+              f"min {fmin:.3f} median {fmed:.3f} mm (nominal "
+              f"{CLEARANCE_MM:g}); vs other piece {gap_piece:.3f} mm "
+              f"(nominal {nom_pp:g})\n"
               f"    crush ribs: {len(sites)} x r{RIB_RADIUS_MM:g} mm "
               f"crest +{RIB_INTERFERENCE_MM:g} mm past nominal: "
               f"{site_str}  -> {path}")
