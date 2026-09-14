@@ -310,7 +310,13 @@ FINAL 225 x 250 FRAME ONLY
   the water plane since terrain rises above it; note rose blue/gray ink
   merged into terrain bodies, so rose stays matte under per-part water
   ironing). Awaiting: fit at 0.15 mm/side (G3), poke-hole/tray feel,
-  4-color seam quality, rose crispness.
+  4-color seam quality, rose crispness, AND the "bodies own their full
+  depth" decision (deferred by ahl until seen in plastic): judge how
+  single-layer coast/gray land reads over the teal sub-surface — if the
+  teal ghosts through or the teal cavity floors look wrong, T2 switches
+  to full-depth bodies (land color to the floor, GRAY under the
+  removable pieces; also fixes the edge cross-section and kills the
+  translucency issue; costs a little purge in the floor layers).
 
 ## Observation log (noted, NOT to be acted on unless ahl says so)
 
