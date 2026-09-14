@@ -133,7 +133,10 @@ rib_interference_mm = 0.05    # crush-rib proudness on piece walls (the
                               # retention mechanism: pieces hold when
                               # tipped, release via poke holes; 0 = off)
 rib_radius_mm = 0.4           # crush-rib half-cylinder radius
-rib_spacing_mm = 50.0         # approx spacing along piece walls
+ribs_per_piece = 4            # flat count, evenly spaced around the
+                              # perimeter on straight-ish stretches
+                              # (ahl: few needed; many ribs = hard
+                              # insertion; was spacing-based)
 land_min_mm = 0.2             # min land height above datum (color opacity)
 
 [compass]
