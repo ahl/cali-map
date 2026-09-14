@@ -77,6 +77,15 @@ mountain_edges = ["overrides/vallejo_mountain_edges.geojson"]
 # target (ahl's p1_final markup: red=mountains, orange=coast).
 region_marks = ["overrides/p1final_marks.geojson"]
 
+[output]
+# Final product size (ahl 2026-09-13): total N-S = 254 mm (10 inches).
+# With the D13 window (CA + 40 km N/E/S + 67.5 km ocean west, 1021.5 x
+# 1135 km) this gives scale 1:4.469M, footprint 228.6 x 254.0 mm,
+# California ~236 mm N-S. Single-plate frame on the 256 mm bed (2 mm
+# margin); D10 reductions are the fallback if the bed disagrees.
+# The 420 mm variant is SET ASIDE for now.
+total_ns_mm = 254.0
+
 [islands]
 # Channel Islands = ONE separate puzzle piece (ahl, 2026-09-13): convex
 # hull of all eight islands + buffer, printed with two-color ocean; sits
