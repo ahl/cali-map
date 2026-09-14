@@ -16,8 +16,8 @@ OVERRIDES := $(wildcard overrides/*.geojson)
 COMMON   := config.toml $(OVERRIDES) $(PIPE)/p1_regions.py
 DEM      := data/dem_ca_albers_250m.npy
 
-.PHONY: all p0 p1 p2 p15 p15b p4
-all: p1 p2 p15 p15b p4
+.PHONY: all p0 p1 p2 p2layout p15 p15b p4
+all: p1 p2 p2layout p15 p15b p4
 
 # ---- P0: statewide 250 m heightfield (slow; rebuilds only if p0 changes)
 p0: $(DEM)
@@ -40,6 +40,12 @@ data/p2_regions_smooth.geojson: $(PIPE)/p2_vectorize.py $(COMMON) $(DEM) \
 		data/p2_land.npz data/p2_borders.geojson
 	$(UV) $(PIPE)/p2_vectorize.py
 data/p2_regions.geojson: data/p2_regions_smooth.geojson ;
+
+# ---- P2 layout drawing (consumes [output].total_ns_mm)
+p2layout: out/p2_layout.png
+out/p2_layout.png: $(PIPE)/p2_layout.py $(COMMON) \
+		data/p2_regions_smooth.geojson data/p2_borders.geojson data/p2_land.npz
+	$(UV) $(PIPE)/p2_layout.py
 
 # ---- P1.5: statewide engraved slab (grooves from P2 vectors)
 p15: out/p15_ca_engraved_150mm.stl
