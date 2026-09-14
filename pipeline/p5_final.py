@@ -44,8 +44,13 @@ THE FRAME (out/p5/frame.3mf, 4-color Bambu multi-body):
 
 PIECES (out/p5/{mountains,valley,desert}.stl): slab = base - floor,
 terrain at the G2 normalized z-rule ([output].z_exaggeration x
-horizontal scale), [print].clearance_per_side_mm per side, vertical
-walls with optional [print].bottom_chamfer_mm 45-deg bottom chamfer.
+horizontal scale), [print].clearance_per_side_mm per side against the
+FRAME and [print].clearance_pair_per_side_mm per side against a sibling
+piece (T1 finding: 0.15 mm/side is the frame friction fit, but doubles
+to a loose 0.30 mm between two 0.15/side piece walls -- piece-piece
+borders get the smaller pair clearance instead, blended in via
+p4_bay_coupon.piece_polygon), vertical walls with optional
+[print].bottom_chamfer_mm 45-deg bottom chamfer.
 
 Version stamps (version_stamp.py) debossed into all four bottoms --
 gated by [output].stamps_enabled (currently FALSE per ahl 2026-09-14:
@@ -153,10 +158,17 @@ def main():
     footprint = box(0.0, 0.0, EW_MM, NS_MM)
     geo = {}
     for name, rid, _ in PIECES:
+        geo[f"{name}_nom"] = p4.mask_polygon(regw == rid, 0.0,
+                                             clip=footprint)
+    for name, rid, _ in PIECES:
         mask = regw == rid
-        geo[f"{name}_nom"] = p4.mask_polygon(mask, 0.0, clip=footprint)
+        other_mask = np.zeros_like(mask)
+        for oname, orid, _ in PIECES:
+            if oname != name:
+                other_mask |= (regw == orid)
         geo[f"{name}_piece"] = p4.clean_piece(
-            p4.mask_polygon(mask, p4.CLEAR_PX, clip=footprint), name,
+            p4.piece_polygon(mask, other_mask, p4.CLEAR_PX,
+                             p4.CLEAR_PAIR_PX, clip=footprint), name,
             notes)
         assert geo[f"{name}_piece"].geom_type == "Polygon", \
             f"{name} piece is not one part"
@@ -427,7 +439,7 @@ def main():
         print(f"    {szn}min width "
               f"~{p4.min_land_width(piece):.2f} mm; gap vs frame "
               f"{gap:.3f} (nom {p4.CLEARANCE_MM:g}); vs pieces "
-              f"{gap_pp:.3f} (nom {2 * p4.CLEARANCE_MM:g})  -> {path}")
+              f"{gap_pp:.3f} (nom {2 * p4.CLEARANCE_PAIR_MM:g})  -> {path}")
 
     for n in notes:
         print(f"  note: {n}")
@@ -557,7 +569,8 @@ def render_preview(geo, s, holes, stamps, rose, rose_c, ew_mm):
     fig.suptitle(
         f"P5 final — frame (4-color: coast/water/gray/black rose) + 3 "
         f"pieces; floor {p4.FLOOR_MM:g}, datum {p4.BASE_MM:g}, "
-        f"clearance {p4.CLEARANCE_MM:g}/side, chamfer "
+        f"clearance {p4.CLEARANCE_MM:g}/side frame, "
+        f"{p4.CLEARANCE_PAIR_MM:g}/side piece-piece, chamfer "
         f"{p4.CHAMFER_MM:g}, z x{p4.Z_EXAG:g}", fontsize=12)
     fig.tight_layout()
     fig.savefig(OUT / "p5_preview.png", bbox_inches="tight",

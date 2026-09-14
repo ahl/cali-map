@@ -116,7 +116,17 @@ floor_mm = 1.2                # tray floor under everything (D16)
 bottom_chamfer_mm = 0.0       # 45-deg chamfer at piece bottom edges
                               # (G4 escalation vs elephant foot; 0 = off,
                               # try 0.3 if T1 binds at the plate)
-poke_hole_d_mm = 8.0          # extraction holes through the floor
+poke_hole_d_mm = 18.0         # extraction holes through the floor —
+                              # adult-FINGER sized (ahl 2026-09-14: the
+                              # poke holes are THE disassembly mechanism;
+                              # was 8.0/pushrod-sized). Holes MAY span
+                              # piece-piece seams; keep >= 1.5 mm from
+                              # frame cavity walls.
+rib_interference_mm = 0.05    # crush-rib proudness on piece walls (the
+                              # retention mechanism: pieces hold when
+                              # tipped, release via poke holes; 0 = off)
+rib_radius_mm = 0.4           # crush-rib half-cylinder radius
+rib_spacing_mm = 50.0         # approx spacing along piece walls
 land_min_mm = 0.2             # min land height above datum (color opacity)
 
 [compass]

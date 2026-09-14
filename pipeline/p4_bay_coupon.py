@@ -336,6 +336,83 @@ def mask_polygon(mask, erode_px, origin_mm=0.0, clip=None):
     return MultiPolygon(parts) if len(parts) > 1 else parts[0]
 
 
+def piece_polygon(mask, other_mask, c_frame_px, c_pair_px, clip=None):
+    """Sub-pixel polygon of a removable PIECE, generalizing mask_polygon
+    to two clearances: shrink by c_frame_px pixels along stretches facing
+    the FRAME (anything that is not another removable piece -- coast,
+    gray land, water, window/rim edge) and by c_pair_px pixels along
+    stretches facing `other_mask` (the union of SIBLING removable-piece
+    masks). T1 print finding: 0.15 mm/side vs the frame is the calibrated
+    friction fit, but the same 0.15/side between two pieces doubles to a
+    loose 0.30 mm total gap -- piece-piece borders get their own
+    (smaller) [print].clearance_pair_per_side_mm instead.
+
+    Two EDT fields, each a direct generalization of mask_polygon's single
+    field (distance to the nearest non-piece pixel):
+      d_frame = EDT(mask | other_mask) -- distance to the nearest FRAME
+                pixel, computed with siblings folded into the foreground
+                so a nearby sibling never shortens it (the frame distance
+                "sees past" siblings to the real frame territory beyond);
+      d_other = EDT(~other_mask)       -- distance to the nearest sibling
+                pixel (0 on the siblings themselves).
+    field = min(d_frame - c_frame_px, d_other - c_pair_px) - 0.5 (the
+    same half-pixel EDT-to-pixel-center correction as mask_polygon's
+    erode_px + 0.5, folded into the offsets so the contour is taken at
+    the literal zero level), zeroed outside `mask` (matches mask_polygon:
+    background is exactly 0, so no spurious contour appears near a
+    SIBLING's own far boundary elsewhere in the raster); same gaussian
+    smoothing / contour / simplify as mask_polygon.
+
+    Where a stretch borders ONLY the frame, d_other is large so the
+    min() always resolves to the frame term (behaves exactly like
+    mask_polygon(mask, c_frame_px)); where a stretch borders ONLY a
+    sibling, d_frame is large (it sees past the sibling) so the min()
+    resolves to the pair term. At a piece-piece-frame triple point the
+    min() blends the two offsets continuously (no seam/discontinuity).
+    Since d_frame and d_other partition all non-piece pixels by type,
+    min(d_frame, d_other) == the single-field distance-to-nearest-non-
+    piece-pixel used by mask_polygon; at c_frame_px == c_pair_px == 0
+    this function is therefore identical to mask_polygon(mask, 0.0,
+    clip=clip)."""
+    if clip is None:
+        clip = box(0, 0, WINDOW_MM, WINDOW_MM)
+    span = mask.shape[0] * PX_MM
+    piece_p = np.pad(mask, PAD_PX, mode="constant", constant_values=False)
+    other_p = np.pad(other_mask, PAD_PX, mode="constant",
+                     constant_values=False)
+    d_frame = ndimage.distance_transform_edt(piece_p | other_p)
+    d_other = ndimage.distance_transform_edt(~other_p)
+    field = np.minimum(d_frame - c_frame_px, d_other - c_pair_px) - 0.5
+    field = np.where(piece_p, field, 0.0)
+    if EDT_SMOOTH_PX > 0:
+        field = ndimage.gaussian_filter(field, EDT_SMOOTH_PX)
+    rings = []
+    for lp in measure.find_contours(field, 0.0):
+        if len(lp) < 4:
+            continue
+        xs = (lp[:, 1] - PAD_PX + 0.5) * PX_MM
+        ys = span - (lp[:, 0] - PAD_PX + 0.5) * PX_MM
+        ring = Polygon(np.column_stack([xs, ys]))
+        if not ring.is_valid:
+            ring = ring.buffer(0)
+        if ring.is_empty or ring.area < 0.02:
+            continue
+        rings.append(ring)
+    if not rings:
+        return None
+    rings.sort(key=lambda r: r.area, reverse=True)
+    geom = rings[0]
+    for r in rings[1:]:                        # even-odd nesting
+        geom = geom.symmetric_difference(r)
+    geom = geom.intersection(clip)
+    geom = geom.simplify(SIMPLIFY_MM, preserve_topology=True)
+    parts = [g for g in getattr(geom, "geoms", [geom])
+             if g.geom_type == "Polygon" and g.area > 1e-6]
+    if not parts:
+        return None
+    return MultiPolygon(parts) if len(parts) > 1 else parts[0]
+
+
 def clean_piece(poly, name, notes):
     """Removable pieces: drop sub-printable slivers; one component."""
     parts = list(getattr(poly, "geoms", [poly]))
@@ -820,7 +897,7 @@ def render_preview(geo, s, tj, holes, stamps, rose=None, rose_c=None):
             ax.set_ylim(tj[1] - 6, tj[1] + 6)
             ax.set_title(f"cavity-edge zoom (12 mm): piece vs frame "
                          f"{CLEARANCE_MM:g} mm, piece vs piece "
-                         f"{2 * CLEARANCE_MM:g} mm", fontsize=10)
+                         f"{2 * CLEARANCE_PAIR_MM:g} mm", fontsize=10)
         ax.set_aspect("equal")
         ax.set_xticks([]), ax.set_yticks([])
 
@@ -970,10 +1047,18 @@ def main():
 
     # ---- polygons -------------------------------------------------------
     geo = {}
-    for name, rid in (("mountains", base.MOUNTAINS), ("valley", base.VALLEY)):
+    piece_ids = {"mountains": base.MOUNTAINS, "valley": base.VALLEY}
+    for name, rid in piece_ids.items():
+        geo[f"{name}_nom"] = mask_polygon(regw == rid, 0.0)
+    for name, rid in piece_ids.items():
         mask = regw == rid
-        geo[f"{name}_nom"] = mask_polygon(mask, 0.0)
-        piece = clean_piece(mask_polygon(mask, CLEAR_PX), name, notes)
+        other_mask = np.zeros_like(mask)
+        for oname, orid in piece_ids.items():
+            if oname != name:
+                other_mask |= (regw == orid)
+        piece = clean_piece(
+            piece_polygon(mask, other_mask, CLEAR_PX, CLEAR_PAIR_PX),
+            name, notes)
         geo[f"{name}_piece"] = piece
     coast_nom = mask_polygon((regw == base.COAST) & ~seaw, 0.0)
     parts = _parts(coast_nom, MIN_COAST_PART_MM2)
@@ -1260,7 +1345,7 @@ def main():
         gap_piece = piece.distance(other)
         print(f"    min width ~{mlw:.2f} mm; gap vs frame "
               f"{gap_frame:.3f} mm (nominal {CLEARANCE_MM:g}); vs other "
-              f"piece {gap_piece:.3f} mm (nominal {2 * CLEARANCE_MM:g})"
+              f"piece {gap_piece:.3f} mm (nominal {2 * CLEARANCE_PAIR_MM:g})"
               f"  -> {path}")
 
     for n in notes:
