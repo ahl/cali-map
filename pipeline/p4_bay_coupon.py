@@ -61,7 +61,10 @@ build (p5_final.py) so coupon-validated tuning transfers 1:1.
 VERSION STAMPS (version_stamp.py): every part's bottom layer carries a
 mirrored debossed tag (0.4 mm deep) -- frame: "<tag> <date> <1:scale>
 c<clearance>", pieces: "<tag> <date> MTN|VAL" -- so printed iterations
-are identifiable in hand.  Tag = config [output].build_tag.
+are identifiable in hand.  Tag = config [output].build_tag.  Gated by
+[output].stamps_enabled (ahl 2026-09-14: currently FALSE -- the stamp
+lettering is still wrong, so all parts get plain flat bottoms until
+version_stamp.py is revisited).
 
 Outputs:
   out/p4_mini/frame.3mf      3 bodies, filaments pre-assigned (Bambu)
@@ -136,6 +139,10 @@ _OUTPUT_CFG = _CFG_ALL["output"]
 TOTAL_NS_MM = _OUTPUT_CFG["total_ns_mm"]
 BUILD_TAG = _OUTPUT_CFG.get("build_tag", "T0")
 Z_EXAG = _OUTPUT_CFG["z_exaggeration"]   # G2 normalized rule
+# Bottom version stamps (ahl 2026-09-14: disabled for now -- "the
+# lettering on the bottom is still wrong; just remove it"): when false,
+# every part gets a plain flat bottom and no version_stamp call is made.
+STAMPS_ENABLED = _OUTPUT_CFG.get("stamps_enabled", True)
 
 # Shared physical print knobs (config [print]): the coupon and the P5
 # final build MUST read the same values so coupon-validated tuning
@@ -843,8 +850,10 @@ def render_preview(geo, s, tj, holes, stamps, rose=None, rose_c=None):
     ax.set_xlim(WINDOW_MM + RIM_MM + 2, -RIM_MM - 2)   # mirrored view
     ax.set_ylim(-RIM_MM - 2, WINDOW_MM + RIM_MM + 2)
     ax.set_title("BOTTOM view (mirrored) — version stamps, "
-                 f"{vstamp.DEPTH_MM:g} mm deboss into the bottom layer",
-                 fontsize=10)
+                 f"{vstamp.DEPTH_MM:g} mm deboss into the bottom layer"
+                 if stamps else
+                 "BOTTOM view (mirrored) — plain bottoms "
+                 "(version stamps disabled)", fontsize=10)
     ax.set_aspect("equal")
     ax.set_xticks([]), ax.set_yticks([])
 
@@ -1089,46 +1098,52 @@ def main():
             COMPASS["ink_min_stroke_mm"] - 1e-6, "black ink stroke under floor"
 
     # ---- version stamps (0.4 mm bottom deboss, mirrored) ----------------
-    date = vstamp.stamp_date()
-    stamp_texts = {
-        "frame": (f"{BUILD_TAG} {date} 1:{1 / s / 1e6:.2f}M "
-                  f"c{CLEARANCE_MM:g}"),
-        "mountains": f"{BUILD_TAG} {date} MTN",
-        "valley": f"{BUILD_TAG} {date} VAL",
-    }
-    # frame: floor-only clear area -- away from cavity outlines and
-    # poke-holes, off the footprint edge
-    allowed_frame = footprint.buffer(-2.0).difference(cavities.buffer(1.5))
-    for c in circles:
-        allowed_frame = allowed_frame.difference(c.buffer(1.5))
-    stamps = {"frame": vstamp.make_stamp(stamp_texts["frame"],
-                                         allowed_frame)}
-    for name in ("mountains", "valley"):
-        piece = geo[f"{name}_piece"]
-        stamps[name] = vstamp.make_stamp(
-            stamp_texts[name], piece.buffer(-(0.8 + CHAMFER_MM)),
-            anchor=polylabel(piece, 0.05))
-    print(f"\nversion stamps ({vstamp.DEPTH_MM:g} mm deboss, mirrored, "
-          "into each bottom layer):")
-    for name, st in stamps.items():
-        host = floor_poly if name == "frame" else geo[f"{name}_piece"]
-        assert st.rect.within(host), f"stamp {name} outside its bottom"
-        if name == "frame":
-            d_cav = st.rect.distance(cavities)
-            d_poke = min(st.rect.distance(c) for c in circles)
-            assert d_cav > 1.0 and d_poke > 1.0
-            extra = (f"; {d_cav:.1f} mm to cavities, {d_poke:.1f} mm to "
-                     "poke-holes")
-        else:
-            extra = (f"; {st.rect.distance(host.boundary):.1f} mm to "
-                     "piece wall")
-        w, h = st.size_mm
-        print(f"  {name:9s} '{st.text}' as {len(st.lines)} line(s), cap "
-              f"{st.cap_mm:.1f} mm, min stroke >= {st.min_stroke_mm:.2f} "
-              f"mm (dil {st.dilated_px} px)\n"
-              f"            rect {w:.1f} x {h:.1f} mm at "
-              f"({st.center[0]:.1f}, {st.center[1]:.1f}), rotated "
-              f"{st.angle:+.0f} deg{extra}")
+    stamps = {}
+    if STAMPS_ENABLED:
+        date = vstamp.stamp_date()
+        stamp_texts = {
+            "frame": (f"{BUILD_TAG} {date} 1:{1 / s / 1e6:.2f}M "
+                      f"c{CLEARANCE_MM:g}"),
+            "mountains": f"{BUILD_TAG} {date} MTN",
+            "valley": f"{BUILD_TAG} {date} VAL",
+        }
+        # frame: floor-only clear area -- away from cavity outlines and
+        # poke-holes, off the footprint edge
+        allowed_frame = footprint.buffer(-2.0).difference(
+            cavities.buffer(1.5))
+        for c in circles:
+            allowed_frame = allowed_frame.difference(c.buffer(1.5))
+        stamps["frame"] = vstamp.make_stamp(stamp_texts["frame"],
+                                            allowed_frame)
+        for name in ("mountains", "valley"):
+            piece = geo[f"{name}_piece"]
+            stamps[name] = vstamp.make_stamp(
+                stamp_texts[name], piece.buffer(-(0.8 + CHAMFER_MM)),
+                anchor=polylabel(piece, 0.05))
+        print(f"\nversion stamps ({vstamp.DEPTH_MM:g} mm deboss, mirrored, "
+              "into each bottom layer):")
+        for name, st in stamps.items():
+            host = floor_poly if name == "frame" else geo[f"{name}_piece"]
+            assert st.rect.within(host), f"stamp {name} outside its bottom"
+            if name == "frame":
+                d_cav = st.rect.distance(cavities)
+                d_poke = min(st.rect.distance(c) for c in circles)
+                assert d_cav > 1.0 and d_poke > 1.0
+                extra = (f"; {d_cav:.1f} mm to cavities, {d_poke:.1f} mm to "
+                         "poke-holes")
+            else:
+                extra = (f"; {st.rect.distance(host.boundary):.1f} mm to "
+                         "piece wall")
+            w, h = st.size_mm
+            print(f"  {name:9s} '{st.text}' as {len(st.lines)} line(s), cap "
+                  f"{st.cap_mm:.1f} mm, min stroke >= {st.min_stroke_mm:.2f} "
+                  f"mm (dil {st.dilated_px} px)\n"
+                  f"            rect {w:.1f} x {h:.1f} mm at "
+                  f"({st.center[0]:.1f}, {st.center[1]:.1f}), rotated "
+                  f"{st.angle:+.0f} deg{extra}")
+    else:
+        print("\nversion stamps DISABLED ([output].stamps_enabled = false) "
+              "-- plain flat bottoms on every part")
 
     # ---- meshes ---------------------------------------------------------
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -1142,7 +1157,7 @@ def main():
     ok = True
     print("\nframe bodies (frame.3mf):")
     m_floor = solid_mesh(floor_poly, lambda v: np.full(len(v), FLOOR_MM),
-                         0.0, quality=False, stamp=stamps["frame"])
+                         0.0, quality=False, stamp=stamps.get("frame"))
     rose_panel = None
     if rose is not None:
         rose_panel = compass_art.RosePanel(rose, rose_c, ROSE_DEPTH)
@@ -1150,14 +1165,16 @@ def main():
         upper_water, rose_panel if ROSE_STYLE == "flush" else None)
     water_mesh = trimesh.util.concatenate([m_floor, m_upper])
     ok &= report_mesh("water(+floor)", water_mesh)
-    zok, zlev = vstamp.verify_stamp_levels(water_mesh, stamps["frame"])
-    ok &= zok
-    print(f"    stamp z-levels {zlev} mm -> depth exactly "
-          f"{vstamp.DEPTH_MM:g}: {zok} (floor left above stamp: "
-          f"{FLOOR_MM - vstamp.DEPTH_MM:g} mm)")
-    # independent deboss-volume check on the uniform-thickness floor
-    fs = stamps["frame"]
-    glyph_vol = fs.mask.sum() * fs.pitch ** 2 * fs.depth
+    fs = stamps.get("frame")
+    if fs is not None:
+        zok, zlev = vstamp.verify_stamp_levels(water_mesh, fs)
+        ok &= zok
+        print(f"    stamp z-levels {zlev} mm -> depth exactly "
+              f"{vstamp.DEPTH_MM:g}: {zok} (floor left above stamp: "
+              f"{FLOOR_MM - vstamp.DEPTH_MM:g} mm)")
+    # independent volume check on the uniform-thickness floor
+    glyph_vol = (fs.mask.sum() * fs.pitch ** 2 * fs.depth
+                 if fs is not None else 0.0)
     exp_vol = floor_poly.area * FLOOR_MM - glyph_vol
     dv = abs(m_floor.volume - exp_vol) / exp_vol
     ok &= dv < 2e-3
@@ -1222,16 +1239,17 @@ def main():
     print("\nremovable pieces:")
     for name in ("mountains", "valley"):
         piece = geo[f"{name}_piece"]
-        mesh = solid_mesh(piece, terrain_piece, 0.0, stamp=stamps[name],
-                          chamfer=CHAMFER_MM)
+        mesh = solid_mesh(piece, terrain_piece, 0.0,
+                          stamp=stamps.get(name), chamfer=CHAMFER_MM)
         path = OUT_DIR / f"{name}.stl"
         mesh.export(path)
         ok &= report_mesh(name, mesh)
-        zok, zlev = vstamp.verify_stamp_levels(mesh, stamps[name],
-                                               extra=(CHAMFER_MM,))
-        ok &= zok
-        print(f"    stamp z-levels {zlev} mm -> depth exactly "
-              f"{vstamp.DEPTH_MM:g}: {zok}")
+        if name in stamps:
+            zok, zlev = vstamp.verify_stamp_levels(mesh, stamps[name],
+                                                   extra=(CHAMFER_MM,))
+            ok &= zok
+            print(f"    stamp z-levels {zlev} mm -> depth exactly "
+                  f"{vstamp.DEPTH_MM:g}: {zok}")
         mlw = min_land_width(piece)
         gap_frame = piece.distance(upper_water)
         other = geo["valley_piece" if name == "mountains"

@@ -47,7 +47,9 @@ terrain at the G2 normalized z-rule ([output].z_exaggeration x
 horizontal scale), [print].clearance_per_side_mm per side, vertical
 walls with optional [print].bottom_chamfer_mm 45-deg bottom chamfer.
 
-Version stamps (version_stamp.py) debossed into all four bottoms.
+Version stamps (version_stamp.py) debossed into all four bottoms --
+gated by [output].stamps_enabled (currently FALSE per ahl 2026-09-14:
+plain flat bottoms until the stamp rendering is revisited).
 
 Machinery is imported from p4_bay_coupon (kept runnable itself): region
 cache, D13 scale, polygon extraction, solid meshing (incl. stamps +
@@ -286,39 +288,46 @@ def main():
             COMPASS["ink_min_stroke_mm"] - 1e-6, "black ink stroke under floor"
 
     # ---- version stamps -------------------------------------------------
-    date = vstamp.stamp_date()
     stamps = {}
-    frame_text = (f"{p4.BUILD_TAG} {date} 1:{1 / s / 1e6:.2f}M "
-                  f"c{p4.CLEARANCE_MM:g}")
-    allowed_frame = footprint.buffer(-2.0).difference(cavities.buffer(1.5))
-    for c in circles:
-        allowed_frame = allowed_frame.difference(c.buffer(1.5))
-    stamps["frame"] = vstamp.make_stamp(frame_text, allowed_frame)
-    for name, _, abbr in PIECES:
-        piece = geo[f"{name}_piece"]
-        stamps[name] = vstamp.make_stamp(
-            f"{p4.BUILD_TAG} {date} {abbr}",
-            piece.buffer(-(STAMP_MARGIN + p4.CHAMFER_MM)),
-            anchor=polylabel(piece, 0.05))
-    print(f"\nversion stamps ({vstamp.DEPTH_MM:g} mm deboss, mirrored):")
-    for name, st in stamps.items():
-        host = floor_poly if name == "frame" else geo[f"{name}_piece"]
-        assert st.rect.within(host)
-        if name == "frame":
-            extra = (f"; {st.rect.distance(cavities):.1f} mm to cavities,"
-                     f" {min(st.rect.distance(c) for c in circles):.1f} "
-                     "mm to poke-holes")
-            assert st.rect.distance(cavities) > 1.0
-            assert min(st.rect.distance(c) for c in circles) > 1.0
-        else:
-            extra = (f"; {st.rect.distance(host.boundary):.1f} mm to "
-                     "piece wall")
-        w, h = st.size_mm
-        print(f"  {name:9s} '{st.text}' {len(st.lines)}L cap "
-              f"{st.cap_mm:.1f} stroke>={st.min_stroke_mm:.2f} "
-              f"(dil {st.dilated_px}): rect {w:.1f} x {h:.1f} mm at "
-              f"({st.center[0]:.1f}, {st.center[1]:.1f}) "
-              f"{st.angle:+.0f} deg{extra}")
+    if p4.STAMPS_ENABLED:
+        date = vstamp.stamp_date()
+        frame_text = (f"{p4.BUILD_TAG} {date} 1:{1 / s / 1e6:.2f}M "
+                      f"c{p4.CLEARANCE_MM:g}")
+        allowed_frame = footprint.buffer(-2.0).difference(
+            cavities.buffer(1.5))
+        for c in circles:
+            allowed_frame = allowed_frame.difference(c.buffer(1.5))
+        stamps["frame"] = vstamp.make_stamp(frame_text, allowed_frame)
+        for name, _, abbr in PIECES:
+            piece = geo[f"{name}_piece"]
+            stamps[name] = vstamp.make_stamp(
+                f"{p4.BUILD_TAG} {date} {abbr}",
+                piece.buffer(-(STAMP_MARGIN + p4.CHAMFER_MM)),
+                anchor=polylabel(piece, 0.05))
+        print(f"\nversion stamps ({vstamp.DEPTH_MM:g} mm deboss, "
+              "mirrored):")
+        for name, st in stamps.items():
+            host = floor_poly if name == "frame" else geo[f"{name}_piece"]
+            assert st.rect.within(host)
+            if name == "frame":
+                extra = (f"; {st.rect.distance(cavities):.1f} mm to "
+                         "cavities, "
+                         f"{min(st.rect.distance(c) for c in circles):.1f}"
+                         " mm to poke-holes")
+                assert st.rect.distance(cavities) > 1.0
+                assert min(st.rect.distance(c) for c in circles) > 1.0
+            else:
+                extra = (f"; {st.rect.distance(host.boundary):.1f} mm to "
+                         "piece wall")
+            w, h = st.size_mm
+            print(f"  {name:9s} '{st.text}' {len(st.lines)}L cap "
+                  f"{st.cap_mm:.1f} stroke>={st.min_stroke_mm:.2f} "
+                  f"(dil {st.dilated_px}): rect {w:.1f} x {h:.1f} mm at "
+                  f"({st.center[0]:.1f}, {st.center[1]:.1f}) "
+                  f"{st.angle:+.0f} deg{extra}")
+    else:
+        print("\nversion stamps DISABLED ([output].stamps_enabled = "
+              "false) -- plain flat bottoms on every part")
 
     # ---- meshes ---------------------------------------------------------
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -330,7 +339,7 @@ def main():
     print("\nframe bodies (frame.3mf):")
     m_floor = p4.solid_mesh(floor_poly,
                             lambda v: np.full(len(v), p4.FLOOR_MM), 0.0,
-                            quality=False, stamp=stamps["frame"])
+                            quality=False, stamp=stamps.get("frame"))
     rose_panel = None
     if rose is not None:
         rose_panel = compass_art.RosePanel(rose, rose_c, p4.ROSE_DEPTH)
@@ -338,15 +347,18 @@ def main():
         upper_water, rose_panel if p4.ROSE_STYLE == "flush" else None)
     water_mesh = trimesh.util.concatenate([m_floor, m_upper])
     ok &= p4.report_mesh("water(+floor)", water_mesh)
-    zok, zlev = vstamp.verify_stamp_levels(water_mesh, stamps["frame"])
-    ok &= zok
-    fs = stamps["frame"]
-    glyph_vol = fs.mask.sum() * fs.pitch ** 2 * fs.depth
+    fs = stamps.get("frame")
+    if fs is not None:
+        zok, zlev = vstamp.verify_stamp_levels(water_mesh, fs)
+        ok &= zok
+        print(f"    frame stamp z-levels {zlev} -> exact "
+              f"{vstamp.DEPTH_MM:g}: {zok}")
+    glyph_vol = (fs.mask.sum() * fs.pitch ** 2 * fs.depth
+                 if fs is not None else 0.0)
     exp = floor_poly.area * p4.FLOOR_MM - glyph_vol
     dv = abs(m_floor.volume - exp) / exp
     ok &= dv < 2e-3
-    print(f"    frame stamp z-levels {zlev} -> exact "
-          f"{vstamp.DEPTH_MM:g}: {zok}; floor volume err {dv * 100:.3f}%")
+    print(f"    floor volume err {dv * 100:.3f}%")
     coast_mesh = p4.solid_mesh(geo["coast_nom"], terrain_coast, p4.BASE_MM)
     ok &= p4.report_mesh("coast(terrain)", coast_mesh)
     gray_mesh = p4.solid_mesh(geo["gray"], terrain_coast, p4.BASE_MM)
@@ -397,18 +409,22 @@ def main():
     for name, _, _ in PIECES:
         piece = geo[f"{name}_piece"]
         mesh = p4.solid_mesh(piece, terrain_piece, 0.0,
-                             stamp=stamps[name], chamfer=p4.CHAMFER_MM)
+                             stamp=stamps.get(name),
+                             chamfer=p4.CHAMFER_MM)
         path = OUT_DIR / f"{name}.stl"
         mesh.export(path)
         piece_meshes[name] = mesh
         ok &= p4.report_mesh(name, mesh)
-        zok, zlev = vstamp.verify_stamp_levels(mesh, stamps[name],
-                                               extra=(p4.CHAMFER_MM,))
-        ok &= zok
+        szn = ""
+        if name in stamps:
+            zok, zlev = vstamp.verify_stamp_levels(mesh, stamps[name],
+                                                   extra=(p4.CHAMFER_MM,))
+            ok &= zok
+            szn = f"stamp z {zlev} exact: {zok}; "
         gap = piece.distance(upper_water)
         others = [geo[f"{o}_piece"] for o, _, _ in PIECES if o != name]
         gap_pp = min(piece.distance(o) for o in others)
-        print(f"    stamp z {zlev} exact: {zok}; min width "
+        print(f"    {szn}min width "
               f"~{p4.min_land_width(piece):.2f} mm; gap vs frame "
               f"{gap:.3f} (nom {p4.CLEARANCE_MM:g}); vs pieces "
               f"{gap_pp:.3f} (nom {2 * p4.CLEARANCE_MM:g})  -> {path}")
@@ -510,7 +526,9 @@ def render_preview(geo, s, holes, stamps, rose, rose_c, ew_mm):
         xr, yr = st.rect.exterior.xy
         ax.plot(xr, yr, color="black", lw=0.5, linestyle=":", zorder=6)
     ax.set_xlim(ew_mm + 3, -3), ax.set_ylim(-3, NS_MM + 3)   # mirrored
-    ax.set_title(f"BOTTOM (mirrored) — {vstamp.DEPTH_MM:g} mm stamps",
+    ax.set_title(f"BOTTOM (mirrored) — {vstamp.DEPTH_MM:g} mm stamps"
+                 if stamps else
+                 "BOTTOM (mirrored) — plain bottoms (stamps disabled)",
                  fontsize=10)
 
     # 4: rose close-up
