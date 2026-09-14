@@ -272,6 +272,35 @@ until its inputs are signed off. Every phase is a jj commit.
   invisibly fragments the coast band; the Census state polygon becomes
   the land authority in P2.
 
+## Print settings checklist (check before EVERY print)
+
+ALL PARTS
+- [ ] Layer height 0.2 mm, first layer 0.2 mm (all model z-dims are
+      0.2 multiples — NO adaptive layers)
+- [ ] Elephant-foot compensation ON (0.15 mm)
+- [ ] Seam position: Aligned
+
+FRAME (frame.3mf — 4-color)
+- [ ] Wall generator: ARACHNE (NOT the Classic default — needed for the
+      rose's 0.45-0.8 mm features)
+- [ ] Filament slots: 1 = CA-land blue, 2 = water teal, 3 = gray,
+      4 = black (re-check after every re-import)
+- [ ] Prime tower ON; "flush into objects' infill" ON
+- [ ] Flush volumes: raise black->teal and black->blue above default
+- [ ] Infill 20-25% (grid/gyroid)
+- [ ] Do NOT move the frame's parts individually (aligned in absolute
+      coords; move the object as a whole only)
+- [ ] Ironing: OFF for now (deferred; later = per-part "Top surfaces"
+      on the WATER body only — "topmost" mode would skip the water)
+
+PIECES (mountains/valley/desert STLs — single color)
+- [ ] Separate plate from the frame (don't ride the color changes)
+- [ ] Top shell layers 5-6 (sloped terrain; avoid infill show-through)
+- [ ] Orientation as imported (terrain up)
+
+FINAL 225 x 250 FRAME ONLY
+- [ ] Brim ~4 mm (the 250 mm N-S size reserved bed room for it)
+
 ## Print sessions
 
 - **T1 (2026-09-14, in progress):** ahl printing the mini-frame set
