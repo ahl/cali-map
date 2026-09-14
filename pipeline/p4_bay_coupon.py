@@ -148,7 +148,9 @@ STAMPS_ENABLED = _OUTPUT_CFG.get("stamps_enabled", True)
 # final build MUST read the same values so coupon-validated tuning
 # transfers 1:1.
 _PRINT_CFG = _CFG_ALL["print"]
-CLEARANCE_MM = _PRINT_CFG["clearance_per_side_mm"]
+CLEARANCE_MM = _PRINT_CFG["clearance_per_side_mm"]        # piece vs FRAME
+CLEARANCE_PAIR_MM = _PRINT_CFG["clearance_pair_per_side_mm"]  # piece vs
+                                           # piece shared borders
 BASE_MM = _PRINT_CFG["base_mm"]           # water surface above bottom
 FLOOR_MM = _PRINT_CFG["floor_mm"]         # tray floor (D16)
 CHAMFER_MM = _PRINT_CFG["bottom_chamfer_mm"]  # 45-deg piece bottom edge
@@ -160,6 +162,7 @@ ROSE_DEPTH = COMPASS.get("depth_mm", COMPASS.get("relief_mm", 0.4))
 PIECE_SLAB_MM = BASE_MM - FLOOR_MM   # piece base slab: rests on the floor
 POKE_MARGIN_MM = 1.5     # extra margin between hole edge and cavity wall
 CLEAR_PX = CLEARANCE_MM / PX_MM
+CLEAR_PAIR_PX = CLEARANCE_PAIR_MM / PX_MM
 
 
 # ------------------------------------------------------- region generation

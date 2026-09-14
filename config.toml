@@ -134,12 +134,17 @@ land_min_mm = 0.2             # min land height above datum (color opacity)
 # test frame.
 enabled = true
 svg = "assets/compass.svg"
-style = "flush"               # "flush" (inlaid, level tops) | "raised"
+# T1 print verdict (ahl 2026-09-14): gray+blue read nicely on the water;
+# FLUSH inlay left visible under-fill (slicer leaves a hairline gap at
+# the coincident inlay/recess walls) -> T2 tries RAISED: rose painted ON
+# TOP of the ocean. v2 artwork has no thin black outlines, so raised is
+# now safe. 2 layers (0.4) over 1 to beat PLA translucency of the teal
+# underneath (drop to 0.2 for subtler if desired).
+style = "raised"              # "flush" (inlaid, level tops) | "raised"
 depth_mm = 0.4                # inlay depth / raise height (2 layers)
 letter_font = "Georgia Bold"
-letter_cap_mm = 4.0           # was 6.0; scaled toward the smaller rose
-                              # (kept above proportional so letters stay
-                              # crisp after min-stroke thickening)
+letter_cap_mm = 6.0           # T1: letters ok but E was toughest ->
+                              # ahl +50% (was 4.0)
 letter_radius_frac = 1.65     # letter anchor radius / ring outer radius.
                               # MUST exceed 1.30 (cardinal tips reach 30%
                               # past the ring): ahl 2026-09-14, points
