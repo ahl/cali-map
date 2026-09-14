@@ -471,6 +471,67 @@ def clean_piece(poly, name, notes):
     return kept[0]
 
 
+def _outward_normal(poly, p, tangent):
+    """Unit normal at boundary point `p` of `poly`, pointing OUT of the
+    polygon (tangent need not be unit or a particular orientation --
+    tested with a tiny probe and flipped if it lands inside)."""
+    tl = np.hypot(tangent[0], tangent[1])
+    if tl < 1e-9:
+        return (1.0, 0.0)
+    tx, ty = tangent[0] / tl, tangent[1] / tl
+    nx, ny = -ty, tx
+    if poly.contains(Point(p.x + 0.01 * nx, p.y + 0.01 * ny)):
+        nx, ny = -nx, -ny
+    return (nx, ny)
+
+
+def add_crush_ribs(piece, nominal, spacing_mm, radius_mm, interference_mm):
+    """Retention crush-ribs (ahl 2026-09-14: pieces must stay seated when
+    the tray is tipped; release is via the finger poke-holes, not a
+    snug piece fit) -- vertical half-cylinder ribs standing proud of
+    `piece`'s (the clearance-cut piece) own wall, spaced ~spacing_mm
+    along the FULL perimeter of `nominal` (the pre-clearance region
+    outline), both frame-facing and piece-facing stretches alike.
+
+    Crest placement is independent of which clearance applied locally:
+    the offset wall sits `clearance_local` inside nominal; a rib
+    protruding (clearance_local + interference_mm) from THAT wall lands
+    at nominal + interference_mm, always -- so every rib is simply a
+    disk of radius `radius_mm` centered (interference_mm - radius_mm)
+    outward from a nominal-boundary sample point (i.e. INSET into the
+    piece by radius_mm - interference_mm when radius_mm > interference_mm,
+    the normal case) and unioned onto `piece`: only the cap beyond
+    piece's own wall becomes new material, a radius_mm-curvature bump
+    whose crest reaches exactly interference_mm past nominal (0 = no
+    ribs). `interference_mm` may be 0 for an enclosed piece's OWN walls
+    -- see ENCLOSED_ZERO_CLEARANCE -- ahl's call was to keep ribs on
+    every piece regardless (the valley still gets ribs against its
+    enclosing neighbor), so this is called uniformly per piece.
+
+    Returns (ribbed_piece, n_ribs)."""
+    if interference_mm <= 0 or radius_mm <= 0:
+        return piece, 0
+    ring = nominal.exterior
+    length = ring.length
+    n = max(3, round(length / spacing_mm))
+    eps = min(0.3, spacing_mm * 0.05)
+    bumps = []
+    for i in range(n):
+        d = (i + 0.5) * length / n
+        p = ring.interpolate(d)
+        p0 = ring.interpolate((d - eps) % length)
+        p1 = ring.interpolate((d + eps) % length)
+        nx, ny = _outward_normal(nominal, p, (p1.x - p0.x, p1.y - p0.y))
+        k = interference_mm - radius_mm
+        bumps.append(Point(p.x + k * nx, p.y + k * ny)
+                    .buffer(radius_mm, quad_segs=16))
+    ribbed = unary_union([piece] + bumps).buffer(0)
+    parts = [g for g in getattr(ribbed, "geoms", [ribbed])
+             if g.geom_type == "Polygon"]
+    parts.sort(key=lambda g: g.area, reverse=True)
+    return parts[0], n
+
+
 def _parts(geom, min_area=0.5):
     return [p for p in getattr(geom, "geoms", [geom])
             if p.geom_type == "Polygon" and p.area >= min_area]
@@ -954,14 +1015,15 @@ def add_poly(ax, geom, color, ec="none", lw=0.0, alpha=1.0, z=1):
                                alpha=alpha, zorder=z))
 
 
-def render_preview(geo, s, tj, holes, stamps, rose=None, rose_c=None):
+def render_preview(geo, s, tj, holes, stamps, ribbed, rib_pt, rose=None,
+                   rose_c=None):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     water_vis = geo["water_visible"]
     cav_floor = {n: geo[f"{n}_nom"] for n in ("mountains", "valley")}
-    n_panels = 5 if rose is not None else 4
+    n_panels = 6 if rose is not None else 5
     fig, axes = plt.subplots(1, n_panels,
                              figsize=(6.4 * n_panels, 7.2), dpi=200)
     rose_colors = {"coast": tuple(base.COLORS[base.COAST])[:3],
@@ -1022,9 +1084,27 @@ def render_preview(geo, s, tj, holes, stamps, rose=None, rose_c=None):
         ax.set_aspect("equal")
         ax.set_xticks([]), ax.set_yticks([])
 
-    # panel 4: BOTTOM view, mirrored (x flipped) so the debossed version
-    # stamps read the way they do on the flipped printed parts
+    # panel 4: crush-rib close-up (12 mm) -- ribbed piece walls vs the
+    # NOMINAL boundary (dashed) they protrude past by RIB_INTERFERENCE_MM
     ax = axes[3]
+    ax.set_facecolor("#1c1c22")
+    for name in ("mountains", "valley"):
+        rid = {v: k for k, v in REGION_NAME.items()}[name]
+        add_poly(ax, ribbed[name], base.COLORS[rid], z=3)
+        nx, ny = geo[f"{name}_nom"].exterior.xy
+        ax.plot(nx, ny, color="white", lw=0.6, linestyle="--", zorder=6,
+                alpha=0.7)
+    ax.set_xlim(rib_pt.x - 6, rib_pt.x + 6)
+    ax.set_ylim(rib_pt.y - 6, rib_pt.y + 6)
+    ax.set_title(f"crush-rib close-up (12 mm): r{RIB_RADIUS_MM:g} mm, "
+                 f"+{RIB_INTERFERENCE_MM:g} mm past nominal (dashed), "
+                 f"~{RIB_SPACING_MM:g} mm spacing", fontsize=9)
+    ax.set_aspect("equal")
+    ax.set_xticks([]), ax.set_yticks([])
+
+    # panel 5: BOTTOM view, mirrored (x flipped) so the debossed version
+    # stamps read the way they do on the flipped printed parts
+    ax = axes[4]
     ax.set_facecolor("#1c1c22")
     add_poly(ax, water_vis, WATER_RGB)
     add_poly(ax, geo["gray"], GRAY_RGB, z=2)
@@ -1059,8 +1139,8 @@ def render_preview(geo, s, tj, holes, stamps, rose=None, rose_c=None):
     ax.set_xticks([]), ax.set_yticks([])
 
     if rose is not None:
-        # panel 5: rose close-up (raised multi-color relief + letters)
-        ax = axes[4]
+        # panel 6: rose close-up (raised multi-color relief + letters)
+        ax = axes[5]
         ax.set_facecolor("#1c1c22")
         add_poly(ax, water_vis, WATER_RGB)
         add_poly(ax, geo["gray"], GRAY_RGB, z=2)
@@ -1233,16 +1313,15 @@ def main():
     # flanking pieces); must stay >= POKE_MARGIN_MM from the frame
     # cavity wall and fully under the removable-piece union -----------
     piece_nom = {n: geo[f"{n}_nom"] for n in ("mountains", "valley")}
-    cav_union = unary_union(list(piece_nom.values()))
     wall_margin = POKE_D_MM / 2 + POKE_MARGIN_MM
     target_n = {n: 2 for n in piece_nom}   # ~1-2 holes credited per piece
     centers, holes = plan_poke_holes(piece_nom, target_n)
     circles = []
     for pt in centers:
         circ = pt.buffer(POKE_D_MM / 2, quad_segs=24)
-        assert cav_union.contains(circ), \
+        assert cavities.contains(circ), \
             "poke-hole not fully under removable pieces"
-        assert cav_union.boundary.distance(pt) >= wall_margin - 1e-6, \
+        assert cavities.boundary.distance(pt) >= wall_margin - 1e-6, \
             "poke-hole closer than POKE_MARGIN_MM to the frame cavity wall"
         circles.append(circ)
         under = [n for n, pts in holes.items() if any(p is pt for p in pts)]
@@ -1458,9 +1537,14 @@ def main():
     print(f"  3MF layout matches cubes_bambu.3mf: {names == expect}")
 
     print("\nremovable pieces:")
+    ribbed_geo = {}
     for name in ("mountains", "valley"):
         piece = geo[f"{name}_piece"]
-        mesh = solid_mesh(piece, terrain_piece, 0.0,
+        ribbed, n_ribs = add_crush_ribs(piece, geo[f"{name}_nom"],
+                                        RIB_SPACING_MM, RIB_RADIUS_MM,
+                                        RIB_INTERFERENCE_MM)
+        ribbed_geo[name] = ribbed
+        mesh = solid_mesh(ribbed, terrain_piece, 0.0,
                           stamp=stamps.get(name), chamfer=CHAMFER_MM)
         path = OUT_DIR / f"{name}.stl"
         mesh.export(path)
@@ -1473,19 +1557,24 @@ def main():
                   f"{vstamp.DEPTH_MM:g}: {zok}")
         mlw = min_land_width(piece)
         gap_frame = piece.distance(upper_water)
-        other = geo["valley_piece" if name == "mountains"
-                    else "mountains_piece"]
+        other_name = "valley" if name == "mountains" else "mountains"
+        other = geo[f"{other_name}_piece"]
         gap_piece = piece.distance(other)
+        nom_pp = pair_gap_nominal_mm(name, other_name)
         print(f"    min width ~{mlw:.2f} mm; gap vs frame "
               f"{gap_frame:.3f} mm (nominal {CLEARANCE_MM:g}); vs other "
-              f"piece {gap_piece:.3f} mm (nominal {2 * CLEARANCE_PAIR_MM:g})"
-              f"  -> {path}")
+              f"piece {gap_piece:.3f} mm (nominal {nom_pp:g})\n"
+              f"    crush ribs: {n_ribs} x r{RIB_RADIUS_MM:g} mm crest "
+              f"+{RIB_INTERFERENCE_MM:g} mm past nominal  -> {path}")
 
     for n in notes:
         print(f"  note: {n}")
 
     tj = triple_junction_mm(regw)
-    render_preview(geo, s, tj, holes, stamps, rose, rose_c)
+    mnom = geo["mountains_nom"].exterior
+    rib_pt = mnom.interpolate(0.5 * mnom.length)
+    render_preview(geo, s, tj, holes, stamps, ribbed_geo, rib_pt, rose,
+                  rose_c)
     print(f"\nall bodies/pieces watertight: {ok}")
     print("canonical Makefile output for this stage: out/p4_mini/frame.3mf "
           "(replaces out/p4_bay_420mm/frame.stl; old p4_bay_* dirs are "

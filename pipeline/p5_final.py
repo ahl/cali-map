@@ -222,19 +222,31 @@ def main():
     geo["water_visible"] = upper_water.difference(
         geo["coast_nom"]).difference(geo["gray"])
 
-    # ---- poke-holes (2-3 per piece by cavity size) ----------------------
-    holes, circles = {}, []
-    for name, _, _ in PIECES:
-        nom = geo[f"{name}_nom"]
-        n = 3 if nom.area > POKE3_AREA_MM2 else 2
-        holes[name] = p4.poke_points(nom, n=n)
-        for pt in holes[name]:
-            circ = pt.buffer(p4.POKE_D_MM / 2, quad_segs=24)
-            assert nom.contains(circ), f"poke-hole under a wall ({name})"
-            circles.append(circ)
-            ax, ay = to_albers_km(pt.x, pt.y)
-            print(f"  poke-hole {name}: ({pt.x:.1f}, {pt.y:.1f}) mm = "
-                  f"Albers ({ax:.0f}, {ay:.0f}) km")
+    # ---- poke-holes: finger-sized (18 mm), THE disassembly mechanism
+    # (ahl 2026-09-14), 2-3 per piece by cavity size, at least one
+    # straddling each major piece-piece seam -- may span a seam (serves
+    # both flanking pieces); must stay >= POKE_MARGIN_MM from the frame
+    # cavity wall and fully under the removable-piece union -----------
+    piece_nom = {name: geo[f"{name}_nom"] for name, _, _ in PIECES}
+    target_n = {name: (3 if piece_nom[name].area > POKE3_AREA_MM2 else 2)
+                for name in piece_nom}
+    centers, holes = p4.plan_poke_holes(piece_nom, target_n)
+    circles = []
+    for pt in centers:
+        circ = pt.buffer(p4.POKE_D_MM / 2, quad_segs=24)
+        assert cavities.contains(circ), \
+            "poke-hole not fully under removable pieces"
+        wall_margin = p4.POKE_D_MM / 2 + p4.POKE_MARGIN_MM
+        assert cavities.boundary.distance(pt) >= wall_margin - 1e-6, \
+            "poke-hole closer than POKE_MARGIN_MM to the frame cavity wall"
+        circles.append(circ)
+        under = [n for n, pts in holes.items() if any(p is pt for p in pts)]
+        ax, ay = to_albers_km(pt.x, pt.y)
+        print(f"  poke-hole {'+'.join(under):24s} ({pt.x:.1f}, {pt.y:.1f}) "
+              f"mm = Albers ({ax:.0f}, {ay:.0f}) km"
+              + ("  [seam hole]" if len(under) > 1 else ""))
+    print("  hole count: " + ", ".join(
+        f"{name}: {len(holes[name])}" for name in piece_nom))
     for i in range(len(circles)):
         for j in range(i + 1, len(circles)):
             assert circles[i].distance(circles[j]) > 1.0
@@ -418,9 +430,14 @@ def main():
 
     print("\nremovable pieces:")
     piece_meshes = {}
+    ribbed_geo = {}
     for name, _, _ in PIECES:
         piece = geo[f"{name}_piece"]
-        mesh = p4.solid_mesh(piece, terrain_piece, 0.0,
+        ribbed, n_ribs = p4.add_crush_ribs(
+            piece, geo[f"{name}_nom"], p4.RIB_SPACING_MM, p4.RIB_RADIUS_MM,
+            p4.RIB_INTERFERENCE_MM)
+        ribbed_geo[name] = ribbed
+        mesh = p4.solid_mesh(ribbed, terrain_piece, 0.0,
                              stamp=stamps.get(name),
                              chamfer=p4.CHAMFER_MM)
         path = OUT_DIR / f"{name}.stl"
@@ -434,17 +451,30 @@ def main():
             ok &= zok
             szn = f"stamp z {zlev} exact: {zok}; "
         gap = piece.distance(upper_water)
-        others = [geo[f"{o}_piece"] for o, _, _ in PIECES if o != name]
-        gap_pp = min(piece.distance(o) for o in others)
         print(f"    {szn}min width "
               f"~{p4.min_land_width(piece):.2f} mm; gap vs frame "
-              f"{gap:.3f} (nom {p4.CLEARANCE_MM:g}); vs pieces "
-              f"{gap_pp:.3f} (nom {2 * p4.CLEARANCE_PAIR_MM:g})  -> {path}")
+              f"{gap:.3f} (nom {p4.CLEARANCE_MM:g}); crush ribs: "
+              f"{n_ribs} x r{p4.RIB_RADIUS_MM:g} mm crest "
+              f"+{p4.RIB_INTERFERENCE_MM:g} mm past nominal  -> {path}")
+
+    print("\npiece-piece seam gaps (only nominally-adjacent pairs):")
+    pnames = [n for n, _, _ in PIECES]
+    for i in range(len(pnames)):
+        for j in range(i + 1, len(pnames)):
+            a, b = pnames[i], pnames[j]
+            if geo[f"{a}_nom"].distance(geo[f"{b}_nom"]) > 1e-6:
+                continue                        # not a shared seam
+            gap_ab = geo[f"{a}_piece"].distance(geo[f"{b}_piece"])
+            nom_ab = p4.pair_gap_nominal_mm(a, b)
+            print(f"    {a}-{b}: {gap_ab:.3f} mm (nom {nom_ab:g})")
 
     for n in notes:
         print(f"  note: {n}")
 
-    render_preview(geo, s, holes, stamps, rose, rose_c, EW_MM)
+    mnom = geo["mountains_nom"].exterior
+    rib_pt = mnom.interpolate(0.5 * mnom.length)
+    render_preview(geo, s, holes, stamps, ribbed_geo, rib_pt, rose, rose_c,
+                  EW_MM)
     print(f"\nall bodies/pieces watertight + checks: {ok}")
     if not ok:
         sys.exit(1)
@@ -456,7 +486,8 @@ def main():
 
 
 # ----------------------------------------------------------------- preview
-def render_preview(geo, s, holes, stamps, rose, rose_c, ew_mm):
+def render_preview(geo, s, holes, stamps, ribbed, rib_pt, rose, rose_c,
+                   ew_mm):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -464,7 +495,7 @@ def render_preview(geo, s, holes, stamps, rose, rose_c, ew_mm):
     from shapely import affinity
 
     ratio = ew_mm / NS_MM
-    fig, axes = plt.subplots(1, 4, figsize=(4 * 7.0 * ratio + 3, 8.0),
+    fig, axes = plt.subplots(1, 5, figsize=(5 * 7.0 * ratio + 3, 8.0),
                              dpi=170)
 
     def draw_map(ax, pieces_exploded=False):
@@ -543,8 +574,23 @@ def render_preview(geo, s, holes, stamps, rose, rose_c, ew_mm):
                  "BOTTOM (mirrored) — plain bottoms (stamps disabled)",
                  fontsize=10)
 
-    # 4: rose close-up
+    # 4: crush-rib close-up (14 mm) -- ribbed piece walls vs the NOMINAL
+    # boundary (dashed) they protrude past by RIB_INTERFERENCE_MM
     ax = axes[3]
+    ax.set_facecolor("#1c1c22")
+    for name, rid, _ in PIECES:
+        p4.add_poly(ax, ribbed[name], base.COLORS[rid], z=3)
+        nx, ny = geo[f"{name}_nom"].exterior.xy
+        ax.plot(nx, ny, color="white", lw=0.6, linestyle="--", zorder=6,
+                alpha=0.7)
+    ax.set_xlim(rib_pt.x - 7, rib_pt.x + 7)
+    ax.set_ylim(rib_pt.y - 7, rib_pt.y + 7)
+    ax.set_title(f"crush-rib close-up (14 mm): r{p4.RIB_RADIUS_MM:g} mm, "
+                 f"+{p4.RIB_INTERFERENCE_MM:g} mm past nominal (dashed), "
+                 f"~{p4.RIB_SPACING_MM:g} mm spacing", fontsize=9)
+
+    # 5: rose close-up
+    ax = axes[4]
     draw_map(ax)
     draw_rose(ax)
     if rose is not None:

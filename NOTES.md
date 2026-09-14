@@ -316,6 +316,17 @@ FINAL 225 x 250 FRAME ONLY
   REAL frame colors (validates the actual 4-color result). The final
   mountains gets a full-size DRESS REHEARSAL in a plentiful color
   before the one-shot brown print.
+- **VERTICAL PRINTING of pieces (open, decide at the rehearsal):** ahl
+  previously printed a similar-size CA topo vertically (brim + some
+  supports) with much better terrain resolution (slope becomes a side
+  wall: XY resolution instead of 0.2 mm z-terracing). Cautions agreed:
+  plate-contact edge is a fit surface (EF squish); texture mismatch with
+  the flat-printed frame terrain is ACCEPTED (frame = context, lower
+  res OK); ribs/overhang handling could be messy. If a flat plate edge
+  is needed, split the valley at its NATURAL seam — Sacramento Valley /
+  San Joaquin Valley at the Delta — so the cut reads as geography (and
+  could become a real fifth piece). Rehearsal print decides; flat
+  printing may be good enough.
 
 ## Print sessions
 
