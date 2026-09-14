@@ -11,7 +11,6 @@
 #   "scikit-image",
 #   "triangle",
 #   "py-lib3mf",
-#   "cairosvg",
 # ]
 # ///
 """P4 v2: Bay Area mini-frame coupon — a miniature of the final product.
@@ -427,13 +426,24 @@ def _cdt_down(pts, segs, holes):
     return bf
 
 
+def _bottom_patch(part, v2, be, stamp, z_bottom):
+    """Rebuild a part bottom around a stamp: version stamps go through
+    version_stamp.stamped_bottom (raster glyph grid); the vector compass
+    panel (compass_art.RosePanel) carries its own CDT builder and is
+    dispatched on its build_bottom method."""
+    build = getattr(stamp, "build_bottom", None)
+    if build is not None:
+        return build(part, v2, be, z_bottom)
+    return vstamp.stamped_bottom(part, v2, be, stamp, z_bottom)
+
+
 def solid_mesh(poly, top_fn, z_bottom=0.0, quality=True, stamp=None,
                chamfer=0.0):
     """Watertight solid over a (Multi)Polygon: top from top_fn(xy)->z,
     flat bottom at z_bottom, vertical walls. quality=False -> boundary-
     only CDT (flat prisms need no interior refinement). stamp: optional
-    version_stamp.Stamp debossed into the bottom of the part containing
-    its rectangle (bottom rebuilt via version_stamp.stamped_bottom).
+    version_stamp.Stamp (or compass_art.RosePanel) debossed into the
+    bottom of the part containing its rectangle (see _bottom_patch).
     chamfer > 0: G4 45-degree bottom edge chamfer -- walls stay vertical
     down to z_bottom + chamfer, then slope inward to the bottom outline
     inset by `chamfer` (elephant-foot relief; [print].bottom_chamfer_mm)."""
@@ -493,8 +503,8 @@ def solid_mesh(poly, top_fn, z_bottom=0.0, quality=True, stamp=None,
                                      np.roll(np.arange(len(ir)), -1)])
             if stamp is not None and inset.contains(stamp.rect):
                 stamped = True
-                bverts, bfaces = vstamp.stamped_bottom(inset, ir, iseg0,
-                                                       stamp, z_bottom)
+                bverts, bfaces = _bottom_patch(inset, ir, iseg0,
+                                               stamp, z_bottom)
             else:
                 bfaces = _cdt_down(ir, iseg0, None)
                 bverts = np.column_stack(
@@ -526,8 +536,7 @@ def solid_mesh(poly, top_fn, z_bottom=0.0, quality=True, stamp=None,
             P, Q = be[:, 0], be[:, 1]
             walls = np.vstack([np.stack([P, bmap[P], bmap[Q]], 1),
                                np.stack([P, bmap[Q], Q], 1)])
-            bverts, bfaces = vstamp.stamped_bottom(part, v2, be, stamp,
-                                                   z_bottom)
+            bverts, bfaces = _bottom_patch(part, v2, be, stamp, z_bottom)
             faces = np.vstack([f, walls, bfaces + len(verts)])
             verts, faces = vstamp.weld(np.vstack([verts, bverts]), faces)
             mesh = trimesh.Trimesh(vertices=verts, faces=faces,
@@ -548,18 +557,19 @@ def solid_mesh(poly, top_fn, z_bottom=0.0, quality=True, stamp=None,
     return trimesh.util.concatenate(bodies) if len(bodies) > 1 else bodies[0]
 
 
-def water_upper_mesh(upper_water_poly, rose_stamp=None):
-    """Upper water solid (floor top .. datum).  With rose_stamp (flush
-    compass style) its TOP carries the matching ink recesses: the solid
-    is built z-MIRRORED so the version-stamp bottom machinery carves the
-    top, then flipped back (z negated, faces reversed)."""
+def water_upper_mesh(upper_water_poly, rose_panel=None):
+    """Upper water solid (floor top .. datum).  With rose_panel (a
+    compass_art.RosePanel; flush compass style) its TOP carries the
+    matching vector ink recesses: the solid is built z-MIRRORED so the
+    bottom-rebuild machinery carves the top, then flipped back (z
+    negated, faces reversed)."""
     zb = FLOOR_MM - OVERLAP_MM
-    if rose_stamp is None:
+    if rose_panel is None:
         return solid_mesh(upper_water_poly,
                           lambda v: np.full(len(v), BASE_MM), zb,
                           quality=False)
     m = solid_mesh(upper_water_poly, lambda v: np.full(len(v), -zb),
-                   -BASE_MM, quality=False, stamp=rose_stamp)
+                   -BASE_MM, quality=False, stamp=rose_panel)
     return trimesh.Trimesh(vertices=m.vertices * [1.0, 1.0, -1.0],
                            faces=m.faces[:, ::-1], process=False)
 
@@ -1133,15 +1143,11 @@ def main():
     print("\nframe bodies (frame.3mf):")
     m_floor = solid_mesh(floor_poly, lambda v: np.full(len(v), FLOOR_MM),
                          0.0, quality=False, stamp=stamps["frame"])
-    rose_stamp = None
-    if rose is not None and ROSE_STYLE == "flush":
-        rose_stamp, n_unassigned = compass_art.union_stamp(
-            rose, rose_c, ROSE_DEPTH)
-        if n_unassigned:
-            print(f"  rose recess: {n_unassigned} pinch-fill cell(s) "
-                  f"({rose.pitch:g} mm) recessed but unfilled by ink "
-                  "(cross-class diagonal junctions; sub-nozzle)")
-    m_upper = water_upper_mesh(upper_water, rose_stamp)
+    rose_panel = None
+    if rose is not None:
+        rose_panel = compass_art.RosePanel(rose, rose_c, ROSE_DEPTH)
+    m_upper = water_upper_mesh(
+        upper_water, rose_panel if ROSE_STYLE == "flush" else None)
     water_mesh = trimesh.util.concatenate([m_floor, m_upper])
     ok &= report_mesh("water(+floor)", water_mesh)
     zok, zlev = vstamp.verify_stamp_levels(water_mesh, stamps["frame"])
@@ -1173,8 +1179,7 @@ def main():
 
     black_mesh = None
     if rose is not None:
-        rm = compass_art.relief_meshes(rose, rose_c, BASE_MM, ROSE_DEPTH,
-                                       style=ROSE_STYLE)
+        rm = rose_panel.ink_meshes(BASE_MM, style=ROSE_STYLE)
         z0, z1 = ((BASE_MM - ROSE_DEPTH, BASE_MM)
                   if ROSE_STYLE == "flush"
                   else (BASE_MM, BASE_MM + ROSE_DEPTH))

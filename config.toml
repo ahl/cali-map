@@ -92,9 +92,12 @@ total_ns_mm = 250.0
 # value ahl print-validated on the P1.5 slab.
 z_exaggeration = 9.3
 
-# Iteration tag debossed into every part's bottom layer (with date +
-# scale + clearance auto-appended). Bump per test iteration.
+# Iteration tag for the bottom stamps. Bump per test iteration.
 build_tag = "T1"
+# Bottom version stamps DISABLED per ahl 2026-09-14 ("the lettering on
+# the bottom is still wrong; just remove it for now") — parts get flat
+# plain bottoms until the stamp rendering is revisited.
+stamps_enabled = false
 
 [print]
 # Physical print parameters — shared by the P4 coupon AND the P5 final

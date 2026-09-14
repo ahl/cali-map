@@ -11,7 +11,6 @@
 #   "scikit-image",
 #   "triangle",
 #   "py-lib3mf",
-#   "cairosvg",
 # ]
 # ///
 """P5: the FULL final product — frame + three removable pieces.
@@ -32,15 +31,16 @@ THE FRAME (out/p5/frame.3mf, 4-color Bambu multi-body):
   - gray (filament 3): ALL non-CA land (Census ca_mask is the authority)
     with full terrain (D15);
   - the D17 compass rose (ahl's artwork, assets/compass.svg):
-    cairosvg rasterizes the artwork, compass_art.py color-keys it into
-    three disjoint ink classes — dark blue -> the coast filament, gray
-    -> the gray filament, black (outlines + pipeline-drawn N/E/S/W
-    letters) -> the black body (filament 4).  Blue/gray rose ink merges
-    into the EXISTING coast/gray bodies (same filament); the frame
-    stays 4 bodies.  [compass].style: "flush" = ink inlaid with tops
-    level with the water surface, matching recesses carved into the
-    water top ([compass].depth_mm); "raised" = ink stands proud on a
-    flat water top.
+    compass_art.py parses the SVG shapes VECTOR end-to-end (curves
+    flattened at ~0.02 mm chord tolerance) into three disjoint ink
+    classes — dark blue -> the coast filament, gray -> the gray
+    filament, black (artwork + pipeline-drawn N/E/S/W letter outlines)
+    -> the black body (filament 4).  Blue/gray rose ink merges into the
+    EXISTING coast/gray bodies (same filament); the frame stays 4
+    bodies.  [compass].style: "flush" = ink inlaid with tops level with
+    the water surface, matching recesses carved into the water top
+    ([compass].depth_mm) from the SAME triangulation (walls exactly
+    coincident); "raised" = ink stands proud on a flat water top.
 
 PIECES (out/p5/{mountains,valley,desert}.stl): slab = base - floor,
 terrain at the G2 normalized z-rule ([output].z_exaggeration x
@@ -258,12 +258,12 @@ def main():
             panel = vstamp.rect_poly(rose_c[0], rose_c[1], w, h, 0.0)
             assert panel.within(upper_water), \
                 "flush rose panel overlaps a cavity"
-        cells = {n: int(m.sum()) for n, m in rose.masks.items()}
+        areas = {n: round(g.area, 1) for n, g in rose.polys.items()}
         print(f"\ncompass rose (D17, {p4.ROSE_STYLE} "
               f"{p4.ROSE_DEPTH:g} mm): ring dia "
               f"{COMPASS['diameter_mm']:g} mm at {rose_c}, "
               f"tips to r {rose.tip_r_mm:.1f} mm, box {w:.1f} x {h:.1f} "
-              f"mm; ink cells {cells}\n"
+              f"mm; ink areas (mm^2) {areas}\n"
               f"  black declared SVG stroke {rose.black_stroke_mm:.2f} mm "
               "(0 = no <stroke>, ink drawn as filled shapes); letters cap "
               f"{COMPASS['letter_cap_mm']:g} mm at r {rose.letter_r_mm:g}"
@@ -331,14 +331,11 @@ def main():
     m_floor = p4.solid_mesh(floor_poly,
                             lambda v: np.full(len(v), p4.FLOOR_MM), 0.0,
                             quality=False, stamp=stamps["frame"])
-    rose_stamp = None
-    if rose is not None and p4.ROSE_STYLE == "flush":
-        rose_stamp, n_unassigned = compass_art.union_stamp(
-            rose, rose_c, p4.ROSE_DEPTH)
-        if n_unassigned:
-            print(f"  rose recess: {n_unassigned} pinch-fill cell(s) "
-                  "recessed but unfilled by ink (sub-nozzle)")
-    m_upper = p4.water_upper_mesh(upper_water, rose_stamp)
+    rose_panel = None
+    if rose is not None:
+        rose_panel = compass_art.RosePanel(rose, rose_c, p4.ROSE_DEPTH)
+    m_upper = p4.water_upper_mesh(
+        upper_water, rose_panel if p4.ROSE_STYLE == "flush" else None)
     water_mesh = trimesh.util.concatenate([m_floor, m_upper])
     ok &= p4.report_mesh("water(+floor)", water_mesh)
     zok, zlev = vstamp.verify_stamp_levels(water_mesh, stamps["frame"])
@@ -356,8 +353,7 @@ def main():
     ok &= p4.report_mesh("gray(terrain)", gray_mesh)
     black_mesh = None
     if rose is not None:
-        rm = compass_art.relief_meshes(rose, rose_c, p4.BASE_MM,
-                                       p4.ROSE_DEPTH, style=p4.ROSE_STYLE)
+        rm = rose_panel.ink_meshes(p4.BASE_MM, style=p4.ROSE_STYLE)
         z0, z1 = ((p4.BASE_MM - p4.ROSE_DEPTH, p4.BASE_MM)
                   if p4.ROSE_STYLE == "flush"
                   else (p4.BASE_MM, p4.BASE_MM + p4.ROSE_DEPTH))
