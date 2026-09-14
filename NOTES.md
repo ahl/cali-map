@@ -1,5 +1,59 @@
 # California Topo Puzzle Map — Design Log
 
+## HANDOFF STATE (written 2026-09-14 at a context reset — READ FIRST)
+
+**Where things stand:** T2 coupon is BUILT, VERIFIED, and CLEARED TO
+PRINT (out/p4_mini/{frame.3mf,mountains.stl,valley.stl}); ahl is about
+to print it. The full final product also exists at out/p5/ (frame.3mf +
+3 piece STLs) built from the SAME parameters. Everything regenerates
+via `make` (D12); config.toml + overrides/ + assets/compass.svg are the
+complete inputs.
+
+**Immediately awaited — ahl's T2 print findings:** rib retention when
+tipped (D18), 18 mm finger-hole ergonomics, valley press-fit at 0.08
+total gap (enclosed-zero-clearance rule), raised rose look (vs T1's
+flush under-fill), 6 mm letter "E" legibility. Each maps to a config
+knob; iterate: bump [output].build_tag, adjust knobs, `make p4`.
+
+**Then the endgame (P6):** full-size mountains DRESS REHEARSAL in a
+plentiful color (decides flat-vs-VERTICAL printing — see Filament
+logistics / vertical-printing notes) -> final prints: frame (4-color,
+brim ~4 mm), valley green, desert yellow, mountains brown LAST (scarce
+filament, print once).
+
+**Open items parked deliberately:**
+- D11 per-scale min-width pass NEVER RAN — the P5 mountains piece has a
+  ~0.8 mm neck somewhere (2 nozzle widths; printable but fragile). If
+  the rehearsal print shows a problem there, this pass is the fix.
+- Full-depth bodies (gray under pieces / land color to the floor):
+  revisit per ahl after judging translucency + teal cavity floors in
+  prints; spec sketched in the T1 session note.
+- Ironing: deferred; route = per-part "Top surfaces" on the WATER body.
+- Bottom version stamps: DISABLED (two failed styles); revisit only via
+  a dedicated small test print.
+- Waterways (D9): deferred to the very end; data ready in
+  data/p2_waterways.geojson; baseline = no waterways.
+- US-Mexico line uses the NE polyline (consistent piece/frame geometry;
+  ~800 m from Census truth — ahl accepted; Census switch is a small
+  p2_land.py change if ever wanted).
+- out/p4_bay_235mm/ and out/p4_bay_420mm/ are OBSOLETE early coupons.
+
+**Working norms that are easy to lose:**
+- Agents: never run jj/git/make; they run stage scripts directly; the
+  coordinator commits after review and runs `make`/`make -n` to prove
+  convergence. BATCH spec changes to in-flight agents (trickling five
+  addenda serialized ~3 h once).
+- Gap measurements: global minima at triple junctions are ARTIFACTS
+  (two clearance regimes meeting at a point); judge fit by the
+  seam-excluded medians the builds now print.
+- ahl's markup loop: he draws on any render (red=mountains,
+  orange=coast, or edge lines), the marks get extracted into
+  overrides/*.geojson, and build_regions applies them — see [overrides].
+- Machine quirks: ahl's shell aliases cp/rm to interactive (use
+  /bin/cp, /bin/rm in scripts/background commands); stock make 3.81
+  (no grouped targets — ride-alongs use @touch recipes); jj snapshot
+  size limit set to 8 MB repo-level; STL/3MF/data/ are gitignored.
+
 A 3D-printable, to-scale topographic map of California as a region-puzzle
 set into a frame of the surrounding geography.
 
