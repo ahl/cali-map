@@ -32,14 +32,18 @@ out/p1_final.png: $(PIPE)/p1_final_render.py $(COMMON) $(DEM)
 # ---- P2a: Census land authority (downloads cached in data/)
 data/p2_land.npz: $(PIPE)/p2_land.py config.toml $(DEM)
 	$(UV) $(PIPE)/p2_land.py
-data/p2_borders.geojson: data/p2_land.npz ;
+# ride-along output (touch keeps its mtime ordered after the canonical
+# target, so `make -n` agrees with `make`)
+data/p2_borders.geojson: data/p2_land.npz
+	@touch $@
 
 # ---- P2b: region vectorization (canonical + smooth flavors)
 p2: data/p2_regions_smooth.geojson
 data/p2_regions_smooth.geojson: $(PIPE)/p2_vectorize.py $(COMMON) $(DEM) \
 		data/p2_land.npz data/p2_borders.geojson
 	$(UV) $(PIPE)/p2_vectorize.py
-data/p2_regions.geojson: data/p2_regions_smooth.geojson ;
+data/p2_regions.geojson: data/p2_regions_smooth.geojson
+	@touch $@
 
 # ---- P2 layout drawing (consumes [output].total_ns_mm)
 p2layout: out/p2_layout.png
