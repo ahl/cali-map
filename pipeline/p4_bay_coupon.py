@@ -22,16 +22,27 @@ D13 window; see p2_layout.py): a ~100 mm square Bay Area window plus an
 The FRAME is a TRAY (one fixed part, 3-color Bambu 3MF per NOTES-3mf.md):
   - a continuous floor (FLOOR_MM) under the ENTIRE footprint, including
     under the removable pieces — cavities are recesses, not through-holes;
+  - the RIM_MM band around the inner window is REAL GEOGRAPHY (ahl's
+    correction): the map content simply continues ~36 km beyond the
+    window on all sides. Band LAND = the gray body, real topography at
+    the same G2 z-scale; band WATER = more water, flat at datum,
+    continuous with the inner water out to the print edge (so gray
+    appears only on sides where the band actually contains land);
   - water body (filament 2) = the floor everywhere + everything up to the
     water surface (BASE_MM above the bottom) outside the cavities: all
-    sea/bay flat at datum, and the sub-datum volume under coast and rim
-    (D14: below datum prints in water color);
-  - coast body (filament 1) = coastal-region land terrain (yellow), real
-    topography from datum up, with a small LAND_MIN_MM visibility floor;
-  - rim body (filament 3) = the artificial band around the window, a flat
-    plateau RIM_RAISE_MM above datum (reads as "land", distinct from
-    water);
-  - CAVITIES for Mountains and Valley at their NOMINAL region outlines;
+    sea/bay flat at datum, and the sub-datum volume under coast and gray
+    land (D14: below datum prints in water color);
+  - coast body (filament 1) = coastal-region land terrain (yellow) INSIDE
+    the inner window, real topography from datum up, with a small
+    LAND_MIN_MM visibility floor;
+  - gray body (filament 3) = ALL land in the outer band regardless of its
+    geographic region, same terrain treatment. The inner/outer boundary
+    on land is purely a color boundary between bodies (coincident
+    vertical walls, like the CA state line on the final product) — not a
+    physical wall or groove;
+  - CAVITIES for Mountains and Valley at their NOMINAL region outlines
+    (pieces are cut at the inner-window edge; where a cavity edge lies on
+    the window boundary its wall faces the gray band-land);
   - POKE-HOLES: two 8 mm circular through-holes in the floor under each
     removable piece (at deep-interior points) to push pieces out.
 
@@ -73,9 +84,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import p1_regions as base
 
 # ------------------------------------------------------------------ params
-WINDOW_MM = 100.0        # geographic window, print mm (square)
-RIM_MM = 8.0             # artificial gray rim width -> ~116 mm total print
-RIM_RAISE_MM = 0.8       # rim plateau height above datum
+WINDOW_MM = 100.0        # inner window (pieces + cavities), print mm
+RIM_MM = 8.0             # real-geography band beyond the window (~36 km)
 # Window center (CA Albers km): west/south of the Carquinez junction so
 # the bay-wrapping Coast Range mountains are the DOMINANT mountains
 # fragment (per ahl's sketch: SF Bay left-of-center, valley entering the
@@ -106,14 +116,16 @@ OVERLAP_MM = 0.05        # internal z-overlap of the water body's 2 solids
 CLEAR_PX = CLEARANCE_MM / PX_MM
 PAD_PX = 12
 N_PX = int(round(WINDOW_MM / PX_MM))
+RIM_PX = int(round(RIM_MM / PX_MM))
+N_FP = N_PX + 2 * RIM_PX          # raster covers the full footprint
 
 # Bambu filament slots (1-based; ahl maps AMS slots when slicing)
-EXTRUDERS = {"coast": 1, "water": 2, "rim": 3}
+EXTRUDERS = {"coast": 1, "water": 2, "gray": 3}
 
 REGION_NAME = {base.MOUNTAINS: "mountains", base.VALLEY: "valley",
                base.DESERT: "desert", base.COAST: "coast"}
 WATER_RGB = (0.73, 0.82, 0.90)
-RIM_RGB = (0.90, 0.88, 0.82)
+GRAY_RGB = (0.80, 0.79, 0.76)
 
 ROOT = base.ROOT
 DATA = base.DATA
@@ -199,8 +211,9 @@ def g2_z_scale(reg, sea, dem, win):
 
 # ------------------------------------------------------------ window build
 def window_rasters(reg, sea, dem, s, cx, cy):
-    x_mm = (np.arange(N_PX) + 0.5) * PX_MM
-    y_mm = WINDOW_MM - (np.arange(N_PX) + 0.5) * PX_MM
+    """Rasters over the FULL footprint (window + band), print grid."""
+    x_mm = (np.arange(N_FP) + 0.5) * PX_MM - RIM_MM
+    y_mm = WINDOW_MM + RIM_MM - (np.arange(N_FP) + 0.5) * PX_MM
     gx = cx + (x_mm - WINDOW_MM / 2) / (s * 1000.0)
     gy = cy + (y_mm - WINDOW_MM / 2) / (s * 1000.0)
     cols = (gx - base.META["x_min"]) / base.META["res"] - 0.5
@@ -270,11 +283,17 @@ def fill_and_contiguity(regw, seaw, notes, s, cx, cy):
 
 
 # -------------------------------------------------- polygon extraction
-def mask_polygon(mask, erode_px):
+def mask_polygon(mask, erode_px, origin_mm=0.0, clip=None):
     """Sub-pixel polygon of `mask` shrunk inward by erode_px pixels (0 =
     nominal outline). EDT of the zero-padded mask, gaussian-smoothed,
     contoured at erode_px + 0.5 (the +0.5 corrects EDT's measure-to-pixel-
-    centers offset); accuracy ~+/-0.5 px (0.025 mm) before SIMPLIFY_MM."""
+    centers offset); accuracy ~+/-0.5 px (0.025 mm) before SIMPLIFY_MM.
+    origin_mm: mm coordinate of the mask's lower-left corner (0 for
+    window-indexed masks, -RIM_MM for footprint-indexed). clip: shapely
+    box to intersect with (default = the inner window)."""
+    if clip is None:
+        clip = box(0, 0, WINDOW_MM, WINDOW_MM)
+    span = mask.shape[0] * PX_MM
     padded = np.pad(mask, PAD_PX, mode="constant", constant_values=False)
     field = ndimage.distance_transform_edt(padded)
     if EDT_SMOOTH_PX > 0:
@@ -283,8 +302,8 @@ def mask_polygon(mask, erode_px):
     for lp in measure.find_contours(field, erode_px + 0.5):
         if len(lp) < 4:
             continue
-        xs = (lp[:, 1] - PAD_PX + 0.5) * PX_MM
-        ys = WINDOW_MM - (lp[:, 0] - PAD_PX + 0.5) * PX_MM
+        xs = (lp[:, 1] - PAD_PX + 0.5) * PX_MM + origin_mm
+        ys = span + origin_mm - (lp[:, 0] - PAD_PX + 0.5) * PX_MM
         ring = Polygon(np.column_stack([xs, ys]))
         if not ring.is_valid:
             ring = ring.buffer(0)
@@ -297,7 +316,7 @@ def mask_polygon(mask, erode_px):
     geom = rings[0]
     for r in rings[1:]:                        # even-odd nesting
         geom = geom.symmetric_difference(r)
-    geom = geom.intersection(box(0, 0, WINDOW_MM, WINDOW_MM))
+    geom = geom.intersection(clip)
     geom = geom.simplify(SIMPLIFY_MM, preserve_topology=True)
     parts = [g for g in getattr(geom, "geoms", [geom])
              if g.geom_type == "Polygon" and g.area > 1e-6]
@@ -592,7 +611,6 @@ def render_preview(geo, s, tj, holes):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    rim_ring = geo["rim_ring"]
     water_vis = geo["water_visible"]
     cav_floor = {n: geo[f"{n}_nom"] for n in ("mountains", "valley")}
     fig, axes = plt.subplots(1, 3, figsize=(19, 7.2), dpi=200)
@@ -600,8 +618,8 @@ def render_preview(geo, s, tj, holes):
     for col, ax in enumerate(axes):
         ax.set_facecolor("#1c1c22")
         explode = col == 1
-        add_poly(ax, rim_ring, RIM_RGB)
         add_poly(ax, water_vis, WATER_RGB)
+        add_poly(ax, geo["gray"], GRAY_RGB, z=2)
         add_poly(ax, geo["coast_nom"], base.COLORS[base.COAST], z=2)
         for name in ("mountains", "valley"):
             rid = {v: k for k, v in REGION_NAME.items()}[name]
@@ -634,8 +652,8 @@ def render_preview(geo, s, tj, holes):
             ax.set_title(
                 f"assembled — 1:{1 / s / 1e6:.3f}M, window "
                 f"{WINDOW_MM / s / 1e6:.0f} km @ ({CENTER_KM[0]:.0f}, "
-                f"{CENTER_KM[1]:.0f}) km Albers; dotted = poke-holes",
-                fontsize=10)
+                f"{CENTER_KM[1]:.0f}) km Albers; band = real geography "
+                "(gray = band land); dotted = poke-holes", fontsize=10)
         elif col == 1:
             ax.set_xlim(-RIM_MM - 30, WINDOW_MM + RIM_MM + 30)
             ax.set_ylim(-RIM_MM - 30, WINDOW_MM + RIM_MM + 30)
@@ -652,8 +670,8 @@ def render_preview(geo, s, tj, holes):
     fig.suptitle(
         "P4 v2 mini-frame — miniature of the final product  "
         f"(tray frame: floor {FLOOR_MM:g} mm, water surface {BASE_MM:g} mm,"
-        f" rim +{RIM_RAISE_MM:g} mm; pieces {PIECE_SLAB_MM:g} mm slab + "
-        "G2 terrain)", fontsize=12)
+        f" band land = gray body w/ terrain; pieces {PIECE_SLAB_MM:g} mm "
+        "slab + G2 terrain)", fontsize=12)
     fig.tight_layout()
     fig.savefig(OUT / "p4_preview.png", bbox_inches="tight",
                 facecolor="white")
@@ -697,11 +715,17 @@ def main():
     cx, cy = CENTER_KM[0] * 1000.0, CENTER_KM[1] * 1000.0
     ground_km = WINDOW_MM / s / 1e6
     print(f"window: {WINDOW_MM:g} mm = {ground_km:.0f} km square @ Albers "
-          f"({CENTER_KM[0]:.0f}, {CENTER_KM[1]:.0f}) km; rim {RIM_MM:g} mm "
-          f"-> total {WINDOW_MM + 2 * RIM_MM:g} mm square")
+          f"({CENTER_KM[0]:.0f}, {CENTER_KM[1]:.0f}) km; real-geography "
+          f"band {RIM_MM:g} mm (~{RIM_MM / s / 1e6:.0f} km) -> total "
+          f"{WINDOW_MM + 2 * RIM_MM:g} mm square")
 
     notes = []
-    regw, seaw, demw = window_rasters(reg, sea, dem, s, cx, cy)
+    # full-footprint rasters; window views drive pieces/cavities/coast
+    regw_fp, seaw_fp, demw_fp = window_rasters(reg, sea, dem, s, cx, cy)
+    win_sl = (slice(RIM_PX, -RIM_PX), slice(RIM_PX, -RIM_PX))
+    regw = regw_fp[win_sl].copy()
+    seaw = seaw_fp[win_sl].copy()
+    demw = demw_fp[win_sl]
     if (regw == base.DESERT).any():
         # desert is out of scope for the mini (no desert piece/cavity);
         # leaving it unowned would punch a void in the frame — fold it
@@ -718,7 +742,8 @@ def main():
 
     max_e_win = float(demw[~seaw].max())
     print(f"max elev in window {max_e_win:.0f} m -> terrain top "
-          f"{BASE_MM + max_e_win * z_per_m:.2f} mm above print bottom")
+          f"{BASE_MM + max_e_win * z_per_m:.2f} mm above print bottom "
+          f"(footprint incl. band: {float(demw_fp[~seaw_fp].max()):.0f} m)")
 
     # ---- polygons -------------------------------------------------------
     geo = {}
@@ -739,11 +764,39 @@ def main():
     footprint = box(-RIM_MM, -RIM_MM, WINDOW_MM + RIM_MM,
                     WINDOW_MM + RIM_MM)
     window_box = box(0, 0, WINDOW_MM, WINDOW_MM)
-    geo["rim_ring"] = footprint.difference(window_box)
+
+    # gray body: ALL land in the outer band, regardless of region --
+    # real geography continuing past the window to the print edge
+    land_fp = mask_polygon(~seaw_fp, 0.0, origin_mm=-RIM_MM, clip=footprint)
+    gray = land_fp.difference(window_box) if land_fp is not None else None
+    gparts = _parts(gray, MIN_COAST_PART_MM2) if gray is not None else []
+    n_crumb = (len(list(getattr(gray, "geoms", [gray]))) - len(gparts)
+               if gray is not None else 0)
+    if n_crumb:
+        notes.append(f"gray body: dropped {n_crumb} band-land crumb "
+                     f"part(s) < {MIN_COAST_PART_MM2} mm^2")
+    assert gparts, "no land in the band at all?"
+    geo["gray"] = MultiPolygon(gparts) if len(gparts) > 1 else gparts[0]
+    assert geo["gray"].intersection(window_box).area < 1e-6
+
     cavities = geo["mountains_nom"].union(geo["valley_nom"])
     upper_water = footprint.difference(cavities)
-    geo["water_visible"] = window_box.difference(cavities).difference(
-        geo["coast_nom"])
+    geo["water_visible"] = footprint.difference(cavities).difference(
+        geo["coast_nom"]).difference(geo["gray"])
+
+    # which footprint edges actually show gray (check vs ahl's sketch)
+    sides = {"west": box(-RIM_MM, -RIM_MM, 0, WINDOW_MM + RIM_MM),
+             "east": box(WINDOW_MM, -RIM_MM, WINDOW_MM + RIM_MM,
+                         WINDOW_MM + RIM_MM),
+             "north": box(-RIM_MM, WINDOW_MM, WINDOW_MM + RIM_MM,
+                          WINDOW_MM + RIM_MM),
+             "south": box(-RIM_MM, -RIM_MM, WINDOW_MM + RIM_MM, 0)}
+    print("  gray band land per side:")
+    for sname, sbox in sides.items():
+        a = geo["gray"].intersection(sbox).area
+        pct = 100 * a / sbox.area
+        print(f"    {sname:5s}: {a:7.1f} mm^2 ({pct:4.1f}% of that band)"
+              + ("  [no gray]" if a < 1.0 else ""))
 
     # ---- poke-holes -----------------------------------------------------
     holes = {n: poke_points(geo[f"{n}_nom"]) for n in ("mountains", "valley")}
@@ -784,19 +837,22 @@ def main():
     ok &= report_mesh("water(+floor)", water_mesh)
     coast_mesh = solid_mesh(geo["coast_nom"], terrain_coast, BASE_MM)
     ok &= report_mesh("coast", coast_mesh)
-    rim_mesh = solid_mesh(geo["rim_ring"],
-                          lambda v: np.full(len(v), BASE_MM + RIM_RAISE_MM),
-                          BASE_MM, quality=False)
-    ok &= report_mesh("rim", rim_mesh)
+    gray_mesh = solid_mesh(geo["gray"], terrain_coast, BASE_MM)
+    ok &= report_mesh("gray", gray_mesh)
+    gray_max = gray_mesh.bounds[1][2]
+    print(f"    gray terrain top {gray_max:.2f} mm "
+          f"(~{(gray_max - BASE_MM) / z_per_m:.0f} m)")
 
-    # inter-body overlap sanity (z-disjoint by construction; lateral check)
-    assert geo["coast_nom"].intersection(geo["rim_ring"]).area < 1e-6
+    # inter-body overlap sanity (z-disjoint by construction; lateral
+    # check: coast is inside the window, gray strictly outside — they
+    # meet only along the window-edge line, a pure color boundary)
+    assert geo["coast_nom"].intersection(geo["gray"]).area < 1e-6
 
     frame_path = OUT_DIR / "frame.3mf"
     write_bambu_3mf(frame_path, "p4_mini_frame",
                     [("coast", coast_mesh, EXTRUDERS["coast"]),
                      ("water", water_mesh, EXTRUDERS["water"]),
-                     ("rim", rim_mesh, EXTRUDERS["rim"])])
+                     ("gray", gray_mesh, EXTRUDERS["gray"])])
     print(f"  -> {frame_path} ({frame_path.stat().st_size / 1e6:.1f} MB)  "
           f"[{lint_3mf(frame_path)}]")
     with zipfile.ZipFile(frame_path) as z:
