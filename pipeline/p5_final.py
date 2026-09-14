@@ -71,7 +71,7 @@ import numpy as np
 import trimesh
 from scipy import ndimage
 from shapely.geometry import MultiPolygon, box
-from shapely.ops import polylabel
+from shapely.ops import polylabel, unary_union
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import p1_regions as base
@@ -430,13 +430,16 @@ def main():
 
     print("\nremovable pieces:")
     piece_meshes = {}
-    ribbed_geo = {}
+    ribbed_geo, rib_sites = {}, {}
     for name, _, _ in PIECES:
         piece = geo[f"{name}_piece"]
-        ribbed, n_ribs = p4.add_crush_ribs(
-            piece, geo[f"{name}_nom"], p4.RIB_SPACING_MM, p4.RIB_RADIUS_MM,
-            p4.RIB_INTERFERENCE_MM)
+        sib_noms = [geo[f"{o}_nom"] for o, _, _ in PIECES if o != name]
+        other_nom = unary_union(sib_noms) if sib_noms else None
+        ribbed, sites = p4.add_crush_ribs(
+            piece, geo[f"{name}_nom"], other_nom, p4.RIBS_PER_PIECE,
+            p4.RIB_RADIUS_MM, p4.RIB_INTERFERENCE_MM)
         ribbed_geo[name] = ribbed
+        rib_sites[name] = sites
         mesh = p4.solid_mesh(ribbed, terrain_piece, 0.0,
                              stamp=stamps.get(name),
                              chamfer=p4.CHAMFER_MM)
@@ -451,11 +454,17 @@ def main():
             ok &= zok
             szn = f"stamp z {zlev} exact: {zok}; "
         gap = piece.distance(upper_water)
+        ring = geo[f"{name}_nom"].exterior
+        site_str = ", ".join(
+            f"{kind}@({p.x:.1f},{p.y:.1f})"
+            for (d, kind), p in zip(sites, [ring.interpolate(d)
+                                            for d, _ in sites]))
         print(f"    {szn}min width "
               f"~{p4.min_land_width(piece):.2f} mm; gap vs frame "
               f"{gap:.3f} (nom {p4.CLEARANCE_MM:g}); crush ribs: "
-              f"{n_ribs} x r{p4.RIB_RADIUS_MM:g} mm crest "
-              f"+{p4.RIB_INTERFERENCE_MM:g} mm past nominal  -> {path}")
+              f"{len(sites)} x r{p4.RIB_RADIUS_MM:g} mm crest "
+              f"+{p4.RIB_INTERFERENCE_MM:g} mm past nominal: {site_str}"
+              f"  -> {path}")
 
     print("\npiece-piece seam gaps (only nominally-adjacent pairs):")
     pnames = [n for n, _, _ in PIECES]
@@ -472,7 +481,7 @@ def main():
         print(f"  note: {n}")
 
     mnom = geo["mountains_nom"].exterior
-    rib_pt = mnom.interpolate(0.5 * mnom.length)
+    rib_pt = mnom.interpolate(rib_sites["mountains"][0][0])
     render_preview(geo, s, holes, stamps, ribbed_geo, rib_pt, rose, rose_c,
                   EW_MM)
     print(f"\nall bodies/pieces watertight + checks: {ok}")
@@ -587,7 +596,7 @@ def render_preview(geo, s, holes, stamps, ribbed, rib_pt, rose, rose_c,
     ax.set_ylim(rib_pt.y - 7, rib_pt.y + 7)
     ax.set_title(f"crush-rib close-up (14 mm): r{p4.RIB_RADIUS_MM:g} mm, "
                  f"+{p4.RIB_INTERFERENCE_MM:g} mm past nominal (dashed), "
-                 f"~{p4.RIB_SPACING_MM:g} mm spacing", fontsize=9)
+                 f"{p4.RIBS_PER_PIECE:d} ribs/piece", fontsize=9)
 
     # 5: rose close-up
     ax = axes[4]

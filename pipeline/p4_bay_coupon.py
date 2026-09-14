@@ -170,7 +170,7 @@ CHAMFER_MM = _PRINT_CFG["bottom_chamfer_mm"]  # 45-deg piece bottom edge
 POKE_D_MM = _PRINT_CFG["poke_hole_d_mm"]
 RIB_INTERFERENCE_MM = _PRINT_CFG.get("rib_interference_mm", 0.0)
 RIB_RADIUS_MM = _PRINT_CFG.get("rib_radius_mm", 0.4)
-RIB_SPACING_MM = _PRINT_CFG.get("rib_spacing_mm", 50.0)
+RIBS_PER_PIECE = _PRINT_CFG.get("ribs_per_piece", 4)
 LAND_MIN_MM = _PRINT_CFG["land_min_mm"]
 COMPASS = _CFG_ALL.get("compass", {"enabled": False})
 ROSE_STYLE = COMPASS.get("style", "raised")   # "flush" | "raised"
@@ -425,15 +425,27 @@ def piece_polygon(mask, other_mask, c_frame_px, c_pair_px, clip=None):
     c_frame_px == c_pair_px == 0 no pixel is ever removed (both
     thresholds are >= 0.5, and the closest a piece pixel can be to any
     non-piece pixel is exactly 1.0), so this is identical to
-    mask_polygon(mask, 0.0, clip=clip)."""
+    mask_polygon(mask, 0.0, clip=clip). Pixels are PADDED by PAD_PX with
+    False before either EDT (matching mask_polygon's own convention) so
+    a piece touching the raw raster's own edge (e.g. the P4 coupon's
+    window boundary, which is rasterized as its own bounded array with
+    no cells beyond it) still sees genuine frame background just past
+    that edge -- computing the EDT on the unpadded array would treat
+    'off the edge' as simply not existing rather than as frame, so a
+    piece flush with the array edge would wrongly get NO frame
+    clearance there (verified: the coupon's south window edge, where
+    both mountains and valley touch y=0, measured an exact 0.000 mm
+    frame gap before this padding was added)."""
+    pad = lambda a: np.pad(a, PAD_PX, mode="constant", constant_values=False)
+    unpad = lambda a: a[PAD_PX:-PAD_PX, PAD_PX:-PAD_PX]
     eff = mask
     if c_frame_px > 0:
-        frame_bg = ~(mask | other_mask)
+        frame_bg = ~(pad(mask) | pad(other_mask))
         d_frame = ndimage.distance_transform_edt(~frame_bg)
-        eff = eff & (d_frame >= c_frame_px + 0.5)
+        eff = eff & unpad(d_frame >= c_frame_px + 0.5)
     if c_pair_px > 0:
-        d_other = ndimage.distance_transform_edt(~other_mask)
-        eff = eff & (d_other >= c_pair_px + 0.5)
+        d_other = ndimage.distance_transform_edt(~pad(other_mask))
+        eff = eff & unpad(d_other >= c_pair_px + 0.5)
     return mask_polygon(eff, 0.0, clip=clip)
 
 
@@ -472,13 +484,79 @@ def _outward_normal(poly, p, tangent):
     return (nx, ny)
 
 
-def add_crush_ribs(piece, nominal, spacing_mm, radius_mm, interference_mm):
+def _ring_curvature(ring, length, d, window_mm=1.0):
+    """Local turning angle (radians) of `ring` at arc-length `d`, between
+    the chords approaching and leaving `d` over +/- window_mm -- a cheap
+    straightness proxy (0 = dead straight, larger = sharper corner)."""
+    p0 = ring.interpolate((d - window_mm) % length)
+    p1 = ring.interpolate(d % length)
+    p2 = ring.interpolate((d + window_mm) % length)
+    v1 = np.array([p1.x - p0.x, p1.y - p0.y])
+    v2 = np.array([p2.x - p1.x, p2.y - p1.y])
+    n1, n2 = np.hypot(*v1), np.hypot(*v2)
+    if n1 < 1e-9 or n2 < 1e-9:
+        return 0.0
+    cosang = float(np.clip(np.dot(v1, v2) / (n1 * n2), -1.0, 1.0))
+    return abs(np.arccos(cosang))
+
+
+def choose_rib_sites(nominal, other_nominal, n_total, sample_step_mm=1.0):
+    """Picks `n_total` rib sites (arc-length positions on `nominal`'s
+    exterior ring) balanced across interface type and spread around the
+    perimeter, preferring straight/gently-curved stretches over sharp
+    corners (ahl 2026-09-14: fewer, well-placed ribs -- 'better contact
+    than sharp corners'; at least 2 must face the FRAME and, if the
+    piece has any piece-facing border at all, at least 1 must face that
+    -- grip on both interface types). `other_nominal`: union of sibling
+    nominal footprints, or None/empty if this piece has no siblings.
+    Returns a list of (arc_length_d, kind) with kind in {"frame",
+    "pair"}, sorted by arc length."""
+    ring = nominal.exterior
+    length = ring.length
+    ds = np.arange(0.0, length, sample_step_mm)
+    pts = [ring.interpolate(d) for d in ds]
+    has_pair = other_nominal is not None and not other_nominal.is_empty
+    ob = other_nominal.boundary if has_pair else None
+    is_pair = np.array([has_pair and ob.distance(p) < 0.02 for p in pts])
+    curv = np.array([_ring_curvature(ring, length, d) for d in ds])
+
+    def greedy_spread(idx, n):
+        """From candidate indices `idx` (into ds/curv), pick up to n,
+        preferring the straighter half, spread by arc-length max-min."""
+        if n <= 0 or len(idx) == 0:
+            return []
+        idx = sorted(idx, key=lambda i: curv[i])
+        idx = idx[:max(n, (len(idx) + 1) // 2)]     # straighter half
+        chosen = [idx[0]]
+        pool = idx[1:]
+        while len(chosen) < n and pool:
+            def arc_gap(i):
+                return min(min(abs(ds[i] - ds[c]), length - abs(ds[i] - ds[c]))
+                           for c in chosen)
+            best = max(pool, key=arc_gap)
+            chosen.append(best)
+            pool.remove(best)
+        return chosen
+
+    n_pair = 1 if has_pair and is_pair.any() else 0
+    n_frame = n_total - n_pair
+    pair_idx = greedy_spread(list(np.nonzero(is_pair)[0]), n_pair)
+    frame_idx = greedy_spread(list(np.nonzero(~is_pair)[0]), n_frame)
+    sites = ([(ds[i], "pair") for i in pair_idx]
+             + [(ds[i], "frame") for i in frame_idx])
+    sites.sort(key=lambda t: t[0])
+    return sites
+
+
+def add_crush_ribs(piece, nominal, other_nominal, n_ribs, radius_mm,
+                   interference_mm):
     """Retention crush-ribs (ahl 2026-09-14: pieces must stay seated when
     the tray is tipped; release is via the finger poke-holes, not a
     snug piece fit) -- vertical half-cylinder ribs standing proud of
-    `piece`'s (the clearance-cut piece) own wall, spaced ~spacing_mm
-    along the FULL perimeter of `nominal` (the pre-clearance region
-    outline), both frame-facing and piece-facing stretches alike.
+    `piece`'s (the clearance-cut piece) own wall, at n_ribs sites chosen
+    by choose_rib_sites (balanced frame/piece-facing coverage, straight
+    stretches preferred, spread around the perimeter of `nominal`, the
+    pre-clearance region outline).
 
     Crest placement is independent of which clearance applied locally:
     the offset wall sits `clearance_local` inside nominal; a rib
@@ -495,16 +573,16 @@ def add_crush_ribs(piece, nominal, spacing_mm, radius_mm, interference_mm):
     every piece regardless (the valley still gets ribs against its
     enclosing neighbor), so this is called uniformly per piece.
 
-    Returns (ribbed_piece, n_ribs)."""
-    if interference_mm <= 0 or radius_mm <= 0:
-        return piece, 0
+    Returns (ribbed_piece, sites) where sites is choose_rib_sites' list
+    of (arc_length_d, kind), for reporting/preview."""
+    if interference_mm <= 0 or radius_mm <= 0 or n_ribs <= 0:
+        return piece, []
     ring = nominal.exterior
     length = ring.length
-    n = max(3, round(length / spacing_mm))
-    eps = min(0.3, spacing_mm * 0.05)
+    eps = min(0.3, length * 0.01)
+    sites = choose_rib_sites(nominal, other_nominal, n_ribs)
     bumps = []
-    for i in range(n):
-        d = (i + 0.5) * length / n
+    for d, _kind in sites:
         p = ring.interpolate(d)
         p0 = ring.interpolate((d - eps) % length)
         p1 = ring.interpolate((d + eps) % length)
@@ -516,7 +594,7 @@ def add_crush_ribs(piece, nominal, spacing_mm, radius_mm, interference_mm):
     parts = [g for g in getattr(ribbed, "geoms", [ribbed])
              if g.geom_type == "Polygon"]
     parts.sort(key=lambda g: g.area, reverse=True)
-    return parts[0], n
+    return parts[0], sites
 
 
 def _parts(geom, min_area=0.5):
@@ -791,7 +869,60 @@ def poke_points(nom_poly, n=2):
     return chosen
 
 
-def seam_hole(nom_a, nom_b, cav_union, allowed, min_len_mm=None):
+def _all_rings(poly):
+    """Every LinearRing of a (Multi)Polygon: each part's exterior AND
+    its interiors (holes) -- a piece fully enclosed by another (the
+    valley inside the mountains, in P5) shows up as an INTERIOR ring of
+    the enclosing piece's polygon, not its exterior, so any perimeter
+    walk that only checks .exterior misses that whole interface."""
+    rings = []
+    for part in getattr(poly, "geoms", [poly]):
+        rings.append(part.exterior)
+        rings.extend(part.interiors)
+    return rings
+
+
+def _best_seam_run(ring, nom_b, cav_union, allowed, min_len_mm,
+                   touch_tol_mm, step_mm):
+    """Longest circularly-contiguous run of `ring` samples lying within
+    touch_tol_mm of nom_b, and the point within a qualifying run (>=
+    min_len_mm) that clears `allowed` and sits farthest from
+    cav_union's own boundary. Returns (point_or_None, run_len_mm)."""
+    length = ring.length
+    n = max(int(length / step_mm), 8)
+    ds = np.linspace(0.0, length, n, endpoint=False)
+    pts = [ring.interpolate(d) for d in ds]
+    close = np.array([nom_b.distance(p) < touch_tol_mm for p in pts])
+    if not close.any():
+        return None, 0.0
+    idx = np.nonzero(close)[0]
+    runs, start, prev = [], idx[0], idx[0]
+    for i in idx[1:]:
+        if i == prev + 1:
+            prev = i
+            continue
+        runs.append((start, prev))
+        start = prev = i
+    runs.append((start, prev))
+    if len(runs) > 1 and runs[0][0] == 0 and runs[-1][1] == n - 1:
+        s1, e1 = runs.pop()
+        s0, e0 = runs.pop(0)
+        runs.append((s1, e0 + n))               # wraps around index 0
+    step_actual = length / n
+    s, e = max(runs, key=lambda r: r[1] - r[0])
+    run_len = (e - s) * step_actual
+    if run_len < min_len_mm:
+        return None, run_len
+    run_pts = [pts[i % n] for i in range(s, e + 1)]
+    outer = cav_union.boundary
+    cands = [p for p in run_pts if allowed.contains(p)]
+    if not cands:
+        return None, run_len
+    return max(cands, key=lambda p: outer.distance(p)), run_len
+
+
+def seam_hole(nom_a, nom_b, cav_union, allowed, min_len_mm=None,
+             touch_tol_mm=0.05, step_mm=0.5):
     """A poke-hole CENTER straddling the shared border of two adjacent
     NOMINAL (pre-clearance) piece footprints -- ahl 2026-09-14: poke-
     holes are now the disassembly mechanism and finger-sized, and one
@@ -801,28 +932,43 @@ def seam_hole(nom_a, nom_b, cav_union, allowed, min_len_mm=None):
     only its outer edge is a real frame wall -- meaning a hole centered
     on the seam is legitimately entirely 'under removable pieces' even
     though its circle crosses two different piece rasters.
-    `allowed` = cav_union already buffered in by the wall margin (hole
-    radius + POKE_MARGIN_MM); candidates are scored by distance to
-    cav_union's OWN boundary (not the individual pieces' boundaries, so
-    the seam itself costs nothing). Returns None if the shared border is
-    shorter than min_len_mm (default: 1.5x the hole diameter, so the
-    full circle plausibly fits along it) or no sampled point clears the
-    wall margin."""
+
+    Finding the seam by exact geometric intersection of the two rings
+    (nom_a.exterior.intersection(nom_b.exterior)) does NOT work in this
+    pipeline: each region's outline is contoured INDEPENDENTLY from its
+    own raster/EDT field (see mask_polygon), so two touching regions'
+    rings approximate the same physical edge but are not bit-identical
+    -- verified their exact intersection is empty even where they
+    plainly border each other over a long run. Instead, walk EVERY ring
+    of BOTH polygons (_all_rings -- critical for an ENCLOSED piece like
+    P5's valley: the mountains/valley border lives on mountains' own
+    INTERIOR ring, the hole valley sits in, not its exterior; verified
+    mountains_nom carries exactly one such 380 mm hole there), sampling
+    every step_mm and marking points within touch_tol_mm of the other
+    polygon (a proximity test against the whole polygon, not exact
+    coincidence -- the same style of check choose_rib_sites uses for
+    pair-vs-frame classification); find the longest circularly-
+    contiguous marked run on any ring, keep it if its arc length is >=
+    min_len_mm (default: 1.5x the hole diameter, so the full circle
+    plausibly fits along it) and some point in it clears `allowed`
+    (cav_union already buffered in by the wall margin -- hole radius +
+    POKE_MARGIN_MM), scored by distance to cav_union's OWN boundary (so
+    the seam itself costs nothing). Returns None if no ring on either
+    side qualifies."""
     if min_len_mm is None:
         min_len_mm = 1.5 * POKE_D_MM
-    shared = nom_a.exterior.intersection(nom_b.exterior)
-    segs = [g for g in getattr(shared, "geoms", [shared])
-            if g.geom_type == "LineString" and g.length >= min_len_mm]
-    if not segs:
-        return None
-    seg = max(segs, key=lambda g: g.length)
-    outer = cav_union.boundary
-    cands = [seg.interpolate(t, normalized=True)
-             for t in np.linspace(0.05, 0.95, 37)]
-    cands = [p for p in cands if allowed.contains(p)]
-    if not cands:
-        return None
-    return max(cands, key=lambda p: outer.distance(p))
+    best_pt, best_len = None, -1.0
+    for ring, other in ((r, nom_b) for r in _all_rings(nom_a)):
+        pt, run_len = _best_seam_run(ring, other, cav_union, allowed,
+                                     min_len_mm, touch_tol_mm, step_mm)
+        if pt is not None and run_len > best_len:
+            best_pt, best_len = pt, run_len
+    for ring, other in ((r, nom_a) for r in _all_rings(nom_b)):
+        pt, run_len = _best_seam_run(ring, other, cav_union, allowed,
+                                     min_len_mm, touch_tol_mm, step_mm)
+        if pt is not None and run_len > best_len:
+            best_pt, best_len = pt, run_len
+    return best_pt
 
 
 def plan_poke_holes(nom, target_n, seam_min_len_mm=None):
@@ -1085,7 +1231,7 @@ def render_preview(geo, s, tj, holes, stamps, ribbed, rib_pt, rose=None,
     ax.set_ylim(rib_pt.y - 6, rib_pt.y + 6)
     ax.set_title(f"crush-rib close-up (12 mm): r{RIB_RADIUS_MM:g} mm, "
                  f"+{RIB_INTERFERENCE_MM:g} mm past nominal (dashed), "
-                 f"~{RIB_SPACING_MM:g} mm spacing", fontsize=9)
+                 f"{RIBS_PER_PIECE:d} ribs/piece", fontsize=9)
     ax.set_aspect("equal")
     ax.set_xticks([]), ax.set_yticks([])
 
@@ -1524,13 +1670,15 @@ def main():
     print(f"  3MF layout matches cubes_bambu.3mf: {names == expect}")
 
     print("\nremovable pieces:")
-    ribbed_geo = {}
+    ribbed_geo, rib_sites = {}, {}
     for name in ("mountains", "valley"):
         piece = geo[f"{name}_piece"]
-        ribbed, n_ribs = add_crush_ribs(piece, geo[f"{name}_nom"],
-                                        RIB_SPACING_MM, RIB_RADIUS_MM,
-                                        RIB_INTERFERENCE_MM)
+        other_name = "valley" if name == "mountains" else "mountains"
+        ribbed, sites = add_crush_ribs(
+            piece, geo[f"{name}_nom"], geo[f"{other_name}_nom"],
+            RIBS_PER_PIECE, RIB_RADIUS_MM, RIB_INTERFERENCE_MM)
         ribbed_geo[name] = ribbed
+        rib_sites[name] = sites
         mesh = solid_mesh(ribbed, terrain_piece, 0.0,
                           stamp=stamps.get(name), chamfer=CHAMFER_MM)
         path = OUT_DIR / f"{name}.stl"
@@ -1544,22 +1692,27 @@ def main():
                   f"{vstamp.DEPTH_MM:g}: {zok}")
         mlw = min_land_width(piece)
         gap_frame = piece.distance(upper_water)
-        other_name = "valley" if name == "mountains" else "mountains"
         other = geo[f"{other_name}_piece"]
         gap_piece = piece.distance(other)
         nom_pp = pair_gap_nominal_mm(name, other_name)
+        ring = geo[f"{name}_nom"].exterior
+        site_pts = [ring.interpolate(d) for d, _ in sites]
+        site_str = ", ".join(
+            f"{kind}@({p.x:.1f},{p.y:.1f})"
+            for (d, kind), p in zip(sites, site_pts))
         print(f"    min width ~{mlw:.2f} mm; gap vs frame "
               f"{gap_frame:.3f} mm (nominal {CLEARANCE_MM:g}); vs other "
               f"piece {gap_piece:.3f} mm (nominal {nom_pp:g})\n"
-              f"    crush ribs: {n_ribs} x r{RIB_RADIUS_MM:g} mm crest "
-              f"+{RIB_INTERFERENCE_MM:g} mm past nominal  -> {path}")
+              f"    crush ribs: {len(sites)} x r{RIB_RADIUS_MM:g} mm "
+              f"crest +{RIB_INTERFERENCE_MM:g} mm past nominal: "
+              f"{site_str}  -> {path}")
 
     for n in notes:
         print(f"  note: {n}")
 
     tj = triple_junction_mm(regw)
     mnom = geo["mountains_nom"].exterior
-    rib_pt = mnom.interpolate(0.5 * mnom.length)
+    rib_pt = mnom.interpolate(rib_sites["mountains"][0][0])
     render_preview(geo, s, tj, holes, stamps, ribbed_geo, rib_pt, rose,
                   rose_c)
     print(f"\nall bodies/pieces watertight: {ok}")
