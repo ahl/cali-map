@@ -9,13 +9,30 @@ every pixel is classified to its NEAREST reference color:
     black     (35, 31, 32)   -> "black"  (black body)
     teal      (39, 170, 225) + white/transparent -> water (no body)
 
+Before anything else touches them, the three raw ink classes are each
+dilated (priority black > coast > gray; a class never grows into a
+higher-priority class's already-claimed cells, so they stay disjoint BY
+CONSTRUCTION) until their printed min stroke width -- measured by the
+same morphological-opening test used for the letters -- clears
+[compass].ink_min_stroke_mm.  Growth is SURGICAL (only where the
+opening test still finds ink too thin), to avoid needlessly eating into
+a neighboring class along a whole shared edge.  Black, at top priority,
+always reaches the floor (hard assert: it starts sub-nozzle at small
+diameters).  coast/gray can be boxed in by black on every side at a
+sharp taper -- a real geometric limit of the artwork at small scale,
+not a bug -- so they're best-effort and reported, not asserted.
+
 N/E/S/W lettering is drawn by the pipeline (config [compass].letter_*)
 in black, merged into the black class (letters win over fills where a
-cardinal tip passes under a letter).  The three ink masks are made
-mutually DISJOINT and diagonal-pinch-free, then extruded as bodies that
-sit ON the water surface: datum -> datum + relief_mm.  Blue/gray rose
-bodies merge into the frame's existing coast/gray filament bodies; the
-black one is its own body.
+cardinal tip passes under a letter).  The rasterized letter glyph ink
+(post its own min-stroke dilation) is asserted to clear the cardinal
+tips (~1.30x the ring radius, plus whatever ink_min_stroke_mm dilation
+added) with a positive radial gap -- config [compass].letter_radius_frac
+is the knob if it doesn't.  The three ink masks are made mutually
+DISJOINT and diagonal-pinch-free, then extruded as bodies that sit ON
+the water surface: datum -> datum + relief_mm.  Blue/gray rose bodies
+merge into the frame's existing coast/gray filament bodies; the black
+one is its own body.
 
 Scale: the OUTER RING (largest circle in the SVG, outer stroke edge) =
 [compass].diameter_mm; the cardinal tips and the letters extend beyond

@@ -259,15 +259,13 @@ def main():
             assert panel.within(upper_water), \
                 "flush rose panel overlaps a cavity"
         cells = {n: int(m.sum()) for n, m in rose.masks.items()}
-        stroke_flag = (" -- UNDER 0.42 mm nozzle width, FLAG"
-                       if rose.black_stroke_mm < 0.42 else "")
         print(f"\ncompass rose (D17, {p4.ROSE_STYLE} "
               f"{p4.ROSE_DEPTH:g} mm): ring dia "
               f"{COMPASS['diameter_mm']:g} mm at {rose_c}, "
               f"tips to r {rose.tip_r_mm:.1f} mm, box {w:.1f} x {h:.1f} "
               f"mm; ink cells {cells}\n"
-              f"  black artwork strokes {rose.black_stroke_mm:.2f} mm"
-              f"{stroke_flag}; letters cap "
+              f"  black declared SVG stroke {rose.black_stroke_mm:.2f} mm "
+              "(0 = no <stroke>, ink drawn as filled shapes); letters cap "
               f"{COMPASS['letter_cap_mm']:g} mm at r {rose.letter_r_mm:g}"
               f" mm, min stroke {rose.letter_min_stroke_mm:.2f} mm, "
               f"font {Path(rose.font_file).name}\n"

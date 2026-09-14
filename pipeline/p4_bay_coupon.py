@@ -1055,15 +1055,13 @@ def main():
             panel = vstamp.rect_poly(rose_c[0], rose_c[1], w, h, 0.0)
             assert panel.within(upper_water), \
                 "flush rose panel overlaps a cavity"
-        stroke_flag = (" -- UNDER 0.42 mm nozzle width, FLAG"
-                       if rose.black_stroke_mm < 0.42 else "")
         print(f"\ncompass rose (D17, {ROSE_STYLE} {ROSE_DEPTH:g} mm): "
               f"ring dia {COMPASS['coupon_diameter_mm']:g} mm at "
               f"{rose_c}, tips to r {rose.tip_r_mm:.1f} mm, box "
               f"{w:.1f} x {h:.1f} mm\n"
-              f"  black artwork strokes {rose.black_stroke_mm:.2f} mm"
-              f"{stroke_flag}; letter min stroke "
-              f"{rose.letter_min_stroke_mm:.2f} mm\n"
+              f"  black declared SVG stroke {rose.black_stroke_mm:.2f} mm "
+              "(0 = no <stroke>, ink drawn as filled shapes); letter min "
+              f"stroke {rose.letter_min_stroke_mm:.2f} mm\n"
               f"  ink min stroke (target {COMPASS['ink_min_stroke_mm']:g} "
               "mm): " + ", ".join(
                   f"{n} {rose.ink_stroke_before_mm[n]:.2f}->"

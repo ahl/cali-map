@@ -52,7 +52,11 @@ from shapely.prepared import prep
 import mesh_common
 
 # ------------------------------------------------------------------ params
-DEPTH_MM = 0.4        # deboss depth (2 layers at 0.2 mm)
+DEPTH_MM = 0.4        # panel/deboss depth (2 layers at 0.2 mm)
+PANEL_STYLE = "benchy"  # "benchy": flush letters in a recessed panel
+                        # (3DBenchy-style positive first-layer text);
+                        # "deboss": letters carved into the bottom
+PANEL_RING_MM = 0.6   # flush border ring around the benchy panel
 PITCH_MM = 0.10       # glyph grid resolution (mm/cell)
 MIN_STROKE_MM = 0.8   # every glyph stroke at least this wide (2 nozzles)
 CAP_MM = 5.0          # target capital height
@@ -293,6 +297,20 @@ def make_stamp(text, allowed, anchor=None, cap_mm=CAP_MM,
             m, _ = mesh_common.remove_diagonal_pinches(m)
             m[0, :] = m[-1, :] = False           # keep the border ring
             m[:, 0] = m[:, -1] = False           # strictly at z_bottom
+            if PANEL_STYLE == "benchy":
+                # 3DBenchy-style (ahl 2026-09-14): letters stay FLUSH at
+                # the plate and the PANEL around them recesses — the
+                # recessed mask becomes the rect interior minus glyphs,
+                # inside a flush border ring that stitches the patch to
+                # the surrounding bottom at one level. Letters print as
+                # positive first-layer lines instead of glyph voids.
+                ring = max(1, int(round(PANEL_RING_MM / pitch)))
+                panel = np.zeros_like(m)
+                panel[ring:-ring, ring:-ring] = True
+                m = panel & ~m
+                m, _ = mesh_common.remove_diagonal_pinches(m)
+                m[0, :] = m[-1, :] = False
+                m[:, 0] = m[:, -1] = False
             ny, nx = m.shape
             hit = _place(nx * pitch, ny * pitch, allowed, anchor,
                          grid_step)

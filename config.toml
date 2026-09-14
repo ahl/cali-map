@@ -133,16 +133,31 @@ letter_cap_mm = 4.0           # was 6.0; scaled toward the smaller rose
 letter_radius_frac = 1.65     # letter anchor radius / ring outer radius.
                               # MUST exceed 1.30 (cardinal tips reach 30%
                               # past the ring): ahl 2026-09-14, points
-                              # must not touch the letters. Measured (not
-                              # just asserted): at dia 25 the actual
-                              # rasterized letter glyph ink came within
-                              # -1.97 mm of the (ink-dilated) cardinal
-                              # tips at 1.45 -- moved out to 1.65 for a
-                              # positive measured gap (build-time assert
-                              # in compass_art.py).
-ink_min_stroke_mm = 0.45      # dilate artwork ink classes to at least
-                              # this printed width (at dia 25 the black
-                              # outlines are ~0.19 mm raw — sub-nozzle)
+                              # must not touch the letters. compass_art.py
+                              # build-time asserts a POSITIVE gap between
+                              # the rasterized letter glyph ink (actual
+                              # pixels, post its own min-stroke dilation)
+                              # and the cardinal tips (measured after
+                              # ink_min_stroke_mm dilation too). At 1.45
+                              # this failed (gap -1.97 mm against the v1
+                              # outlined artwork); 1.65 clears it (+0.35
+                              # mm against the current v2 artwork, dia 25).
+ink_min_stroke_mm = 0.45      # dilate artwork ink classes (priority
+                              # black > coast > gray, disjoint by
+                              # construction; SURGICAL growth only where
+                              # the opening test finds ink too thin) to
+                              # at least this printed width, same test as
+                              # the letters. The v2 artwork (black ring +
+                              # black center, no thin outlines) already
+                              # clears it raw at dia 25 (black 2.00 mm,
+                              # coast/gray 0.55 mm each -- 0 dilation
+                              # steps needed); kept as a hard floor for
+                              # future artwork edits, with black asserted
+                              # (it has no neighbor that can pinch it) and
+                              # coast/gray best-effort + reported (they
+                              # can be geometrically boxed in by black at
+                              # a sharp taper on a thinner-outlined
+                              # design, per compass_art.py's comments).
 diameter_mm = 25.0            # outer-ring diameter (ahl 2026-09-14:
                               # half the previous 50)
 # P5 final frame placement (mm from Frame SW corner). Was [48, 55];
