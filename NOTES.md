@@ -25,7 +25,7 @@ set into a frame of the surrounding geography.
 | D6 | Print bed 256×256 mm; whole model ≤ 1000×1000 mm total | Either frame fits one bed, or frame is carved into tiles |
 | D7 | Material: PLA. Fit: snug but disassemblable | Clearance values TBD (see G3) |
 | D8 | Version control: jj (colocated git), repo = this directory | |
-| D12 | Automation contract: change a region aspect -> `uv run pipeline/regen_all.py` rebuilds the whole chain (p1 render, land, vectors, slabs, coupons) in dependency order | ahl 2026-09-13, after print validation |
+| D12 | Automation contract: **`make`** rebuilds exactly the stale artifacts. Every stage target depends on config.toml + overrides/*.geojson + its script + upstream artifacts, so markup/knob changes can never be silently ignored (the P4 stale-cache bug class). Stages: p0 p1 p2 p15 p15b p4; `make -n` previews. | ahl 2026-09-13 |
 | D13 | **Final-map aspect = the P1.5 slab at 135 x 150** (CA bbox + 40 km N/E/S + 67.5 km ocean west; 0.9 aspect). ahl 2026-09-13: "we're going to use that aspect ratio for the final map" | |
 | D10 | Map area may be REDUCED in the final crop | ahl intentionally over-cropped the reference area. End-stage parameter; affects only the frame, never the pieces. Only reductions. |
 | D11 | Physical scale decided at the END; possibly multiple scales | Geometry/borders in map meters; scale, Z-exaggeration, clearance applied at mesh export. Per-scale border min-width pass required (printable width is fixed in mm). |
