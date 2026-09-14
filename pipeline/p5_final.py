@@ -31,14 +31,16 @@ THE FRAME (out/p5/frame.3mf, 4-color Bambu multi-body):
     Islands (coast cells in the region raster, D15/G11);
   - gray (filament 3): ALL non-CA land (Census ca_mask is the authority)
     with full terrain (D15);
-  - the D17 compass rose (ahl's artwork, assets/compass.svg) as RAISED
-    relief on the water surface (datum -> datum + [compass].relief_mm):
+  - the D17 compass rose (ahl's artwork, assets/compass.svg):
     cairosvg rasterizes the artwork, compass_art.py color-keys it into
     three disjoint ink classes — dark blue -> the coast filament, gray
     -> the gray filament, black (outlines + pipeline-drawn N/E/S/W
     letters) -> the black body (filament 4).  Blue/gray rose ink merges
     into the EXISTING coast/gray bodies (same filament); the frame
-    stays 4 bodies.  The water top under the rose stays flat.
+    stays 4 bodies.  [compass].style: "flush" = ink inlaid with tops
+    level with the water surface, matching recesses carved into the
+    water top ([compass].depth_mm); "raised" = ink stands proud on a
+    flat water top.
 
 PIECES (out/p5/{mountains,valley,desert}.stl): slab = base - floor,
 terrain at the G2 normalized z-rule ([output].z_exaggeration x
@@ -252,11 +254,16 @@ def main():
         d_gray = hull.distance(geo["gray"])
         d_cav = hull.distance(cavities)
         w, h = rose.size_mm
+        if p4.ROSE_STYLE == "flush":
+            panel = vstamp.rect_poly(rose_c[0], rose_c[1], w, h, 0.0)
+            assert panel.within(upper_water), \
+                "flush rose panel overlaps a cavity"
         cells = {n: int(m.sum()) for n, m in rose.masks.items()}
         stroke_flag = (" -- UNDER 0.42 mm nozzle width, FLAG"
                        if rose.black_stroke_mm < 0.42 else "")
-        print(f"\ncompass rose (D17, raised {COMPASS['relief_mm']:g} mm):"
-              f" ring dia {COMPASS['diameter_mm']:g} mm at {rose_c}, "
+        print(f"\ncompass rose (D17, {p4.ROSE_STYLE} "
+              f"{p4.ROSE_DEPTH:g} mm): ring dia "
+              f"{COMPASS['diameter_mm']:g} mm at {rose_c}, "
               f"tips to r {rose.tip_r_mm:.1f} mm, box {w:.1f} x {h:.1f} "
               f"mm; ink cells {cells}\n"
               f"  black artwork strokes {rose.black_stroke_mm:.2f} mm"
@@ -316,9 +323,14 @@ def main():
     m_floor = p4.solid_mesh(floor_poly,
                             lambda v: np.full(len(v), p4.FLOOR_MM), 0.0,
                             quality=False, stamp=stamps["frame"])
-    m_upper = p4.solid_mesh(upper_water,
-                            lambda v: np.full(len(v), p4.BASE_MM),
-                            p4.FLOOR_MM - p4.OVERLAP_MM, quality=False)
+    rose_stamp = None
+    if rose is not None and p4.ROSE_STYLE == "flush":
+        rose_stamp, n_unassigned = compass_art.union_stamp(
+            rose, rose_c, p4.ROSE_DEPTH)
+        if n_unassigned:
+            print(f"  rose recess: {n_unassigned} pinch-fill cell(s) "
+                  "recessed but unfilled by ink (sub-nozzle)")
+    m_upper = p4.water_upper_mesh(upper_water, rose_stamp)
     water_mesh = trimesh.util.concatenate([m_floor, m_upper])
     ok &= p4.report_mesh("water(+floor)", water_mesh)
     zok, zlev = vstamp.verify_stamp_levels(water_mesh, stamps["frame"])
@@ -337,16 +349,27 @@ def main():
     black_mesh = None
     if rose is not None:
         rm = compass_art.relief_meshes(rose, rose_c, p4.BASE_MM,
-                                       COMPASS["relief_mm"])
-        z_top = p4.BASE_MM + COMPASS["relief_mm"]
+                                       p4.ROSE_DEPTH, style=p4.ROSE_STYLE)
+        z0, z1 = ((p4.BASE_MM - p4.ROSE_DEPTH, p4.BASE_MM)
+                  if p4.ROSE_STYLE == "flush"
+                  else (p4.BASE_MM, p4.BASE_MM + p4.ROSE_DEPTH))
         for rname, rmesh in rm.items():
             bb = rmesh.bounds
-            raised = (abs(bb[0][2] - p4.BASE_MM) < 1e-6
-                      and abs(bb[1][2] - z_top) < 1e-6)
-            ok &= raised and p4.report_mesh(f"rose {rname}", rmesh)
+            zok2 = (abs(bb[0][2] - z0) < 1e-6
+                    and abs(bb[1][2] - z1) < 1e-6)
+            ok &= zok2 and p4.report_mesh(f"rose {rname}", rmesh)
             print(f"    rose {rname} z {bb[0][2]:.2f}..{bb[1][2]:.2f} "
-                  f"(datum {p4.BASE_MM:g} + {COMPASS['relief_mm']:g}) "
-                  f"raised OK: {raised}")
+                  f"(want {z0:g}..{z1:g}, {p4.ROSE_STYLE}) OK: {zok2}")
+        if p4.ROSE_STYLE == "flush":
+            up_lv = sorted(set(np.round(m_upper.vertices[:, 2],
+                                        5).tolist()))
+            want = [round(v, 5) for v in
+                    (p4.FLOOR_MM - p4.OVERLAP_MM,
+                     p4.BASE_MM - p4.ROSE_DEPTH, p4.BASE_MM)]
+            flush_ok = up_lv == want
+            ok &= flush_ok
+            print(f"    water-top recess z-levels {up_lv} == {want}: "
+                  f"{flush_ok}")
         # blue/gray rose ink joins the matching filament bodies
         coast_mesh = trimesh.util.concatenate([coast_mesh, rm["coast"]])
         gray_mesh = trimesh.util.concatenate([gray_mesh, rm["gray"]])
@@ -499,10 +522,10 @@ def render_preview(geo, s, holes, stamps, rose, rose_c, ew_mm):
         half = max(rose.size_mm) / 2 + 6
         ax.set_xlim(cx - half, cx + half)
         ax.set_ylim(cy - half, cy + half)
-        ax.set_title(f"rose close-up — ring dia {2 * r:g} mm, raised "
-                     f"{COMPASS['relief_mm']:g} mm (blue ink -> coast "
-                     "filament, gray -> gray, black + letters -> black)",
-                     fontsize=9)
+        ax.set_title(f"rose close-up — ring dia {2 * r:g} mm, "
+                     f"{p4.ROSE_STYLE} {p4.ROSE_DEPTH:g} mm (blue ink "
+                     "-> coast filament, gray -> gray, black + letters "
+                     "-> black)", fontsize=9)
     else:
         ax.set_title("compass disabled", fontsize=10)
 

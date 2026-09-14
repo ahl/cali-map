@@ -232,9 +232,13 @@ def load_rose(svg_path, diameter_mm, letter_font, letter_cap_mm,
                    letter_min_stroke_mm=letter_stroke, font_file=ff)
 
 
-def relief_meshes(rose, center_mm, base_mm, relief_mm):
-    """One watertight extrusion per ink class, sitting ON the water
-    surface: z = base_mm .. base_mm + relief_mm."""
+def relief_meshes(rose, center_mm, base_mm, depth_mm, style="raised"):
+    """One watertight extrusion per ink class.  style='raised': bodies
+    sit ON the water surface (base .. base+depth).  style='flush':
+    bodies are INLAID, tops level with the water surface
+    (base-depth .. base) — pair with the matching water-top recesses
+    from union_stamp()."""
+    z0 = float(base_mm) - depth_mm if style == "flush" else float(base_mm)
     meshes = {}
     ny, nx = rose.masks["black"].shape
     x0 = center_mm[0] - nx * rose.pitch / 2
@@ -244,10 +248,31 @@ def relief_meshes(rose, center_mm, base_mm, relief_mm):
             continue
         hf = np.flipud(m)              # heightfield rows: 0 = north
         mesh = mesh_common.heightfield_to_mesh(
-            np.full(hf.shape, float(relief_mm)), hf, rose.pitch)
-        mesh.apply_translation([x0, y0, float(base_mm)])
+            np.full(hf.shape, float(depth_mm)), hf, rose.pitch)
+        mesh.apply_translation([x0, y0, z0])
         meshes[name] = mesh
     return meshes
+
+
+def union_stamp(rose, center_mm, depth_mm):
+    """For style='flush': a version_stamp.Stamp carrying the ink UNION,
+    to carve the matching recesses into the water body's TOP (build the
+    water solid z-mirrored with this stamp, then flip z and reverse
+    faces).  The union is made pinch-free by FILLING; filled cells (rare
+    single cells at cross-class diagonal junctions) belong to no ink
+    body and stay as sub-nozzle 1-cell pockets — returned as `added`
+    for reporting.  Grid coordinates match relief_meshes() exactly, so
+    the inlay walls are coincident with the recess walls."""
+    u = rose.ink_union()
+    u, added = mesh_common.remove_diagonal_pinches(u)
+    ny, nx = u.shape
+    w, h = nx * rose.pitch, ny * rose.pitch
+    st = vstamp.Stamp(
+        text="compass recess", lines=[], cap_mm=0.0, pitch=rose.pitch,
+        depth=float(depth_mm), mask=u, center=tuple(center_mm), angle=0.0,
+        rect=vstamp.rect_poly(center_mm[0], center_mm[1], w, h, 0.0),
+        dilated_px=0, min_stroke_mm=0.0)
+    return st, int(added)
 
 
 def draw_rose(ax, rose, center_mm, colors, z=5):

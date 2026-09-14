@@ -137,10 +137,13 @@ center_mm = [43.0, 45.0]
 # P4 mini-frame placement (mm from coupon SW corner) + smaller diameter
 # for the coupon's tighter Pacific. Was [30, 35] @ 50: the artwork +
 # letters box (~76 mm at dia 50) cannot fit the coupon's ocean pocket
-# anywhere (max ~58 mm) -- p4 build 2026-09-14 searched dia 50/45/40/36
-# and placed the largest that fits with >= 1.2 mm land clearance.
-coupon_center_mm = [22.0, 28.0]
-coupon_diameter_mm = 36.0
+# anywhere. RAISED style fit dia 36 @ [22, 28] (ink-over-sea only), but
+# FLUSH also needs the full letters box clear of the piece cavities
+# (the water-top recess panel) -- p4 build 2026-09-14 searched the
+# ladder 36/34/32: largest flush-valid is dia 32 here, panel >= 1 mm
+# from cavities and all ink >= 1.2 mm from land.
+coupon_center_mm = [19.7, 28.3]
+coupon_diameter_mm = 32.0
 
 [islands]
 # D15 (ahl, 2026-09-13): the islands PIECE is SCRAPPED — the Channel

@@ -149,6 +149,8 @@ CHAMFER_MM = _PRINT_CFG["bottom_chamfer_mm"]  # 45-deg piece bottom edge
 POKE_D_MM = _PRINT_CFG["poke_hole_d_mm"]
 LAND_MIN_MM = _PRINT_CFG["land_min_mm"]
 COMPASS = _CFG_ALL.get("compass", {"enabled": False})
+ROSE_STYLE = COMPASS.get("style", "raised")   # "flush" | "raised"
+ROSE_DEPTH = COMPASS.get("depth_mm", COMPASS.get("relief_mm", 0.4))
 PIECE_SLAB_MM = BASE_MM - FLOOR_MM   # piece base slab: rests on the floor
 POKE_MARGIN_MM = 1.5     # extra margin between hole edge and cavity wall
 CLEAR_PX = CLEARANCE_MM / PX_MM
@@ -546,6 +548,22 @@ def solid_mesh(poly, top_fn, z_bottom=0.0, quality=True, stamp=None,
     return trimesh.util.concatenate(bodies) if len(bodies) > 1 else bodies[0]
 
 
+def water_upper_mesh(upper_water_poly, rose_stamp=None):
+    """Upper water solid (floor top .. datum).  With rose_stamp (flush
+    compass style) its TOP carries the matching ink recesses: the solid
+    is built z-MIRRORED so the version-stamp bottom machinery carves the
+    top, then flipped back (z negated, faces reversed)."""
+    zb = FLOOR_MM - OVERLAP_MM
+    if rose_stamp is None:
+        return solid_mesh(upper_water_poly,
+                          lambda v: np.full(len(v), BASE_MM), zb,
+                          quality=False)
+    m = solid_mesh(upper_water_poly, lambda v: np.full(len(v), -zb),
+                   -BASE_MM, quality=False, stamp=rose_stamp)
+    return trimesh.Trimesh(vertices=m.vertices * [1.0, 1.0, -1.0],
+                           faces=m.faces[:, ::-1], process=False)
+
+
 def make_terrain_fn(dem, s, gx0, gy0, z_per_m, z_datum, floor_mm=0.0):
     """(x_mm, y_mm) print coords -> top z: z_datum + relief (clamped to
     sea level; floor_mm = minimum height above datum, for the coast).
@@ -835,8 +853,8 @@ def render_preview(geo, s, tj, holes, stamps, rose=None, rose_c=None):
         half = max(rose.size_mm) / 2 + 5
         ax.set_xlim(rose_c[0] - half, rose_c[0] + half)
         ax.set_ylim(rose_c[1] - half, rose_c[1] + half)
-        ax.set_title(f"rose close-up — ring dia {2 * r:g} mm, raised "
-                     f"{COMPASS['relief_mm']:g} mm (blue -> coast "
+        ax.set_title(f"rose close-up — ring dia {2 * r:g} mm, "
+                     f"{ROSE_STYLE} {ROSE_DEPTH:g} mm (blue -> coast "
                      "filament, gray, black + letters)", fontsize=9)
         ax.set_aspect("equal")
         ax.set_xticks([]), ax.set_yticks([])
@@ -1031,10 +1049,16 @@ def main():
         d_gray = hull.distance(geo["gray"])
         d_cav = hull.distance(cavities)
         w, h = rose.size_mm
+        if ROSE_STYLE == "flush":
+            # the water-top recess panel spans the whole ink box; it
+            # must not cross a cavity (holes in the upper water solid)
+            panel = vstamp.rect_poly(rose_c[0], rose_c[1], w, h, 0.0)
+            assert panel.within(upper_water), \
+                "flush rose panel overlaps a cavity"
         stroke_flag = (" -- UNDER 0.42 mm nozzle width, FLAG"
                        if rose.black_stroke_mm < 0.42 else "")
-        print(f"\ncompass rose (D17, raised {COMPASS['relief_mm']:g} mm):"
-              f" ring dia {COMPASS['coupon_diameter_mm']:g} mm at "
+        print(f"\ncompass rose (D17, {ROSE_STYLE} {ROSE_DEPTH:g} mm): "
+              f"ring dia {COMPASS['coupon_diameter_mm']:g} mm at "
               f"{rose_c}, tips to r {rose.tip_r_mm:.1f} mm, box "
               f"{w:.1f} x {h:.1f} mm\n"
               f"  black artwork strokes {rose.black_stroke_mm:.2f} mm"
@@ -1101,8 +1125,15 @@ def main():
     print("\nframe bodies (frame.3mf):")
     m_floor = solid_mesh(floor_poly, lambda v: np.full(len(v), FLOOR_MM),
                          0.0, quality=False, stamp=stamps["frame"])
-    m_upper = solid_mesh(upper_water, lambda v: np.full(len(v), BASE_MM),
-                         FLOOR_MM - OVERLAP_MM, quality=False)
+    rose_stamp = None
+    if rose is not None and ROSE_STYLE == "flush":
+        rose_stamp, n_unassigned = compass_art.union_stamp(
+            rose, rose_c, ROSE_DEPTH)
+        if n_unassigned:
+            print(f"  rose recess: {n_unassigned} pinch-fill cell(s) "
+                  f"({rose.pitch:g} mm) recessed but unfilled by ink "
+                  "(cross-class diagonal junctions; sub-nozzle)")
+    m_upper = water_upper_mesh(upper_water, rose_stamp)
     water_mesh = trimesh.util.concatenate([m_floor, m_upper])
     ok &= report_mesh("water(+floor)", water_mesh)
     zok, zlev = vstamp.verify_stamp_levels(water_mesh, stamps["frame"])
@@ -1134,16 +1165,26 @@ def main():
 
     black_mesh = None
     if rose is not None:
-        rm = compass_art.relief_meshes(rose, rose_c, BASE_MM,
-                                       COMPASS["relief_mm"])
-        z_top = BASE_MM + COMPASS["relief_mm"]
+        rm = compass_art.relief_meshes(rose, rose_c, BASE_MM, ROSE_DEPTH,
+                                       style=ROSE_STYLE)
+        z0, z1 = ((BASE_MM - ROSE_DEPTH, BASE_MM)
+                  if ROSE_STYLE == "flush"
+                  else (BASE_MM, BASE_MM + ROSE_DEPTH))
         for rname, rmesh in rm.items():
             bb = rmesh.bounds
-            raised = (abs(bb[0][2] - BASE_MM) < 1e-6
-                      and abs(bb[1][2] - z_top) < 1e-6)
-            ok &= raised and report_mesh(f"rose {rname}", rmesh)
+            zok2 = (abs(bb[0][2] - z0) < 1e-6 and abs(bb[1][2] - z1) < 1e-6)
+            ok &= zok2 and report_mesh(f"rose {rname}", rmesh)
             print(f"    rose {rname} z {bb[0][2]:.2f}..{bb[1][2]:.2f} "
-                  f"raised OK: {raised}")
+                  f"(want {z0:g}..{z1:g}, {ROSE_STYLE}) OK: {zok2}")
+        if ROSE_STYLE == "flush":
+            up_lv = sorted(set(np.round(m_upper.vertices[:, 2],
+                                        5).tolist()))
+            want = [round(v, 5) for v in (FLOOR_MM - OVERLAP_MM,
+                                          BASE_MM - ROSE_DEPTH, BASE_MM)]
+            flush_ok = up_lv == want
+            ok &= flush_ok
+            print(f"    water-top recess z-levels {up_lv} == {want}: "
+                  f"{flush_ok}")
         coast_mesh = trimesh.util.concatenate([coast_mesh, rm["coast"]])
         gray_mesh = trimesh.util.concatenate([gray_mesh, rm["gray"]])
         black_mesh = rm["black"]
