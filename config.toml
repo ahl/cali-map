@@ -87,9 +87,9 @@ region_marks = ["overrides/p1final_marks.geojson"]
 total_ns_mm = 254.0
 
 [islands]
-# Channel Islands = ONE separate puzzle piece (ahl, 2026-09-13): convex
-# hull of all eight islands + buffer, printed with two-color ocean; sits
-# in its own frame cavity. Farallones skipped. Mainland Coast piece no
-# longer carries the islands (D2 revised).
-mode = "one_piece_hull"
+# D15 (ahl, 2026-09-13): the islands PIECE is SCRAPPED — the Channel
+# Islands print as yellow coast-land bodies ON the 3-color surround
+# piece (gray non-CA land / water / yellow coast). Farallones skipped.
+# The hull machinery below is retired but kept for reference.
+mode = "in_surround"
 buffer_km = 10.0

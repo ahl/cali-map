@@ -73,10 +73,10 @@ PAD_KM = 40.0        # D13 window margin N/E/S (matches p15_engraved.py)
 WEST_PAD_KM = 67.5   # D13 window open-Pacific margin W
 
 FRAME_COLOR = (0.78, 0.78, 0.78)
-ISLANDS_COLOR = (0.35, 0.62, 0.85)
-WATER_MIX = 0.78     # coast-water fill = the coast land color lightened
-                     # this far toward white (paler tint, same hue family,
-                     # so it still reads as "the coast piece, just water")
+WATER_MIX = 0.78     # universal water tint = the coast land color
+                     # lightened this far toward white (paler tint, same
+                     # hue family) -- ONE color for every drop of water in
+                     # the window, regardless of which piece owns it
 
 REGION_NAMES = {base.MOUNTAINS: "mountains", base.VALLEY: "valley",
                 base.DESERT: "desert", base.COAST: "coast"}
@@ -193,6 +193,18 @@ def extract_arcs(R):
             if (min(n, nb), max(n, nb)) not in visited:
                 arcs.append(walk(n, nb))
     return arcs, CW
+
+
+def _iter_lines(geom):
+    """Flatten a shapely geometry (a boundary-intersection result can be a
+    GeometryCollection with stray points) down to its LineString parts."""
+    if geom.is_empty:
+        return
+    if geom.geom_type == "LineString":
+        yield geom
+    elif geom.geom_type in ("MultiLineString", "GeometryCollection"):
+        for g in geom.geoms:
+            yield from _iter_lines(g)
 
 
 def arc_coords(path, CW, x0, y1):
@@ -387,6 +399,34 @@ def build_layout():
     if coast_full.geom_type == "Polygon":
         coast_full = shapely.MultiPolygon([coast_full])
 
+    # ahl's correction: ocean is ONE continuous water color regardless of
+    # which piece owns it (frame's southern water and islands' shelf are
+    # not gray/blue -- they're the same tint as coast-water). Vectorize
+    # the whole window's sea (ungated, unexcluded -- so it already has a
+    # correctly-shaped hole for every land mass, including the islands'
+    # own land and out-of-state land) and clean it against the four exact
+    # CA-mainland vectors the same way coast-water was cleaned above.
+    W_all = np.zeros((r1 - r0, c1 - c0), np.uint8)
+    W_all[sea] = 1
+    water_all = vectorize_labels(W_all, x0, y1, [1])[1]
+    water_all = shapely.set_precision(water_all, 1.0)
+    exact_ca_land = shapely.union_all(
+        [regions["mountains"], regions["valley"], regions["desert"],
+         regions["coast"]], grid_size=1.0)
+    water_all = shapely.difference(water_all, exact_ca_land, grid_size=1.0)
+    if water_all.geom_type == "Polygon":
+        water_all = shapely.MultiPolygon([water_all])
+
+    # frame's and the islands piece's own land sub-areas, for the
+    # region-palette/gray fill -- everything else in each piece is water,
+    # painted with the single universal tint.
+    frame_land = frame.difference(water_all)
+    island_land = regions["islands"].difference(water_all)
+    if frame_land.geom_type == "Polygon":
+        frame_land = shapely.MultiPolygon([frame_land])
+    if island_land.geom_type == "Polygon":
+        island_land = shapely.MultiPolygon([island_land])
+
     pieces = {
         "coast_land": regions["coast"],
         "coast_water": coast_water,
@@ -395,11 +435,45 @@ def build_layout():
         "valley": regions["valley"],
         "desert": regions["desert"],
         "islands": regions["islands"],
+        "island_land": island_land,
         "frame": frame,
+        "frame_land": frame_land,
+        "water_all": water_all,
     }
     # pinhole-sized (few m^2) interior rings from the polygonize round trip
     # would otherwise render as a stray dot at print resolution
     pieces = {k: drop_tiny_holes(g) for k, g in pieces.items()}
+
+    # piece-parting lines (drawn distinctly from same-piece land/water
+    # seams): for every pair of the 6 physical pieces, the shared boundary
+    # is solid where it touches ANY land (a real, informative edge -- an
+    # interior CA border, a state line, or a piece boundary that follows
+    # an actual coastline) and dashed where it runs entirely through open
+    # water with land on neither side (the coast/frame ocean-split gate
+    # line; the islands piece's outline, wholly inside coast-water).
+    land_all = shapely.union_all(
+        [regions["mountains"], regions["valley"], regions["desert"],
+         regions["coast"], pieces["island_land"], pieces["frame_land"]])
+    piece_polys = {"mountains": regions["mountains"],
+                  "valley": regions["valley"], "desert": regions["desert"],
+                  "coast": pieces["coast"], "islands": regions["islands"],
+                  "frame": pieces["frame"]}
+    names = list(piece_polys)
+    land_lines, water_lines = [], []
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            shared = piece_polys[names[i]].boundary.intersection(
+                piece_polys[names[j]].boundary)
+            for ln in _iter_lines(shared):
+                if ln.length < 1.0:
+                    continue
+                if ln.buffer(30.0).intersects(land_all):
+                    land_lines.append(ln)
+                else:
+                    water_lines.append(ln)
+    pieces["_parting_land_lines"] = land_lines
+    pieces["_parting_water_lines"] = water_lines
+
     bbox = (x0, x1, y0, y1)
     return pieces, bbox, ca_rows, gate_y
 
@@ -429,7 +503,7 @@ def render(pieces, bbox, ca_rows, gate_y):
                                     (c[:, 1] - y0) * scale])
         return shapely.transform(geom, f)
 
-    mm_pieces = {k: to_mm(g) for k, g in pieces.items()}
+    mm_pieces = {k: to_mm(g) for k, g in pieces.items() if not k.startswith("_")}
 
     ca_r0, ca_r1 = ca_rows
     ca_y1 = Y1 - ca_r0 * RES
@@ -444,14 +518,15 @@ def render(pieces, bbox, ca_rows, gate_y):
         "mountains": base.COLORS[base.MOUNTAINS],
         "valley": base.COLORS[base.VALLEY],
         "desert": base.COLORS[base.DESERT],
+        "coast": base.COLORS[base.COAST],
         "coast_land": base.COLORS[base.COAST],
-        "islands": ISLANDS_COLOR,
+        "islands": base.COLORS[base.COAST],  # islands land = coast-yellow
         "frame": FRAME_COLOR,
     }
     coast_rgb = base.COLORS[base.COAST]
     water_rgb = tuple(c + (1.0 - c) * WATER_MIX for c in coast_rgb)
 
-    def draw_mp(ax, mp, color, lw=0.7, zorder=2):
+    def draw_mp(ax, mp, color, lw=0.0, edgecolor="none", zorder=2):
         if mp.is_empty:
             return
         polys = mp.geoms if hasattr(mp, "geoms") else [mp]
@@ -462,8 +537,23 @@ def render(pieces, bbox, ca_rows, gate_y):
                 verts.append(arr)
                 codes.append([MplPath.MOVETO] + [MplPath.LINETO] * (len(arr) - 1))
         path = MplPath(np.concatenate(verts), np.concatenate(codes))
-        ax.add_patch(PathPatch(path, facecolor=color, edgecolor="black",
+        ax.add_patch(PathPatch(path, facecolor=color, edgecolor=edgecolor,
                                linewidth=lw, zorder=zorder))
+
+    def draw_boundary(ax, mp, **kw):
+        if mp.is_empty:
+            return
+        polys = mp.geoms if hasattr(mp, "geoms") else [mp]
+        for p in polys:
+            for ring in [p.exterior, *p.interiors]:
+                arr = np.asarray(ring.coords)
+                ax.plot(arr[:, 0], arr[:, 1], **kw)
+
+    def plot_line(ax, ln, **kw):
+        arr = np.asarray(ln.coords)
+        mmx = (arr[:, 0] - x0) * scale
+        mmy = (arr[:, 1] - y0) * scale
+        ax.plot(mmx, mmy, **kw)
 
     fig = plt.figure(figsize=(13.5, 15.5), dpi=200)
     gs = fig.add_gridspec(2, 1, height_ratios=[5.3, 1.15], hspace=0.10)
@@ -483,15 +573,25 @@ def render(pieces, bbox, ca_rows, gate_y):
     ax.add_patch(Rectangle((0, 0), fp_w, fp_h, fill=False,
                            edgecolor="black", linewidth=1.5, zorder=5))
 
-    draw_mp(ax, mm_pieces["frame"], COLORS["frame"], zorder=2)
-    draw_mp(ax, mm_pieces["coast_water"], water_rgb, zorder=2)
+    # Fill order: ONE continuous water tint for every drop of water in the
+    # window first (ahl's correction), then non-CA land (frame) gray, then
+    # the CA region palette on top, then the islands' own land patch in
+    # the same yellow as the coast piece's land.
+    draw_mp(ax, mm_pieces["water_all"], water_rgb, zorder=1)
+    draw_mp(ax, mm_pieces["frame_land"], COLORS["frame"], zorder=2)
     draw_mp(ax, mm_pieces["mountains"], COLORS["mountains"], zorder=3)
     draw_mp(ax, mm_pieces["valley"], COLORS["valley"], zorder=3)
     draw_mp(ax, mm_pieces["desert"], COLORS["desert"], zorder=3)
     draw_mp(ax, mm_pieces["coast_land"], COLORS["coast_land"], zorder=3)
-    draw_mp(ax, mm_pieces["islands"], COLORS["islands"], lw=0.9, zorder=4)
+    draw_mp(ax, mm_pieces["island_land"], COLORS["islands"], zorder=4)
 
-    # political borders (thin lines on the frame)
+    # thin hint line at every land/water transition (coastlines proper --
+    # not piece boundaries, just a legibility aid now that water is a
+    # single flat color everywhere)
+    draw_boundary(ax, mm_pieces["water_all"], color="#8a8a8a",
+                 linewidth=0.35, zorder=5)
+
+    # political borders (thin lines on the frame, for context)
     gj = json.loads((DATA / "p2_borders.geojson").read_text())
     win = box(x0, y0, x1, y1)
     for f in gj["features"]:
@@ -507,11 +607,21 @@ def render(pieces, bbox, ca_rows, gate_y):
             mmy = (arr[:, 1] - y0) * scale
             ax.plot(mmx, mmy, color="#333333", linewidth=0.55, zorder=6)
 
-    # gate line marker (dotted), the ocean-split proposal
-    ax.plot([0, fp_w], [gate_mm, gate_mm], ":", color="#8a2020",
-           linewidth=1.0, zorder=6)
-    ax.text(2, gate_mm + 2, "US-Mexico line extended west\n(coast/frame "
-           "ocean split)", fontsize=7.5, color="#8a2020", va="bottom")
+    # piece-parting lines: solid where the seam touches land anywhere
+    # along its length (a real, informative edge -- interior CA borders,
+    # state lines, or a piece boundary that follows an actual coastline);
+    # dashed where the seam runs entirely through open water with land on
+    # neither side (the coast/frame ocean-split gate line; the islands
+    # piece's outline, which sits wholly inside coast-water).
+    for ln in pieces["_parting_land_lines"]:
+        plot_line(ax, ln, color="black", linewidth=0.9, zorder=7)
+    for ln in pieces["_parting_water_lines"]:
+        plot_line(ax, ln, color="black", linewidth=0.9,
+                 linestyle=(0, (5, 3)), zorder=7)
+
+    ax.text(2, gate_mm + 2, "coast/frame ocean-split boundary (dashed --\n"
+           "follows the US-Mexico line extended west)",
+           fontsize=7.5, color="#444444", va="bottom", zorder=7)
 
     def dim_h(y, x_a, x_b, label, off=8):
         ax.annotate("", xy=(x_b, y), xytext=(x_a, y),
@@ -603,6 +713,13 @@ def render(pieces, bbox, ca_rows, gate_y):
         axt.plot([x, x], [0, 1], color="#bbbbbb", linewidth=0.6)
     axt.add_patch(Rectangle((0, 0), 1, 1, fill=False, edgecolor="black",
                             linewidth=0.8))
+    axt.text(0.0, -0.05,
+             "Coast, Islands, and Frame are each two-color prints (layer-"
+             "swap at the datum): the universal water tint below/at 2 mm, "
+             "region color (coast/islands: yellow; frame: gray) above.  "
+             "Solid piece-parting lines run through land; dashed "
+             "piece-parting lines run entirely through open water.",
+             fontsize=8.5, ha="left", va="top", color="#333333", wrap=True)
 
     fig.savefig(OUT / "p2_layout.png", bbox_inches="tight")
     print(f"wrote {OUT / 'p2_layout.png'}")
