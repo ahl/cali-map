@@ -269,6 +269,15 @@ until its inputs are signed off. Every phase is a jj commit.
   invisibly fragments the coast band; the Census state polygon becomes
   the land authority in P2.
 
+## Observation log (noted, NOT to be acted on unless ahl says so)
+
+- **PLA translucency at thin land (ahl 2026-09-14):** near-datum coastal
+  land sits ~1 layer (LAND_MIN_MM = 0.2) above the water body; PLA is
+  slightly translucent, so the water color may ghost through. OK for the
+  mini-frame print. Known remedies if ever wanted: raise LAND_MIN_MM to
+  2-3 layers, or give land bodies downward depth (color the top N mm of
+  the slab in the land filament instead of starting at datum).
+
 ## DEM resolution strategy (2026-09-13, after ahl noticed inset softness)
 
 - Global heightfield: zoom-9 terrarium, 250 m — sufficient wherever
