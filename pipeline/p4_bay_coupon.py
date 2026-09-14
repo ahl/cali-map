@@ -11,6 +11,7 @@
 #   "scikit-image",
 #   "triangle",
 #   "py-lib3mf",
+#   "cairosvg",
 # ]
 # ///
 """P4 v2: Bay Area mini-frame coupon — a miniature of the final product.
@@ -93,6 +94,7 @@ from skimage import measure
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import p1_regions as base
 import version_stamp as vstamp
+import compass_art
 
 # ------------------------------------------------------------------ params
 WINDOW_MM = 100.0        # inner window (pieces + cavities), print mm
@@ -118,7 +120,7 @@ RIM_PX = int(round(RIM_MM / PX_MM))
 N_FP = N_PX + 2 * RIM_PX          # raster covers the full footprint
 
 # Bambu filament slots (1-based; ahl maps AMS slots when slicing)
-EXTRUDERS = {"coast": 1, "water": 2, "gray": 3}
+EXTRUDERS = {"coast": 1, "water": 2, "gray": 3, "black": 4}
 
 REGION_NAME = {base.MOUNTAINS: "mountains", base.VALLEY: "valley",
                base.DESERT: "desert", base.COAST: "coast"}
@@ -146,6 +148,7 @@ FLOOR_MM = _PRINT_CFG["floor_mm"]         # tray floor (D16)
 CHAMFER_MM = _PRINT_CFG["bottom_chamfer_mm"]  # 45-deg piece bottom edge
 POKE_D_MM = _PRINT_CFG["poke_hole_d_mm"]
 LAND_MIN_MM = _PRINT_CFG["land_min_mm"]
+COMPASS = _CFG_ALL.get("compass", {"enabled": False})
 PIECE_SLAB_MM = BASE_MM - FLOOR_MM   # piece base slab: rests on the floor
 POKE_MARGIN_MM = 1.5     # extra margin between hole edge and cavity wall
 CLEAR_PX = CLEARANCE_MM / PX_MM
@@ -715,14 +718,18 @@ def add_poly(ax, geom, color, ec="none", lw=0.0, alpha=1.0, z=1):
                                alpha=alpha, zorder=z))
 
 
-def render_preview(geo, s, tj, holes, stamps):
+def render_preview(geo, s, tj, holes, stamps, rose=None, rose_c=None):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     water_vis = geo["water_visible"]
     cav_floor = {n: geo[f"{n}_nom"] for n in ("mountains", "valley")}
-    fig, axes = plt.subplots(1, 4, figsize=(25.5, 7.2), dpi=200)
+    n_panels = 5 if rose is not None else 4
+    fig, axes = plt.subplots(1, n_panels,
+                             figsize=(6.4 * n_panels, 7.2), dpi=200)
+    rose_colors = {"coast": tuple(base.COLORS[base.COAST])[:3],
+                   "gray": GRAY_RGB, "black": (0.12, 0.11, 0.11)}
 
     for col, ax in enumerate(axes[:3]):
         ax.set_facecolor("#1c1c22")
@@ -749,6 +756,8 @@ def render_preview(geo, s, tj, holes, stamps):
                 ax.annotate(name, (cc.x, cc.y), color="black", fontsize=10,
                             ha="center", weight="bold", zorder=6)
             add_poly(ax, g, base.COLORS[rid], z=3)
+        if col in (0, 1) and rose is not None:
+            compass_art.draw_rose(ax, rose, rose_c, rose_colors)
         if col == 0:
             for name in ("mountains", "valley"):
                 for pt in holes[name]:
@@ -810,6 +819,27 @@ def render_preview(geo, s, tj, holes, stamps):
                  fontsize=10)
     ax.set_aspect("equal")
     ax.set_xticks([]), ax.set_yticks([])
+
+    if rose is not None:
+        # panel 5: rose close-up (raised multi-color relief + letters)
+        ax = axes[4]
+        ax.set_facecolor("#1c1c22")
+        add_poly(ax, water_vis, WATER_RGB)
+        add_poly(ax, geo["gray"], GRAY_RGB, z=2)
+        add_poly(ax, geo["coast_nom"], base.COLORS[base.COAST], z=2)
+        compass_art.draw_rose(ax, rose, rose_c, rose_colors)
+        r = COMPASS["coupon_diameter_mm"] / 2
+        ax.add_patch(plt.Circle(rose_c, r, fill=False, lw=0.6,
+                                edgecolor="#666", linestyle="--",
+                                zorder=6))
+        half = max(rose.size_mm) / 2 + 5
+        ax.set_xlim(rose_c[0] - half, rose_c[0] + half)
+        ax.set_ylim(rose_c[1] - half, rose_c[1] + half)
+        ax.set_title(f"rose close-up — ring dia {2 * r:g} mm, raised "
+                     f"{COMPASS['relief_mm']:g} mm (blue -> coast "
+                     "filament, gray, black + letters)", fontsize=9)
+        ax.set_aspect("equal")
+        ax.set_xticks([]), ax.set_yticks([])
 
     fig.suptitle(
         "P4 v2 mini-frame — miniature of the final product  "
@@ -974,6 +1004,48 @@ def main():
     print(f"  floor: one connected body, {len(floor_poly.interiors)} "
           "poke-holes")
 
+    # ---- compass rose (ahl's artwork, raised relief; coupon placement) --
+    rose, rose_c = None, None
+    if COMPASS.get("enabled", False):
+        rose = compass_art.load_rose(
+            ROOT / COMPASS["svg"], COMPASS["coupon_diameter_mm"],
+            COMPASS["letter_font"], COMPASS["letter_cap_mm"],
+            COMPASS["letter_radius_frac"])
+        rose_c = tuple(COMPASS["coupon_center_mm"])
+        xi, yi = rose.cell_centers(rose_c)
+        assert (xi.min() > -RIM_MM + 0.5 and yi.min() > -RIM_MM + 0.5
+                and xi.max() < WINDOW_MM + RIM_MM - 0.5
+                and yi.max() < WINDOW_MM + RIM_MM - 0.5), \
+            "rose ink runs off the coupon footprint"
+        rr = np.clip(np.round((WINDOW_MM + RIM_MM - yi) / PX_MM
+                              - 0.5).astype(int), 0, N_FP - 1)
+        cc = np.clip(np.round((xi + RIM_MM) / PX_MM - 0.5).astype(int),
+                     0, N_FP - 1)
+        on_land = ~seaw_fp[rr, cc]
+        assert not on_land.any(), (
+            f"rose ink over land: {on_land.sum()} cells, first at "
+            f"({xi[on_land][0] if on_land.any() else 0:.1f}, "
+            f"{yi[on_land][0] if on_land.any() else 0:.1f}) mm")
+        hull = rose.ink_hull(rose_c)
+        d_coast = hull.distance(geo["coast_nom"])
+        d_gray = hull.distance(geo["gray"])
+        d_cav = hull.distance(cavities)
+        w, h = rose.size_mm
+        stroke_flag = (" -- UNDER 0.42 mm nozzle width, FLAG"
+                       if rose.black_stroke_mm < 0.42 else "")
+        print(f"\ncompass rose (D17, raised {COMPASS['relief_mm']:g} mm):"
+              f" ring dia {COMPASS['coupon_diameter_mm']:g} mm at "
+              f"{rose_c}, tips to r {rose.tip_r_mm:.1f} mm, box "
+              f"{w:.1f} x {h:.1f} mm\n"
+              f"  black artwork strokes {rose.black_stroke_mm:.2f} mm"
+              f"{stroke_flag}; letter min stroke "
+              f"{rose.letter_min_stroke_mm:.2f} mm\n"
+              f"  open-water check: all ink over sea; ink-hull margins "
+              f"-- coast {d_coast:.1f} mm, gray {d_gray:.1f} mm, "
+              f"cavities {d_cav:.1f} mm")
+        assert rose.letter_min_stroke_mm >= 0.8 - 1e-6, \
+            "letter strokes < 0.8"
+
     # ---- version stamps (0.4 mm bottom deboss, mirrored) ----------------
     date = vstamp.stamp_date()
     stamp_texts = {
@@ -1060,11 +1132,31 @@ def main():
     # meet only along the window-edge line, a pure color boundary)
     assert geo["coast_nom"].intersection(geo["gray"]).area < 1e-6
 
+    black_mesh = None
+    if rose is not None:
+        rm = compass_art.relief_meshes(rose, rose_c, BASE_MM,
+                                       COMPASS["relief_mm"])
+        z_top = BASE_MM + COMPASS["relief_mm"]
+        for rname, rmesh in rm.items():
+            bb = rmesh.bounds
+            raised = (abs(bb[0][2] - BASE_MM) < 1e-6
+                      and abs(bb[1][2] - z_top) < 1e-6)
+            ok &= raised and report_mesh(f"rose {rname}", rmesh)
+            print(f"    rose {rname} z {bb[0][2]:.2f}..{bb[1][2]:.2f} "
+                  f"raised OK: {raised}")
+        coast_mesh = trimesh.util.concatenate([coast_mesh, rm["coast"]])
+        gray_mesh = trimesh.util.concatenate([gray_mesh, rm["gray"]])
+        black_mesh = rm["black"]
+        ok &= report_mesh("coast body", coast_mesh)
+        ok &= report_mesh("gray body", gray_mesh)
+
+    bodies = [("coast", coast_mesh, EXTRUDERS["coast"]),
+              ("water", water_mesh, EXTRUDERS["water"]),
+              ("gray", gray_mesh, EXTRUDERS["gray"])]
+    if black_mesh is not None:
+        bodies.append(("black", black_mesh, EXTRUDERS["black"]))
     frame_path = OUT_DIR / "frame.3mf"
-    write_bambu_3mf(frame_path, "p4_mini_frame",
-                    [("coast", coast_mesh, EXTRUDERS["coast"]),
-                     ("water", water_mesh, EXTRUDERS["water"]),
-                     ("gray", gray_mesh, EXTRUDERS["gray"])])
+    write_bambu_3mf(frame_path, "p4_mini_frame", bodies)
     print(f"  -> {frame_path} ({frame_path.stat().st_size / 1e6:.1f} MB)  "
           f"[{lint_3mf(frame_path)}]")
     with zipfile.ZipFile(frame_path) as z:
@@ -1100,7 +1192,7 @@ def main():
         print(f"  note: {n}")
 
     tj = triple_junction_mm(regw)
-    render_preview(geo, s, tj, holes, stamps)
+    render_preview(geo, s, tj, holes, stamps, rose, rose_c)
     print(f"\nall bodies/pieces watertight: {ok}")
     print("canonical Makefile output for this stage: out/p4_mini/frame.3mf "
           "(replaces out/p4_bay_420mm/frame.stl; old p4_bay_* dirs are "

@@ -164,14 +164,15 @@ def _stroke_ok(mask, half_mm, pitch):
 
 
 def measure_min_stroke(mask, pitch):
-    """Lower bound on the narrowest stroke (mm) via the opening test."""
+    """Lower bound on the narrowest stroke (mm) via the opening test.
+    Takes the LARGEST passing radius: at pixel scale the test is not
+    monotonic in the disk radius (a blocky small disk can fail where a
+    rounder larger one passes), so no early break."""
     ok = 0.0
     for half in np.arange(0.30, 0.71, 0.05):
         if _stroke_ok(mask, half, pitch):
-            ok = half
-        else:
-            break
-    return 2 * ok
+            ok = max(ok, half)
+    return round(2 * ok, 6)
 
 
 def _ensure_stroke(mask, pitch, min_stroke):

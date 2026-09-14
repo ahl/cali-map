@@ -116,12 +116,16 @@ land_min_mm = 0.2             # min land height above datum (color opacity)
 # (39,170,225) -> water (no body), dark blue (46,49,146) -> CA-land
 # filament, gray (193,199,210) -> gray, black -> black. Lettering
 # (N/E/S/W) added by the pipeline in black, independent of artwork.
-# RAISED relief per ahl: non-water colors stand proud of the water
-# surface (not inlaid). Goes on BOTH the P5 final frame and the P4
+# Style FLUSH per ahl 2026-09-14 ("if the black outline is challenging
+# to print, do it flush"): the ~0.5 mm black outlines as raised
+# free-standing ridges were the print risk, so ALL ink colors are
+# inlaid with tops level with the water surface. "raised" remains
+# available as a switch. Goes on BOTH the P5 final frame and the P4
 # test frame.
 enabled = true
 svg = "assets/compass.svg"
-relief_mm = 0.4               # raised height above water (2 layers)
+style = "flush"               # "flush" (inlaid, level tops) | "raised"
+depth_mm = 0.4                # inlay depth / raise height (2 layers)
 letter_font = "Georgia Bold"
 letter_cap_mm = 6.0
 letter_radius_frac = 1.26     # letter anchor radius / ring outer radius
@@ -130,10 +134,13 @@ diameter_mm = 50.0            # outer-ring diameter (tips extend beyond)
 # moved SW because the letters box clipped the mountains cavity and
 # Point Conception coast.
 center_mm = [43.0, 45.0]
-# P4 mini-frame placement (mm from coupon SW corner) + optional smaller
-# diameter for the coupon's tighter Pacific.
-coupon_center_mm = [30.0, 35.0]
-coupon_diameter_mm = 50.0
+# P4 mini-frame placement (mm from coupon SW corner) + smaller diameter
+# for the coupon's tighter Pacific. Was [30, 35] @ 50: the artwork +
+# letters box (~76 mm at dia 50) cannot fit the coupon's ocean pocket
+# anywhere (max ~58 mm) -- p4 build 2026-09-14 searched dia 50/45/40/36
+# and placed the largest that fits with >= 1.2 mm land clearance.
+coupon_center_mm = [22.0, 28.0]
+coupon_diameter_mm = 36.0
 
 [islands]
 # D15 (ahl, 2026-09-13): the islands PIECE is SCRAPPED — the Channel

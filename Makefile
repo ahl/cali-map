@@ -68,13 +68,14 @@ out/p15b_vallejo_inset.stl: $(PIPE)/p15b_vallejo_inset.py $(PIPE)/dem_hires.py \
 # ---- P4 v2: Bay Area mini-frame coupon (tray frame 3MF + 2 pieces)
 p4: out/p4_mini/frame.3mf
 out/p4_mini/frame.3mf: $(PIPE)/p4_bay_coupon.py $(PIPE)/version_stamp.py \
-		$(PIPE)/mesh_common.py $(COMMON) $(DEM) \
-		data/p2_land.npz config.toml
+		$(PIPE)/mesh_common.py $(PIPE)/compass_art.py $(COMMON) $(DEM) \
+		data/p2_land.npz assets/compass.svg config.toml
 	$(UV) $(PIPE)/p4_bay_coupon.py
 
 # ---- P5: FULL final product (4-color frame 3MF + 3 pieces + preview)
 p5: out/p5/frame.3mf
 out/p5/frame.3mf: $(PIPE)/p5_final.py $(PIPE)/p4_bay_coupon.py \
-		$(PIPE)/version_stamp.py $(PIPE)/mesh_common.py $(COMMON) $(DEM) \
-		data/p2_land.npz assets/compass_rose.svg config.toml
+		$(PIPE)/version_stamp.py $(PIPE)/mesh_common.py \
+		$(PIPE)/compass_art.py $(COMMON) $(DEM) \
+		data/p2_land.npz assets/compass.svg config.toml
 	$(UV) $(PIPE)/p5_final.py

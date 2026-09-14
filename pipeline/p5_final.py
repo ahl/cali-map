@@ -11,6 +11,7 @@
 #   "scikit-image",
 #   "triangle",
 #   "py-lib3mf",
+#   "cairosvg",
 # ]
 # ///
 """P5: the FULL final product — frame + three removable pieces.
@@ -30,15 +31,14 @@ THE FRAME (out/p5/frame.3mf, 4-color Bambu multi-body):
     Islands (coast cells in the region raster, D15/G11);
   - gray (filament 3): ALL non-CA land (Census ca_mask is the authority)
     with full terrain (D15);
-  - black (filament 4): the D17 compass rose as a FLUSH INLAY sunk
-    [compass].inlay_depth_mm into the water datum surface.  The SVG
-    (assets/compass_rose.svg) is parsed (polygons / stroked circles /
-    serif letters), its BLACK-inked geometry rasterized to a mask at
-    ROSE_PITCH_MM, and the same two-level-grid machinery that cuts the
-    version stamps cuts the matching recesses into the water top (the
-    water body is built z-mirrored so version_stamp.stamped_bottom can
-    carve its TOP, then flipped back).  Black body = mask extrusion
-    (mesh_common.heightfield_to_mesh), top flush at datum.
+  - the D17 compass rose (ahl's artwork, assets/compass.svg) as RAISED
+    relief on the water surface (datum -> datum + [compass].relief_mm):
+    cairosvg rasterizes the artwork, compass_art.py color-keys it into
+    three disjoint ink classes — dark blue -> the coast filament, gray
+    -> the gray filament, black (outlines + pipeline-drawn N/E/S/W
+    letters) -> the black body (filament 4).  Blue/gray rose ink merges
+    into the EXISTING coast/gray bodies (same filament); the frame
+    stays 4 bodies.  The water top under the rose stays flat.
 
 PIECES (out/p5/{mountains,valley,desert}.stl): slab = base - floor,
 terrain at the G2 normalized z-rule ([output].z_exaggeration x
@@ -56,7 +56,6 @@ out/p5_preview.png (assembled / exploded / bottom-with-stamps / rose).
 """
 
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import numpy as np
@@ -68,14 +67,11 @@ from shapely.ops import polylabel
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import p1_regions as base
 import p4_bay_coupon as p4
-import mesh_common
+import compass_art
 import version_stamp as vstamp
 
 # ------------------------------------------------------------------ params
 PX_MM = p4.PX_MM             # print raster (0.05 mm/px; ~4500 x 5000 px)
-ROSE_PITCH_MM = 0.15         # compass-rose inlay grid (SVG strokes are
-                             # ~0.5 mm at 50 mm diameter -> 3+ cells)
-DARK = "#231f20"             # the rose SVG's "black"
 NS_MM = p4.TOTAL_NS_MM
 EXTRUDERS = {"coast": 1, "water": 2, "gray": 3, "black": 4}
 POKE3_AREA_MM2 = 4000.0      # cavities above this get 3 poke-holes
@@ -89,155 +85,6 @@ COMPASS = CFG.get("compass", {"enabled": False})
 PIECES = (("mountains", base.MOUNTAINS, "MTN"),
           ("valley", base.VALLEY, "VAL"),
           ("desert", base.DESERT, "DES"))
-
-
-# ----------------------------------------------------------- compass rose
-def _parse_svg(path):
-    root = ET.parse(path).getroot()
-    vb = [float(t) for t in root.get("viewBox").split()]
-    els = []
-    for el in root.iter():
-        tag = el.tag.split("}")[-1]
-        g = el.get
-        dark_f = g("fill", "none") == DARK
-        dark_s = g("stroke", "none") == DARK
-        sw = float(g("stroke-width", "0"))
-        if tag == "circle":
-            els.append(("circle", dict(
-                cx=float(g("cx")), cy=float(g("cy")), r=float(g("r")),
-                fill_dark=dark_f, stroke_dark=dark_s and sw > 0, sw=sw)))
-        elif tag == "polygon":
-            pts = [tuple(float(v) for v in p.split(","))
-                   for p in g("points").split()]
-            els.append(("polygon", dict(
-                pts=pts, fill_dark=dark_f,
-                stroke_dark=dark_s and sw > 0, sw=sw)))
-        elif tag == "text":
-            els.append(("text", dict(
-                x=float(g("x")), y=float(g("y")),
-                size=float(g("font-size", "16")), s=el.text or "",
-                fill_dark=dark_f)))
-    return vb, els
-
-
-def _serif_bold(size_px):
-    from PIL import ImageFont
-    for p in ("/System/Library/Fonts/Supplemental/Georgia Bold.ttf",
-              "/Library/Fonts/Georgia Bold.ttf",
-              "/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf"):
-        if Path(p).exists():
-            return ImageFont.truetype(p, size_px), Path(p).stem
-    import matplotlib
-    p = Path(matplotlib.get_data_path()) / "fonts/ttf/DejaVuSerif-Bold.ttf"
-    return ImageFont.truetype(str(p), size_px), p.stem
-
-
-def rasterize_rose(svg_path, diameter_mm, pitch):
-    """Black-ink mask of the rose, row 0 = SOUTH, symmetric about the
-    rose center (so placing the mask at [compass].center_mm keeps the
-    center exact).  diameter_mm = printed outer edge of the outer ring.
-    Returns (mask, mm_per_svg_unit, font_name)."""
-    from PIL import Image, ImageDraw
-    vb, els = _parse_svg(svg_path)
-    r_out = max(a["r"] + a["sw"] / 2 for k, a in els
-                if k == "circle" and a["stroke_dark"])
-    kk = diameter_mm / (2.0 * r_out)      # mm per SVG unit
-    f = kk / pitch                        # px per SVG unit
-    pad = int(np.ceil((vstamp.MARGIN_MM + 1.0) / pitch))
-    W = int(np.ceil(vb[2] * f)) + 2 * pad
-    H = int(np.ceil(vb[3] * f)) + 2 * pad
-    tx = lambda x: (x - vb[0]) * f + pad
-    ty = lambda y: (y - vb[1]) * f + pad
-    img = Image.new("L", (W, H), 0)
-    d = ImageDraw.Draw(img)
-    font_name = None
-    for kind, a in els:
-        if kind == "circle":
-            if a["fill_dark"]:
-                d.ellipse([tx(a["cx"] - a["r"]), ty(a["cy"] - a["r"]),
-                           tx(a["cx"] + a["r"]), ty(a["cy"] + a["r"])],
-                          fill=255)
-            if a["stroke_dark"]:
-                ro = a["r"] + a["sw"] / 2      # SVG strokes are centered
-                d.ellipse([tx(a["cx"] - ro), ty(a["cy"] - ro),
-                           tx(a["cx"] + ro), ty(a["cy"] + ro)],
-                          outline=255, width=max(1, round(a["sw"] * f)))
-        elif kind == "polygon":
-            pts = [(tx(x), ty(y)) for x, y in a["pts"]]
-            if a["fill_dark"]:
-                d.polygon(pts, fill=255)
-            if a["stroke_dark"]:
-                d.line(pts + pts[:1], fill=255, joint="curve",
-                       width=max(1, round(a["sw"] * f)))
-        elif kind == "text" and a["fill_dark"] and a["s"].strip():
-            font, font_name = _serif_bold(max(6, round(a["size"] * f)))
-            d.text((tx(a["x"]), ty(a["y"])), a["s"].strip(), fill=255,
-                   font=font, anchor="mm")
-    min_sw = min((a["sw"] for k, a in els
-                  if k != "text" and a.get("stroke_dark")), default=0.0)
-    m = np.asarray(img) > 127
-    m = np.flipud(m)                       # row 0 = south
-    # symmetric crop about the artwork center (viewBox center)
-    ccol = (0.0 - vb[0]) * f + pad         # rose center in px
-    crow = (H - 1) - ((0.0 - vb[1]) * f + pad)   # after flipud
-    rows, cols = np.nonzero(m)
-    mrg = int(np.ceil(vstamp.MARGIN_MM / pitch)) + 2
-    half_c = int(np.ceil(max(ccol - cols.min(), cols.max() + 1 - ccol))) + mrg
-    half_r = int(np.ceil(max(crow - rows.min(), rows.max() + 1 - crow))) + mrg
-    half_c = min(half_c, int(ccol), W - int(ccol) - 1)
-    half_r = min(half_r, int(crow), H - int(crow) - 1)
-    m = m[int(crow) - half_r:int(crow) + half_r,
-          int(ccol) - half_c:int(ccol) + half_c]
-    m, _ = mesh_common.remove_diagonal_pinches(m)
-    m[0, :] = m[-1, :] = False
-    m[:, 0] = m[:, -1] = False
-    return m, kk, font_name, min_sw * kk
-
-
-def make_rose_stamp():
-    """Stamp object for the compass recesses in the water top (mask NOT
-    x-mirrored: the rose is carved into the TOP surface, read from
-    above), plus the matching black inlay body parameters."""
-    svg = base.ROOT / COMPASS["svg"]
-    mask, kk, font_name, min_stroke = rasterize_rose(
-        svg, COMPASS["diameter_mm"], ROSE_PITCH_MM)
-    ny, nx = mask.shape
-    w, h = nx * ROSE_PITCH_MM, ny * ROSE_PITCH_MM
-    cx, cy = COMPASS["center_mm"]
-    rose = vstamp.Stamp(
-        text="compass rose (D17)", lines=[], cap_mm=0.0,
-        pitch=ROSE_PITCH_MM, depth=COMPASS["inlay_depth_mm"], mask=mask,
-        center=(cx, cy), angle=0.0,
-        rect=vstamp.rect_poly(cx, cy, w, h, 0.0), dilated_px=0,
-        min_stroke_mm=min_stroke)
-    return rose, kk, font_name
-
-
-def black_inlay_mesh(rose):
-    """The black body: extrusion of the ink mask, top FLUSH at datum."""
-    hf = np.flipud(rose.mask)             # heightfield rows: 0 = north
-    top = np.full(hf.shape, rose.depth, np.float64)
-    mesh = mesh_common.heightfield_to_mesh(top, hf, rose.pitch)
-    ny, nx = rose.mask.shape
-    mesh.apply_translation([rose.center[0] - nx * rose.pitch / 2,
-                            rose.center[1] - ny * rose.pitch / 2,
-                            p4.BASE_MM - rose.depth])
-    return mesh
-
-
-def water_upper_mesh(upper_water, rose):
-    """Upper water solid (floor top .. datum) with the rose recesses cut
-    into its TOP: built z-mirrored so the stamp machinery (which carves
-    bottoms) applies, then flipped back."""
-    zb = p4.FLOOR_MM - p4.OVERLAP_MM
-    if rose is None:
-        return p4.solid_mesh(upper_water,
-                             lambda v: np.full(len(v), p4.BASE_MM), zb,
-                             quality=False)
-    m = p4.solid_mesh(upper_water, lambda v: np.full(len(v), -zb),
-                      -p4.BASE_MM, quality=False, stamp=rose)
-    return trimesh.Trimesh(vertices=m.vertices * [1.0, 1.0, -1.0],
-                           faces=m.faces[:, ::-1], process=False)
 
 
 # -------------------------------------------------------------------- main
@@ -381,41 +228,47 @@ def main():
     assert floor_poly.geom_type == "Polygon"
     print(f"  floor: one body, {len(floor_poly.interiors)} poke-holes")
 
-    # ---- compass rose ---------------------------------------------------
-    rose = None
+    # ---- compass rose (ahl's artwork, raised relief) --------------------
+    rose, rose_c = None, None
     if COMPASS.get("enabled", False):
-        from shapely.geometry import MultiPoint
-        rose, kk, font_name = make_rose_stamp()
-        w, h = rose.size_mm
-        # exact no-land-contact test: every INK cell must lie over open
-        # sea (the rect's empty corners may span water next to land, but
-        # nothing black may touch land)
-        jj, ii = np.nonzero(rose.mask)
-        xi = rose.center[0] - w / 2 + (ii + 0.5) * rose.pitch
-        yi = rose.center[1] - h / 2 + (jj + 0.5) * rose.pitch
+        rose = compass_art.load_rose(
+            base.ROOT / COMPASS["svg"], COMPASS["diameter_mm"],
+            COMPASS["letter_font"], COMPASS["letter_cap_mm"],
+            COMPASS["letter_radius_frac"])
+        rose_c = tuple(COMPASS["center_mm"])
+        # every ink cell (any class) must lie over open sea: the raised
+        # bodies stand on the water datum surface
+        xi, yi = rose.cell_centers(rose_c)
         rr = np.clip(np.round((NS_MM - yi) / PX_MM - 0.5).astype(int),
                      0, ny - 1)
         cc = np.clip(np.round(xi / PX_MM - 0.5).astype(int), 0, nx - 1)
         on_land = ~seaw[rr, cc]
-        assert rose.rect.within(upper_water), \
-            "rose rectangle overlaps a piece cavity"
         assert not on_land.any(), (
             f"rose ink over land: {on_land.sum()} cells, first at "
             f"({xi[on_land][0] if on_land.any() else 0:.1f}, "
             f"{yi[on_land][0] if on_land.any() else 0:.1f}) mm")
-        hull = MultiPoint(
-            np.column_stack([xi[::7], yi[::7]])).convex_hull
+        hull = rose.ink_hull(rose_c)
         d_coast = hull.distance(geo["coast_nom"])
         d_gray = hull.distance(geo["gray"])
         d_cav = hull.distance(cavities)
-        print(f"\ncompass rose (D17): ring dia {COMPASS['diameter_mm']:g} "
-              f"mm at {tuple(COMPASS['center_mm'])}, artwork+letters "
-              f"{w:.1f} x {h:.1f} mm, inlay {rose.depth:g} mm, "
-              f"min ink stroke ~{rose.min_stroke_mm:.2f} mm, "
-              f"letters font {font_name}\n"
+        w, h = rose.size_mm
+        cells = {n: int(m.sum()) for n, m in rose.masks.items()}
+        stroke_flag = (" -- UNDER 0.42 mm nozzle width, FLAG"
+                       if rose.black_stroke_mm < 0.42 else "")
+        print(f"\ncompass rose (D17, raised {COMPASS['relief_mm']:g} mm):"
+              f" ring dia {COMPASS['diameter_mm']:g} mm at {rose_c}, "
+              f"tips to r {rose.tip_r_mm:.1f} mm, box {w:.1f} x {h:.1f} "
+              f"mm; ink cells {cells}\n"
+              f"  black artwork strokes {rose.black_stroke_mm:.2f} mm"
+              f"{stroke_flag}; letters cap "
+              f"{COMPASS['letter_cap_mm']:g} mm at r {rose.letter_r_mm:g}"
+              f" mm, min stroke {rose.letter_min_stroke_mm:.2f} mm, "
+              f"font {Path(rose.font_file).name}\n"
               f"  open-water check: all ink over sea; ink-hull margins "
               f"-- coast {d_coast:.1f} mm, gray {d_gray:.1f} mm, "
               f"cavities {d_cav:.1f} mm")
+        assert rose.letter_min_stroke_mm >= 0.8 - 1e-6, \
+            "letter strokes < 0.8"
 
     # ---- version stamps -------------------------------------------------
     date = vstamp.stamp_date()
@@ -463,8 +316,9 @@ def main():
     m_floor = p4.solid_mesh(floor_poly,
                             lambda v: np.full(len(v), p4.FLOOR_MM), 0.0,
                             quality=False, stamp=stamps["frame"])
-    m_upper = water_upper_mesh(upper_water, rose)
-    ok &= p4.report_mesh("water upper", m_upper)
+    m_upper = p4.solid_mesh(upper_water,
+                            lambda v: np.full(len(v), p4.BASE_MM),
+                            p4.FLOOR_MM - p4.OVERLAP_MM, quality=False)
     water_mesh = trimesh.util.concatenate([m_floor, m_upper])
     ok &= p4.report_mesh("water(+floor)", water_mesh)
     zok, zlev = vstamp.verify_stamp_levels(water_mesh, stamps["frame"])
@@ -476,30 +330,34 @@ def main():
     ok &= dv < 2e-3
     print(f"    frame stamp z-levels {zlev} -> exact "
           f"{vstamp.DEPTH_MM:g}: {zok}; floor volume err {dv * 100:.3f}%")
-    if rose is not None:
-        up_lv = sorted(set(np.round(m_upper.vertices[:, 2], 5).tolist()))
-        want = [round(v, 5) for v in (p4.FLOOR_MM - p4.OVERLAP_MM,
-                                      p4.BASE_MM - rose.depth, p4.BASE_MM)]
-        flush_ok = up_lv == want
-        ok &= flush_ok
-        print(f"    rose recess z-levels {up_lv} == {want}: {flush_ok}")
     coast_mesh = p4.solid_mesh(geo["coast_nom"], terrain_coast, p4.BASE_MM)
-    ok &= p4.report_mesh("coast", coast_mesh)
+    ok &= p4.report_mesh("coast(terrain)", coast_mesh)
     gray_mesh = p4.solid_mesh(geo["gray"], terrain_coast, p4.BASE_MM)
-    ok &= p4.report_mesh("gray", gray_mesh)
+    ok &= p4.report_mesh("gray(terrain)", gray_mesh)
+    black_mesh = None
+    if rose is not None:
+        rm = compass_art.relief_meshes(rose, rose_c, p4.BASE_MM,
+                                       COMPASS["relief_mm"])
+        z_top = p4.BASE_MM + COMPASS["relief_mm"]
+        for rname, rmesh in rm.items():
+            bb = rmesh.bounds
+            raised = (abs(bb[0][2] - p4.BASE_MM) < 1e-6
+                      and abs(bb[1][2] - z_top) < 1e-6)
+            ok &= raised and p4.report_mesh(f"rose {rname}", rmesh)
+            print(f"    rose {rname} z {bb[0][2]:.2f}..{bb[1][2]:.2f} "
+                  f"(datum {p4.BASE_MM:g} + {COMPASS['relief_mm']:g}) "
+                  f"raised OK: {raised}")
+        # blue/gray rose ink joins the matching filament bodies
+        coast_mesh = trimesh.util.concatenate([coast_mesh, rm["coast"]])
+        gray_mesh = trimesh.util.concatenate([gray_mesh, rm["gray"]])
+        black_mesh = rm["black"]
     bodies = [("coast", coast_mesh, EXTRUDERS["coast"]),
               ("water", water_mesh, EXTRUDERS["water"]),
               ("gray", gray_mesh, EXTRUDERS["gray"])]
-    if rose is not None:
-        black_mesh = black_inlay_mesh(rose)
-        ok &= p4.report_mesh("black(rose)", black_mesh)
-        bb = black_mesh.bounds
-        flush = (abs(bb[1][2] - p4.BASE_MM) < 1e-6
-                 and abs(bb[0][2] - (p4.BASE_MM - rose.depth)) < 1e-6)
-        ok &= flush
-        print(f"    black inlay z {bb[0][2]:.3f}..{bb[1][2]:.3f} "
-              f"(datum {p4.BASE_MM:g}) -> flush: {flush}")
+    if black_mesh is not None:
         bodies.append(("black", black_mesh, EXTRUDERS["black"]))
+    ok &= p4.report_mesh("coast body", coast_mesh)
+    ok &= p4.report_mesh("gray body", gray_mesh)
     assert geo["coast_nom"].intersection(geo["gray"]).area < 1e-6
 
     frame_path = OUT_DIR / "frame.3mf"
@@ -531,7 +389,7 @@ def main():
     for n in notes:
         print(f"  note: {n}")
 
-    render_preview(geo, s, holes, stamps, rose, EW_MM)
+    render_preview(geo, s, holes, stamps, rose, rose_c, EW_MM)
     print(f"\nall bodies/pieces watertight + checks: {ok}")
     if not ok:
         sys.exit(1)
@@ -543,7 +401,7 @@ def main():
 
 
 # ----------------------------------------------------------------- preview
-def render_preview(geo, s, holes, stamps, rose, ew_mm):
+def render_preview(geo, s, holes, stamps, rose, rose_c, ew_mm):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -578,17 +436,12 @@ def render_preview(geo, s, holes, stamps, rose, ew_mm):
                             ha="center", weight="bold", zorder=6)
             p4.add_poly(ax, g, base.COLORS[rid], z=3)
 
+    rose_colors = {"coast": tuple(base.COLORS[base.COAST])[:3],
+                   "gray": p4.GRAY_RGB, "black": (0.12, 0.11, 0.11)}
+
     def draw_rose(ax):
-        if rose is None:
-            return
-        w, h = rose.size_mm
-        rgba = np.zeros(rose.mask.shape + (4,))
-        rgba[rose.mask] = (0.1, 0.1, 0.1, 1.0)
-        ax.imshow(rgba, extent=(rose.center[0] - w / 2,
-                                rose.center[0] + w / 2,
-                                rose.center[1] - h / 2,
-                                rose.center[1] + h / 2),
-                  origin="lower", interpolation="nearest", zorder=5)
+        if rose is not None:
+            compass_art.draw_rose(ax, rose, rose_c, rose_colors)
 
     # 1: assembled
     ax = axes[0]
@@ -638,7 +491,7 @@ def render_preview(geo, s, holes, stamps, rose, ew_mm):
     draw_map(ax)
     draw_rose(ax)
     if rose is not None:
-        cx, cy = rose.center
+        cx, cy = rose_c
         r = COMPASS["diameter_mm"] / 2
         ax.add_patch(plt.Circle((cx, cy), r, fill=False, lw=0.6,
                                 edgecolor="#666", linestyle="--",
@@ -646,8 +499,10 @@ def render_preview(geo, s, holes, stamps, rose, ew_mm):
         half = max(rose.size_mm) / 2 + 6
         ax.set_xlim(cx - half, cx + half)
         ax.set_ylim(cy - half, cy + half)
-        ax.set_title(f"rose close-up — ring dia {2 * r:g} mm, inlay "
-                     f"{rose.depth:g} mm flush", fontsize=10)
+        ax.set_title(f"rose close-up — ring dia {2 * r:g} mm, raised "
+                     f"{COMPASS['relief_mm']:g} mm (blue ink -> coast "
+                     "filament, gray -> gray, black + letters -> black)",
+                     fontsize=9)
     else:
         ax.set_title("compass disabled", fontsize=10)
 
