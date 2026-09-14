@@ -274,10 +274,14 @@ until its inputs are signed off. Every phase is a jj commit.
 
 ## Print sessions
 
-- **T1 (2026-09-14, in progress):** ahl printing mountains + valley
-  pieces; real (final-choice) filament loaded for the frame; testing
-  IRONING on the water surface. Awaiting: fit verdict at 0.15 mm/side
-  (G3), poke-hole/tray feel, 3-color seam quality, ironing result.
+- **T1 (2026-09-14, in progress):** ahl printing the mini-frame set
+  (4-color frame.3mf w/ vector rose + mountains/valley pieces, plain
+  bottoms). IRONING DEFERRED (revisit later; if wanted, the route is
+  per-part "Top surfaces" on the WATER body — "topmost" mode would skip
+  the water plane since terrain rises above it; note rose blue/gray ink
+  merged into terrain bodies, so rose stays matte under per-part water
+  ironing). Awaiting: fit at 0.15 mm/side (G3), poke-hole/tray feel,
+  4-color seam quality, rose crispness.
 
 ## Observation log (noted, NOT to be acted on unless ahl says so)
 
