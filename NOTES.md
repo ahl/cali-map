@@ -25,6 +25,8 @@ set into a frame of the surrounding geography.
 | D6 | Print bed 256×256 mm; whole model ≤ 1000×1000 mm total | Either frame fits one bed, or frame is carved into tiles |
 | D7 | Material: PLA. Fit: snug but disassemblable | Clearance values TBD (see G3) |
 | D8 | Version control: jj (colocated git), repo = this directory | |
+| D12 | Automation contract: change a region aspect -> `uv run pipeline/regen_all.py` rebuilds the whole chain (p1 render, land, vectors, slabs, coupons) in dependency order | ahl 2026-09-13, after print validation |
+| D13 | Slab/final-map aspect: ahl likes the P1.5 aspect (CA bbox + 40 km N/E/S) with MORE ocean west — WEST_PAD_KM = 50 added. Candidate template for the final frame crop (D10) | |
 | D10 | Map area may be REDUCED in the final crop | ahl intentionally over-cropped the reference area. End-stage parameter; affects only the frame, never the pieces. Only reductions. |
 | D11 | Physical scale decided at the END; possibly multiple scales | Geometry/borders in map meters; scale, Z-exaggeration, clearance applied at mesh export. Per-scale border min-width pass required (printable width is fixed in mm). |
 | D9 | Waterways/lakes as second color on EACH piece — **OPTIONAL** | ahl may or may not print with these; keep it a build flag. Default output = solid single-color pieces; water variant = region body minus water inlays + water bodies in one 3MF (AMS + Bambu Studio confirmed). Prototyped P3, implemented P5, final call at the end. |
@@ -115,8 +117,14 @@ set into a frame of the surrounding geography.
     (in-plane or via its printed shelf); sub-printable specks (Delta
     levee islets, coastal rocks) dropped at vectorization; per-scale
     min-width enforcement (D11).
-- **G2 — Vertical exaggeration factor**: TBD (typical 3–8× at this scale).
-  Also: base thickness value.
+- **G2 — Vertical exaggeration: RESOLVED 2026-09-13 (print-validated).**
+  ahl printed the P1.5 slab and called the vertical scale "very
+  pleasing" — the rule is **relief = 5 mm at CA's max elevation on a
+  150 mm N-S print**, i.e. **~9.3x vertical exaggeration** (equivalently
+  Whitney relief ≈ N-S extent / 30). Keep the exaggeration FACTOR
+  constant across print sizes (relief grows proportionally with the
+  model). Base thickness 2.0 mm validated on the same print. P3 may
+  still bracket ±20% for the final build, but this is the default.
 - **G3 — Clearances**: PLA-on-PLA puzzle fit; likely ~0.15–0.25 mm/side,
   calibrate with a test coupon before committing to full prints.
 - **G4 — Wall geometry**: vertical vs. slightly drafted piece walls
@@ -177,9 +185,10 @@ until its inputs are signed off. Every phase is a jj commit.
 - **P0 — Data & pipeline skeleton.** [DONE 2026-09-13] Fetch DEM tiles,
   CGS provinces, state borders; reproject to CA Albers (EPSG:3310);
   heightfield built. Extent approved (final crop may REDUCE it, D10).
-- **P1 — Region boundaries.** [SCREEN-APPROVED by ahl 2026-09-13;
-  physical validation = the P1.5 print, which ahl counts as part of P1]
-  25 m +
+- **P1 — Region boundaries.** [CLOSED — PRINT-VALIDATED 2026-09-13: ahl
+  printed the statewide slab; "regions look excellent"; no
+  mountain-as-valley errors; some mountains-as-coastal accepted as fine;
+  Bay Area imperfections accepted for our purposes] 25 m +
   13.5 km band + all rules + ahl's markup overrides (Vallejo mountain
   corridor; p1_final red->mountains / orange->coast marks — overrides/
   *.geojson, applied by build_regions [overrides]). Definitive artifact:

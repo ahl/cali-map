@@ -72,7 +72,9 @@ GROOVE_DEPTH_MM = 0.4  # groove depth
 GROOVE_TARGET_MM = 0.4  # target groove WIDTH; actual px width is whatever
                         # integer count of px is closest at this PX_MM
 MIN_FLOOR_MM = 1.0     # groove floor never goes below this (base protection)
-PAD_KM = 40.0          # slab margin beyond CA's bbox on N, E, S (not W)
+PAD_KM = 40.0          # slab margin beyond CA's bbox on N, E, S
+WEST_PAD_KM = 50.0     # extra open Pacific west of CA (ahl 2026-09-13:
+                       # "a bit more space to the west showing more ocean")
 
 STL_NAME = "p15_ca_engraved_150mm.stl"
 PNG_NAME = "p15_preview.png"
@@ -207,13 +209,15 @@ def build_source_rasters():
 
 
 def slab_window(ca):
-    """Source-grid slice for the slab: CA bbox + PAD_KM on N, E, S."""
+    """Source-grid slice for the slab: CA bbox + PAD_KM on N, E, S and
+    WEST_PAD_KM of open Pacific on the west."""
     pad = int(round(PAD_KM * 1000.0 / base.META["res"]))
+    wpad = int(round(WEST_PAD_KM * 1000.0 / base.META["res"]))
     rows = np.nonzero(ca.any(axis=1))[0]
     cols = np.nonzero(ca.any(axis=0))[0]
     r0 = max(rows[0] - pad, 0)
     r1 = min(rows[-1] + 1 + pad, ca.shape[0])
-    c0 = cols[0]                                   # west: already Pacific
+    c0 = max(cols[0] - wpad, 0)
     c1 = min(cols[-1] + 1 + pad, ca.shape[1])
     return slice(r0, r1), slice(c0, c1)
 
