@@ -110,9 +110,18 @@ poke_hole_d_mm = 8.0          # extraction holes through the floor
 land_min_mm = 0.2             # min land height above datum (color opacity)
 
 [compass]
-# D17 compass rose inlay in the Frame's Pacific (black, 4th color).
+# D17 compass rose inlay in the Frame's Pacific. ahl's Illustrator
+# artwork (pending drop-in as assets/compass_rose_ahl.svg) maps its
+# colors to the four loaded filaments: light blue/teal -> water (no
+# ink), blue -> the CA-land filament (the coast body's slot), gray ->
+# gray, black -> black outlines. Lettering (N/E/S/W) is ADDED BY THE
+# PIPELINE in black — font/size/radius are the knobs below, independent
+# of the artwork.
 enabled = true
-svg = "assets/compass_rose.svg"
+svg = "assets/compass_rose.svg"  # -> switch to compass_rose_ahl.svg on drop
+letter_font = "Georgia Bold"
+letter_cap_mm = 6.0
+letter_radius_frac = 1.26   # letter anchor radius / ring outer radius
 diameter_mm = 50.0            # outer-ring diameter on the printed Frame
 # Rose center, mm from the Frame's SW corner. Was [48, 55]; moved 11 mm
 # SW (p5 build 2026-09-14): the letters box clipped the mountains cavity
