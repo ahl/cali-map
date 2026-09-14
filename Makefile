@@ -55,7 +55,8 @@ out/p15b_vallejo_inset.stl: $(PIPE)/p15b_vallejo_inset.py $(PIPE)/dem_hires.py \
 		data/p2_regions_smooth.geojson
 	$(UV) $(PIPE)/p15b_vallejo_inset.py
 
-# ---- P4: Bay Area fit coupons (both scales + frames)
-p4: out/p4_bay_420mm/frame.stl
-out/p4_bay_420mm/frame.stl: $(PIPE)/p4_bay_coupon.py $(COMMON) $(DEM)
+# ---- P4 v2: Bay Area mini-frame coupon (tray frame 3MF + 2 pieces)
+p4: out/p4_mini/frame.3mf
+out/p4_mini/frame.3mf: $(PIPE)/p4_bay_coupon.py $(COMMON) $(DEM) \
+		data/p2_land.npz config.toml
 	$(UV) $(PIPE)/p4_bay_coupon.py
