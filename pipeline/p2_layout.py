@@ -33,12 +33,13 @@ islands/frame split): FOUR physical pieces tiling the D13 window.
 The D13 window = California's Census bbox (data/p2_land.npz ca_mask)
 padded 40 km on N/E/S and 67.5 km of open Pacific on the W (same padding
 p15_engraved.py uses), scaled so the window's total N-S extent =
-config.toml [output].total_ns_mm (254 mm).
+config.toml [output].total_ns_mm.
 
 The frame's internal land/water coloring (which of its own territory
 is gray vs. yellow vs. water) is derived by rasterizing the exact CA
-region vectors + the islands hull back onto the DEM grid within the
-window, classifying the remainder as land or water from data/p2_land.npz,
+region vectors (the coast feature includes the Channel Islands, D15)
+back onto the DEM grid within the window,
+classifying the remainder as land or water from data/p2_land.npz,
 and re-vectorizing with the same corner-grid arc extraction
 p2_vectorize.py uses for the canonical geometry -- then a light
 Douglas-Peucker simplify for a clean print-quality line at this scale.
@@ -268,23 +269,16 @@ def build_layout():
     # without this, union_all/difference below produce degenerate slivers
     # of near-zero area at the shared-border vertices.
     regions = {k: shapely.set_precision(g, 1.0) for k, g in regions.items()}
-    # p2_vectorize.py's own overlap check (coast vs islands) only runs on
-    # the canonical DP flavor, not this smooth/Chaikin preview flavor;
-    # the smooth coast polygon has a ~0.013 km^2 sliver overlap with the
-    # islands hull near the mainland (found while building this figure --
-    # worth a look upstream, but harmless here: clip it defensively).
-    coast_islands_overlap = regions["coast"].intersection(regions["islands"]).area
-    if coast_islands_overlap > 0:
-        print(f"  note: p2_regions_smooth.geojson coast/islands overlap "
-             f"{coast_islands_overlap / 1e6:.4f} km^2 (smooth-flavor "
-             f"artifact, not present in the canonical DP flavor) -- "
-             f"clipped for this drawing")
-        regions["coast"] = regions["coast"].difference(regions["islands"])
 
     (r0, r1, c0, c1), (x0, x1, y0, y1), ca_rows = ca_window_bbox()
 
+    # D15: island land = the coast feature's off-mainland parts (the
+    # Channel Islands and bay islets are coast MultiPolygon parts now;
+    # there is no separate islands feature).
     shape_full = (META["height"], META["width"])
-    islands_m = rasterize_mp(regions["islands"], shape_full)[r0:r1, c0:c1]
+    coast_parts = sorted(regions["coast"].geoms, key=lambda p: -p.area)
+    islands_mp = shapely.MultiPolygon(coast_parts[1:])
+    islands_m = rasterize_mp(islands_mp, shape_full)[r0:r1, c0:c1]
 
     land_mask = np.load(DATA / "p2_land.npz")["land_mask"][r0:r1, c0:c1]
     # data/p2_land.npz's land_mask is the RAW Census/NE land model; every
@@ -338,11 +332,8 @@ def build_layout():
     if water_all.geom_type == "Polygon":
         water_all = shapely.MultiPolygon([water_all])
 
-    island_land = regions["islands"].difference(water_all)
-    if island_land.geom_type == "Polygon":
-        island_land = shapely.MultiPolygon([island_land])
     frame_gray = frame_piece.difference(water_all) \
-        .difference(regions["coast"]).difference(island_land)
+        .difference(regions["coast"])
     if frame_gray.geom_type == "Polygon":
         frame_gray = shapely.MultiPolygon([frame_gray])
 
@@ -353,8 +344,7 @@ def build_layout():
         "desert": regions["desert"],
         # cosmetic-only fill sub-areas of the frame (not pieces):
         "water_all": water_all,
-        "coast_land": regions["coast"],
-        "island_land": island_land,
+        "coast_land": regions["coast"],  # incl. Channel Islands (D15)
         "frame_gray": frame_gray,
     }
     # pinhole-sized (few m^2) interior rings from the polygonize round trip
@@ -455,7 +445,6 @@ def render(pieces, bbox, ca_rows):
     draw_mp(ax, mm_pieces["water_all"], water_rgb, zorder=1)
     draw_mp(ax, mm_pieces["frame_gray"], COLORS["frame"], zorder=2)
     draw_mp(ax, mm_pieces["coast_land"], COLORS["coast"], zorder=3)
-    draw_mp(ax, mm_pieces["island_land"], COLORS["coast"], zorder=3)
     # the three removable pieces, project palette
     draw_mp(ax, mm_pieces["mountains"], COLORS["mountains"], zorder=4)
     draw_mp(ax, mm_pieces["valley"], COLORS["valley"], zorder=4)
@@ -515,7 +504,7 @@ def render(pieces, bbox, ca_rows):
     ax.set_ylabel("mm")
     ax.set_title(
         "California topo puzzle -- P2 final-product layout proposal\n"
-        f"scale 1:{scale_denom:,.0f}   (254 mm = 10 in)   "
+        f"scale 1:{scale_denom:,.0f}   (N-S {TOTAL_NS_MM:g} mm)   "
         f"footprint {fp_w:.1f} x {fp_h:.1f} mm",
         fontsize=13)
 

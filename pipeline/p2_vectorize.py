@@ -22,10 +22,12 @@ Steps:
      p2_land.py): new land inside CA joins the nearest region; land
      outside CA is frame territory; polygon sea is sea. No-exclave rule +
      sub-printable speck drop (P2 cleanup contract; Farallones stay out).
-  3. Pull the eight Channel Islands out of Coast: they form their own
-     puzzle piece (config [islands] one_piece_hull) whose outline is the
-     convex hull of all island land buffered by buffer_km of ocean.
-     Harbor/bay islets (Terminal Island etc.) stay with mainland Coast.
+  3. Channel Islands per config [islands].mode: "in_surround" (D15,
+     current) keeps them classified as COAST land — the coast feature is
+     a MultiPolygon including the eight island rings, printed yellow on
+     the surround; "one_piece_hull" (retired, kept for history) pulls
+     them out into their own hull+buffer piece feature. The Farallones
+     are dropped either way; harbor/bay islets stay with mainland Coast.
   4. Extract the mainland boundary as a topological arc-node graph on
      pixel corners: every border polyline is stored ONCE and shared by
      the regions on both sides, so adjacent polygons reference
@@ -146,11 +148,13 @@ def build_final_raster():
     return R, dem, sea, mainland
 
 
-def extract_channel_islands(R, mainland):
-    """Remove the eight Channel Islands from the region raster (they are
-    their own piece now, D2 revised) and return their land mask. Other
-    off-mainland components (Terminal Island, bay islets) stay with their
-    region — folded into the mainland Coast feature."""
+def extract_channel_islands(R, mainland, remove):
+    """Identify the eight Channel Islands in the region raster and drop
+    the Farallones (not on any piece, per ahl). remove=True (retired
+    one_piece_hull mode) zeroes the islands out of the raster for their
+    own piece; remove=False (D15 in_surround) leaves them as COAST land
+    and only matches/reports. Other off-mainland components (bay islets)
+    always stay with their region. Returns the islands' land mask."""
     to_ll = base.Transformer.from_crs(META["crs"], "EPSG:4326",
                                       always_xy=True)
     targets = {}
@@ -179,8 +183,11 @@ def extract_channel_islands(R, mainland):
             print(f"  {comp.sum() * KM2:7.1f} km^2 at ({lat:.2f}N, "
                   f"{abs(lon):.2f}W) -> DROPPED (Farallones, per ahl)")
             continue
-        who = f"islands piece ({hit})" if hit else \
-            f"stays {REGION_NAMES[int(np.bincount(R[comp]).argmax())]}"
+        if hit:
+            who = (f"islands piece ({hit})" if remove
+                   else f"coast land (Channel Island: {hit})")
+        else:
+            who = f"stays {REGION_NAMES[int(np.bincount(R[comp]).argmax())]}"
         print(f"  {comp.sum() * KM2:7.1f} km^2 at ({lat:.2f}N, "
               f"{abs(lon):.2f}W) -> {who}")
         if hit:
@@ -189,8 +196,9 @@ def extract_channel_islands(R, mainland):
     missing = set(CHANNEL_ISLANDS) - matched
     if missing:
         raise RuntimeError(f"Channel Islands not found in raster: {missing}")
-    R[isl] = 0
-    print(f"  islands piece land: {isl.sum() * KM2:.1f} km^2 "
+    if remove:
+        R[isl] = 0
+    print(f"  Channel Islands land: {isl.sum() * KM2:.1f} km^2 "
           f"({len(matched)}/8 islands matched)")
     return isl
 
@@ -620,17 +628,68 @@ def assemble(lines, R, flavor):
     return regions
 
 
+def verify_islands(regions, islands_mp, isl_mask):
+    """Mode-dependent island checks. one_piece_hull: the hull piece must
+    overlap no mainland region. in_surround (D15): every Channel Island
+    component must lie inside the COAST feature, and the coast's island
+    parts must touch no other region."""
+    coast = regions[base.COAST]
+    if islands_mp is not None:
+        for rid, g in regions.items():
+            olap = g.intersection(islands_mp).area
+            if olap:
+                raise RuntimeError(f"islands piece overlaps "
+                                   f"{REGION_NAMES[rid]} by {olap:.1f} m^2")
+        print(f"  islands piece: overlaps NO mainland region; "
+              f"min gap to coast piece {coast.distance(islands_mp) / 1000:.1f}"
+              f" km")
+        return
+    lab, n = ndimage.label(isl_mask)
+    slices = ndimage.find_objects(lab)
+    inside = 0
+    for i in range(1, n + 1):  # deepest-interior cell of each island
+        sl = slices[i - 1]
+        comp = lab[sl] == i
+        d = ndimage.distance_transform_edt(comp)
+        rr, cc = np.unravel_index(int(d.argmax()), d.shape)
+        x = X0 + (sl[1].start + cc + 0.5) * RES
+        y = Y1 - (sl[0].start + rr + 0.5) * RES
+        if bool(shapely.contains_xy(coast, x, y)):
+            inside += 1
+    parts = sorted(coast.geoms, key=lambda p: -p.area)
+    ch, other_isl = 0, 0
+    for p in parts[1:]:
+        q = p.representative_point()
+        r, c = int((Y1 - q.y) / RES), int((q.x - X0) / RES)
+        if 0 <= r < isl_mask.shape[0] and 0 <= c < isl_mask.shape[1] \
+                and isl_mask[r, c]:
+            ch += 1
+        else:
+            other_isl += 1
+    others = shapely.union_all([g for rid, g in regions.items()
+                                if rid != base.COAST])
+    dmin = min((p.distance(others) for p in parts[1:]), default=np.inf)
+    status = "OK" if inside == n and dmin > 0 else "CHECK"
+    print(f"  islands-in-coast (D15): {inside}/{n} island components "
+          f"inside the coast feature; coast = 1 mainland + {ch} Channel "
+          f"Island + {other_isl} bay-islet part(s); island parts' min "
+          f"distance to other regions {dmin / 1000:.1f} km -> {status}")
+    if status != "OK":
+        raise RuntimeError("D15 islands-in-coast verification failed")
+
+
 def write_geojson(path, regions, islands_mp):
     feats = [{"type": "Feature",
               "properties": {"region": REGION_NAMES[rid], "region_id": rid},
               "geometry": mapping(regions[rid])}
              for rid in sorted(regions)]
-    feats.append({"type": "Feature",
-                  "properties": {"region": "islands",
-                                 "region_id": ISLANDS_ID,
-                                 "kind": "piece_outline_hull_buffer",
-                                 "buffer_km": ISL_CFG["buffer_km"]},
-                  "geometry": mapping(islands_mp)})
+    if islands_mp is not None:
+        feats.append({"type": "Feature",
+                      "properties": {"region": "islands",
+                                     "region_id": ISLANDS_ID,
+                                     "kind": "piece_outline_hull_buffer",
+                                     "buffer_km": ISL_CFG["buffer_km"]},
+                      "geometry": mapping(islands_mp)})
     gj = {"type": "FeatureCollection",
           "crs": {"type": "name",
                   "properties": {"name": "urn:ogc:def:crs:EPSG::3310"}},
@@ -651,7 +710,11 @@ def main():
             prev_areas[f["properties"]["region"]] = g.area / 1e6
 
     R, dem, sea, mainland = build_final_raster()
-    isl_mask = extract_channel_islands(R, mainland)
+    mode = ISL_CFG["mode"]
+    if mode not in ("in_surround", "one_piece_hull"):
+        raise RuntimeError(f"unknown [islands] mode {mode!r}")
+    hull_mode = mode == "one_piece_hull"
+    isl_mask = extract_channel_islands(R, mainland, remove=hull_mode)
     print(f"region raster sha256: "
           f"{hashlib.sha256(R.tobytes()).hexdigest()[:16]}")
     for rid, nm in REGION_NAMES.items():
@@ -660,10 +723,15 @@ def main():
             if nm in prev_areas else ""
         print(f"  final {nm:9s}: {a:9.1f} km^2{d}")
 
-    islands_mp = islands_piece_polygon(isl_mask)
-    print(f"islands piece: hull+{ISL_CFG['buffer_km']:g} km buffer, "
-          f"{islands_mp.area / 1e6:,.0f} km^2, "
-          f"{len(islands_mp.geoms[0].exterior.coords)} vertices")
+    if hull_mode:
+        islands_mp = islands_piece_polygon(isl_mask)
+        print(f"islands piece: hull+{ISL_CFG['buffer_km']:g} km buffer, "
+              f"{islands_mp.area / 1e6:,.0f} km^2, "
+              f"{len(islands_mp.geoms[0].exterior.coords)} vertices")
+    else:
+        islands_mp = None
+        print("[islands] mode in_surround (D15): Channel Islands stay "
+              "coast land; no separate islands feature")
 
     print("\nextracting boundary arcs...")
     paths0, cycles0, CW = extract_arcs(R)
@@ -733,16 +801,10 @@ def main():
 
     print()
     regions_dp = assemble(dp_lines, R, "canonical DP")
-    for rid, g in regions_dp.items():  # islands piece may touch nothing
-        olap = g.intersection(islands_mp).area
-        if olap:
-            raise RuntimeError(f"islands piece overlaps {REGION_NAMES[rid]}"
-                               f" by {olap:.1f} m^2")
-    gap = regions_dp[base.COAST].distance(islands_mp)
-    print(f"  islands piece: overlaps NO mainland region; "
-          f"min gap to coast piece {gap / 1000:.1f} km")
+    verify_islands(regions_dp, islands_mp, isl_mask)
     print()
     regions_sm = assemble(sm_lines, R, "smooth preview")
+    verify_islands(regions_sm, islands_mp, isl_mask)
 
     write_geojson(DATA / "p2_regions.geojson", regions_dp, islands_mp)
     write_geojson(DATA / "p2_regions_smooth.geojson", regions_sm, islands_mp)
@@ -786,7 +848,13 @@ def render_qa(dem, sea, regions, islands_mp, border_parts, ne_corner):
                                    edgecolor="black", linewidth=lw))
 
     geoms_cols = [(g, base.COLORS[rid]) for rid, g in regions.items()]
-    geoms_cols.append((islands_mp, ISLANDS_COLOR))
+    if islands_mp is not None:
+        geoms_cols.append((islands_mp, ISLANDS_COLOR))
+        legend = ("yellow=Coast, magenta=Mountains, green=Valley, "
+                  "orange=Desert, blue=Islands piece")
+    else:
+        legend = ("yellow=Coast (incl. Channel Islands, D15), "
+                  "magenta=Mountains, green=Valley, orange=Desert")
 
     fig = plt.figure(figsize=(17, 12), dpi=150)
     gs = fig.add_gridspec(2, 2, width_ratios=[2.05, 1])
@@ -798,9 +866,7 @@ def render_qa(dem, sea, regions, islands_mp, border_parts, ne_corner):
     draw(ax1, geoms_cols, 0.6)
     ax1.set_xlim(-420, 560), ax1.set_ylim(-660, 470)
     ax1.set_title("P2 regions, smooth flavor (Chaikin x2 on natural arcs; "
-                  "political borders exact)\nyellow=Coast, "
-                  "magenta=Mountains, green=Valley, orange=Desert, "
-                  "blue=Islands piece", fontsize=12)
+                  f"political borders exact)\n{legend}", fontsize=12)
 
     backdrop(ax2, -260, -120, -80, 95, 1)
     draw(ax2, geoms_cols, 1.2)
