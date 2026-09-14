@@ -271,6 +271,13 @@ until its inputs are signed off. Every phase is a jj commit.
   invisibly fragments the coast band; the Census state polygon becomes
   the land authority in P2.
 
+## Print sessions
+
+- **T1 (2026-09-14, in progress):** ahl printing mountains + valley
+  pieces; real (final-choice) filament loaded for the frame; testing
+  IRONING on the water surface. Awaiting: fit verdict at 0.15 mm/side
+  (G3), poke-hole/tray feel, 3-color seam quality, ironing result.
+
 ## Observation log (noted, NOT to be acted on unless ahl says so)
 
 - **PLA translucency at thin land (ahl 2026-09-14):** near-datum coastal
