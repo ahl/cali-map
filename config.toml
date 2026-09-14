@@ -96,6 +96,27 @@ z_exaggeration = 9.3
 # scale + clearance auto-appended). Bump per test iteration.
 build_tag = "T1"
 
+[print]
+# Physical print parameters — shared by the P4 coupon AND the P5 final
+# build, so coupon-validated values transfer 1:1. Adjust after each test
+# print; `make` regenerates everything affected.
+clearance_per_side_mm = 0.15  # piece wall shrink (piece-piece gap = 2x)
+base_mm = 3.0                 # water surface height above print bottom
+floor_mm = 1.2                # tray floor under everything (D16)
+bottom_chamfer_mm = 0.0       # 45-deg chamfer at piece bottom edges
+                              # (G4 escalation vs elephant foot; 0 = off,
+                              # try 0.3 if T1 binds at the plate)
+poke_hole_d_mm = 8.0          # extraction holes through the floor
+land_min_mm = 0.2             # min land height above datum (color opacity)
+
+[compass]
+# D17 compass rose inlay in the Frame's Pacific (black, 4th color).
+enabled = true
+svg = "assets/compass_rose.svg"
+diameter_mm = 50.0            # outer-ring diameter on the printed Frame
+center_mm = [48.0, 55.0]      # rose center, mm from the Frame's SW corner
+inlay_depth_mm = 0.4          # flush inlay into the water top surface
+
 [islands]
 # D15 (ahl, 2026-09-13): the islands PIECE is SCRAPPED — the Channel
 # Islands print as yellow coast-land bodies ON the 3-color surround
