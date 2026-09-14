@@ -93,7 +93,7 @@ total_ns_mm = 250.0
 z_exaggeration = 9.3
 
 # Iteration tag for the bottom stamps. Bump per test iteration.
-build_tag = "T1"
+build_tag = "T2"
 # Bottom version stamps DISABLED per ahl 2026-09-14 ("the lettering on
 # the bottom is still wrong; just remove it for now") — parts get flat
 # plain bottoms until the stamp rendering is revisited.
@@ -103,7 +103,14 @@ stamps_enabled = false
 # Physical print parameters — shared by the P4 coupon AND the P5 final
 # build, so coupon-validated values transfer 1:1. Adjust after each test
 # print; `make` regenerates everything affected.
-clearance_per_side_mm = 0.15  # piece wall shrink (piece-piece gap = 2x)
+clearance_per_side_mm = 0.15  # piece shrink vs the FRAME (frame = nominal;
+                              # total piece-frame gap = this value).
+                              # T1 verdict: mountains "pretty locked in"
+                              # at 0.15 -- the calibrated friction fit.
+clearance_pair_per_side_mm = 0.075  # piece shrink along PIECE-PIECE shared
+                              # borders (total gap = 2x = 0.15, matching
+                              # the frame fit; was 0.15/side = 0.30 total,
+                              # which made the valley loose -- T1 finding)
 base_mm = 3.0                 # water surface height above print bottom
 floor_mm = 1.2                # tray floor under everything (D16)
 bottom_chamfer_mm = 0.0       # 45-deg chamfer at piece bottom edges
