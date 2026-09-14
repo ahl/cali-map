@@ -127,9 +127,18 @@ svg = "assets/compass.svg"
 style = "flush"               # "flush" (inlaid, level tops) | "raised"
 depth_mm = 0.4                # inlay depth / raise height (2 layers)
 letter_font = "Georgia Bold"
-letter_cap_mm = 6.0
-letter_radius_frac = 1.26     # letter anchor radius / ring outer radius
-diameter_mm = 50.0            # outer-ring diameter (tips extend beyond)
+letter_cap_mm = 4.0           # was 6.0; scaled toward the smaller rose
+                              # (kept above proportional so letters stay
+                              # crisp after min-stroke thickening)
+letter_radius_frac = 1.45     # letter anchor radius / ring outer radius.
+                              # MUST exceed 1.30 (cardinal tips reach 30%
+                              # past the ring): ahl 2026-09-14, points
+                              # must not touch the letters.
+ink_min_stroke_mm = 0.45      # dilate artwork ink classes to at least
+                              # this printed width (at dia 25 the black
+                              # outlines are ~0.19 mm raw — sub-nozzle)
+diameter_mm = 25.0            # outer-ring diameter (ahl 2026-09-14:
+                              # half the previous 50)
 # P5 final frame placement (mm from Frame SW corner). Was [48, 55];
 # moved SW because the letters box clipped the mountains cavity and
 # Point Conception coast.
@@ -142,8 +151,10 @@ center_mm = [43.0, 45.0]
 # (the water-top recess panel) -- p4 build 2026-09-14 searched the
 # ladder 36/34/32: largest flush-valid is dia 32 here, panel >= 1 mm
 # from cavities and all ink >= 1.2 mm from land.
+# At dia 25 the coupon can carry the rose at FULL final size — the test
+# now validates the exact printed rose.
 coupon_center_mm = [19.7, 28.3]
-coupon_diameter_mm = 32.0
+coupon_diameter_mm = 25.0
 
 [islands]
 # D15 (ahl, 2026-09-13): the islands PIECE is SCRAPPED — the Channel
