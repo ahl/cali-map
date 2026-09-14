@@ -86,6 +86,13 @@ region_marks = ["overrides/p1final_marks.geojson"]
 # The 420 mm variant is SET ASIDE for now.
 total_ns_mm = 254.0
 
+# Vertical exaggeration (G2, normalized 2026-09-14): terrain z = true
+# height x this factor x the horizontal scale. Constant and
+# grid-independent — replaces the earlier "5 mm at CA max per 150 mm"
+# rule, whose CA-max sample varied with grid resolution. 9.3 is the
+# value ahl print-validated on the P1.5 slab.
+z_exaggeration = 9.3
+
 [islands]
 # D15 (ahl, 2026-09-13): the islands PIECE is SCRAPPED — the Channel
 # Islands print as yellow coast-land bodies ON the 3-color surround

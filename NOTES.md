@@ -120,14 +120,16 @@ set into a frame of the surrounding geography.
     (in-plane or via its printed shelf); sub-printable specks (Delta
     levee islets, coastal rocks) dropped at vectorization; per-scale
     min-width enforcement (D11).
-- **G2 — Vertical exaggeration: RESOLVED 2026-09-13 (print-validated).**
-  ahl printed the P1.5 slab and called the vertical scale "very
-  pleasing" — the rule is **relief = 5 mm at CA's max elevation on a
-  150 mm N-S print**, i.e. **~9.3x vertical exaggeration** (equivalently
-  Whitney relief ≈ N-S extent / 30). Keep the exaggeration FACTOR
-  constant across print sizes (relief grows proportionally with the
-  model). Base thickness 2.0 mm validated on the same print. P3 may
-  still bracket ±20% for the final build, but this is the default.
+- **G2 — Vertical exaggeration: RESOLVED; NORMALIZED 2026-09-14.**
+  Canonical rule: **z = true height x 9.3 x horizontal scale** (config
+  [output].z_exaggeration) — constant, grid-independent. 9.3 is the
+  factor ahl print-validated on the P1.5 slab ("very pleasing").
+  Supersedes the "5 mm at CA max per 150 mm" formulation whose CA-max
+  sample varied with grid resolution (caused 9.3-vs-8.8 bookkeeping
+  drift between builds; the mini-frame coupon shipped ~5% shallower —
+  fine for fit testing, not rebuilt). P5 and all future builds use the
+  config value; the older drivers' internal rule is superseded and gets
+  switched over next time each is touched.
 - **G3 — Clearances**: PLA-on-PLA puzzle fit; likely ~0.15–0.25 mm/side,
   calibrate with a test coupon before committing to full prints.
 - **G4 — Wall geometry**: vertical vs. slightly drafted piece walls
