@@ -168,8 +168,8 @@ def main():
                 other_mask |= (regw == orid)
         geo[f"{name}_piece"] = p4.clean_piece(
             p4.piece_polygon(mask, other_mask, p4.CLEAR_PX,
-                             p4.CLEAR_PAIR_PX, clip=footprint), name,
-            notes)
+                             p4.piece_pair_clear_px(name),
+                             clip=footprint), name, notes)
         assert geo[f"{name}_piece"].geom_type == "Polygon", \
             f"{name} piece is not one part"
     coast_nom = p4.mask_polygon((regw == base.COAST) & ~seaw, 0.0,

@@ -312,6 +312,10 @@ FINAL 225 x 250 FRAME ONLY
   test-print pieces in green/any plentiful color (fit doesn't care).
   The mountains piece is also the biggest filament consumer of the
   three; if a reprint risk appears, order more brown before P6.
+- ahl's plan: coupon pieces in WHITE (T1 done so); frame coupons in the
+  REAL frame colors (validates the actual 4-color result). The final
+  mountains gets a full-size DRESS REHEARSAL in a plentiful color
+  before the one-shot brown print.
 
 ## Print sessions
 

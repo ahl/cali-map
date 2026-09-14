@@ -151,6 +151,19 @@ _PRINT_CFG = _CFG_ALL["print"]
 CLEARANCE_MM = _PRINT_CFG["clearance_per_side_mm"]        # piece vs FRAME
 CLEARANCE_PAIR_MM = _PRINT_CFG["clearance_pair_per_side_mm"]  # piece vs
                                            # piece shared borders
+ENCLOSED_ZERO_CLEARANCE = _PRINT_CFG.get("enclosed_piece_zero_clearance",
+                                         False)
+# ahl 2026-09-14: the VALLEY is fully enclosed by the mountains in the
+# real P5 layout (touches no frame -- only another removable piece), so
+# under enclosed_piece_zero_clearance it contributes ZERO shrink on its
+# own piece-facing walls; its neighbor's CLEARANCE_PAIR_MM does the
+# WHOLE piece-piece gap (total 0.08, not 0.16). The coupon's valley DOES
+# touch the window rim (frame) on some stretches, but that's already
+# handled automatically: piece_polygon's d_frame field only ever counts
+# an ACTUAL sibling piece as "other", so a valley/rim boundary is
+# frame-facing (CLEARANCE_MM) regardless of this flag -- only the
+# valley/mountains stretch is affected.
+ENCLOSED_PIECE = "valley"
 BASE_MM = _PRINT_CFG["base_mm"]           # water surface above bottom
 FLOOR_MM = _PRINT_CFG["floor_mm"]         # tray floor (D16)
 CHAMFER_MM = _PRINT_CFG["bottom_chamfer_mm"]  # 45-deg piece bottom edge
@@ -166,6 +179,27 @@ PIECE_SLAB_MM = BASE_MM - FLOOR_MM   # piece base slab: rests on the floor
 POKE_MARGIN_MM = 1.5     # extra margin between hole edge and cavity wall
 CLEAR_PX = CLEARANCE_MM / PX_MM
 CLEAR_PAIR_PX = CLEARANCE_PAIR_MM / PX_MM
+
+
+def piece_pair_clear_px(name):
+    """Piece-facing clearance CONTRIBUTED BY `name`'s own walls (pixels):
+    the enclosed piece (ENCLOSED_PIECE, when ENCLOSED_ZERO_CLEARANCE) is
+    the exact nominal shape on every piece-facing stretch -- zero self-
+    contribution, its neighbor's CLEAR_PAIR_PX does the entire gap.
+    Every other piece contributes the full CLEAR_PAIR_PX (so two non-
+    enclosed siblings, e.g. mountains-desert in P5, each shrink by
+    CLEARANCE_PAIR_MM for a 2x total)."""
+    if ENCLOSED_ZERO_CLEARANCE and name == ENCLOSED_PIECE:
+        return 0.0
+    return CLEAR_PAIR_PX
+
+
+def pair_gap_nominal_mm(name_a, name_b):
+    """Expected TOTAL piece-piece gap at the name_a/name_b seam (mm):
+    each side's own contribution (0 for the enclosed piece, else
+    CLEARANCE_PAIR_MM), summed."""
+    return (piece_pair_clear_px(name_a) + piece_pair_clear_px(name_b)) \
+        * PX_MM
 
 
 # ------------------------------------------------------- region generation
@@ -1144,7 +1178,8 @@ def main():
             if oname != name:
                 other_mask |= (regw == orid)
         piece = clean_piece(
-            piece_polygon(mask, other_mask, CLEAR_PX, CLEAR_PAIR_PX),
+            piece_polygon(mask, other_mask, CLEAR_PX,
+                         piece_pair_clear_px(name)),
             name, notes)
         geo[f"{name}_piece"] = piece
     coast_nom = mask_polygon((regw == base.COAST) & ~seaw, 0.0)
@@ -1193,19 +1228,29 @@ def main():
         print(f"    {sname:5s}: {a:7.1f} mm^2 ({pct:4.1f}% of that band)"
               + ("  [no gray]" if a < 1.0 else ""))
 
-    # ---- poke-holes -----------------------------------------------------
-    holes = {n: poke_points(geo[f"{n}_nom"]) for n in ("mountains", "valley")}
+    # ---- poke-holes: finger-sized (18 mm), THE disassembly mechanism
+    # (ahl 2026-09-14) -- may straddle a piece-piece seam (serves both
+    # flanking pieces); must stay >= POKE_MARGIN_MM from the frame
+    # cavity wall and fully under the removable-piece union -----------
+    piece_nom = {n: geo[f"{n}_nom"] for n in ("mountains", "valley")}
+    cav_union = unary_union(list(piece_nom.values()))
+    wall_margin = POKE_D_MM / 2 + POKE_MARGIN_MM
+    target_n = {n: 2 for n in piece_nom}   # ~1-2 holes credited per piece
+    centers, holes = plan_poke_holes(piece_nom, target_n)
     circles = []
-    for name, pts in holes.items():
-        for pt in pts:
-            circ = pt.buffer(POKE_D_MM / 2, quad_segs=24)
-            assert geo[f"{name}_nom"].contains(circ), \
-                f"poke-hole under a wall ({name})"
-            circles.append(circ)
-            gx = cx + (pt.x - WINDOW_MM / 2) / (s * 1000.0)
-            gy = cy + (pt.y - WINDOW_MM / 2) / (s * 1000.0)
-            print(f"  poke-hole {name}: window ({pt.x:.1f}, {pt.y:.1f}) mm"
-                  f" = Albers ({gx / 1000:.1f}, {gy / 1000:.1f}) km")
+    for pt in centers:
+        circ = pt.buffer(POKE_D_MM / 2, quad_segs=24)
+        assert cav_union.contains(circ), \
+            "poke-hole not fully under removable pieces"
+        assert cav_union.boundary.distance(pt) >= wall_margin - 1e-6, \
+            "poke-hole closer than POKE_MARGIN_MM to the frame cavity wall"
+        circles.append(circ)
+        under = [n for n, pts in holes.items() if any(p is pt for p in pts)]
+        gx = cx + (pt.x - WINDOW_MM / 2) / (s * 1000.0)
+        gy = cy + (pt.y - WINDOW_MM / 2) / (s * 1000.0)
+        print(f"  poke-hole {'+'.join(under):18s} window ({pt.x:.1f}, "
+              f"{pt.y:.1f}) mm = Albers ({gx / 1000:.1f}, {gy / 1000:.1f})"
+              f" km" + ("  [seam hole]" if len(under) > 1 else ""))
     for i in range(len(circles)):
         for j in range(i + 1, len(circles)):
             assert circles[i].distance(circles[j]) > 1.0
@@ -1214,7 +1259,8 @@ def main():
         floor_poly = floor_poly.difference(c)
     assert floor_poly.geom_type == "Polygon", "floor not one connected body"
     print(f"  floor: one connected body, {len(floor_poly.interiors)} "
-          "poke-holes")
+          f"poke-holes ({len(centers)} total, dia {POKE_D_MM:g} mm) -- "
+          + ", ".join(f"{n}: {len(holes[n])} hole(s)" for n in piece_nom))
 
     # ---- compass rose (ahl's artwork, raised relief; coupon placement) --
     rose, rose_c = None, None
