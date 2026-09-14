@@ -436,12 +436,15 @@ def weld(verts, faces, decimals=6):
 
 
 # ------------------------------------------------------------ verification
-def verify_stamp_levels(mesh, stamp, z_bottom=0.0):
-    """All vertices below z_bottom + depth must sit EXACTLY at z_bottom or
-    z_bottom + depth (deboss depth exact, nothing in between); the depth
-    level must actually be present.  Returns (ok, levels_found)."""
+def verify_stamp_levels(mesh, stamp, z_bottom=0.0, extra=()):
+    """All vertices below z_bottom + depth must sit EXACTLY at z_bottom,
+    z_bottom + depth, or a declared extra level (e.g. a bottom-chamfer
+    ring); the depth level must actually be present.  Returns
+    (ok, levels_found)."""
     z = mesh.vertices[:, 2]
     low = z[z < z_bottom + stamp.depth + 1e-5]
     levels = sorted(set(np.round(low - z_bottom, 5).tolist()))
     want = {0.0, round(stamp.depth, 5)}
+    want |= {round(e, 5) for e in extra
+             if 0 < e < stamp.depth + 1e-5}
     return set(levels) == want, levels

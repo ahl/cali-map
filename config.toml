@@ -114,7 +114,11 @@ land_min_mm = 0.2             # min land height above datum (color opacity)
 enabled = true
 svg = "assets/compass_rose.svg"
 diameter_mm = 50.0            # outer-ring diameter on the printed Frame
-center_mm = [48.0, 55.0]      # rose center, mm from the Frame's SW corner
+# Rose center, mm from the Frame's SW corner. Was [48, 55]; moved 11 mm
+# SW (p5 build 2026-09-14): the letters box clipped the mountains cavity
+# and the Point Conception coast. At [43, 45] the ink clears all land by
+# >= 11 mm and the letters box clears the cavities by ~2 mm.
+center_mm = [43.0, 45.0]
 inlay_depth_mm = 0.4          # flush inlay into the water top surface
 
 [islands]

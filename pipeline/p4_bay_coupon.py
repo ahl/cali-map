@@ -46,13 +46,17 @@ The FRAME is a TRAY (one fixed part, 3-color Bambu 3MF per NOTES-3mf.md):
   - POKE-HOLES: two 8 mm circular through-holes in the floor under each
     removable piece (at deep-interior points) to push pieces out.
 
-REMOVABLE PIECES (mountains.stl, valley.stl): slab = BASE_MM - FLOOR_MM
-(they rest ON the tray floor, so datum and terrain line up with the
-frame), real terrain at the G2 z-scale (relief = 5 mm at CA max elevation
-per 150 mm N-S, factor held constant across sizes — computed the way
-p15_engraved.py does), VERTICAL walls (G4: no draft — slice with
-elephant-foot compensation ON), CLEARANCE_MM per side against the cavity
+REMOVABLE PIECES (mountains.stl, valley.stl): slab = base - floor (they
+rest ON the tray floor, so datum and terrain line up with the frame),
+real terrain at the G2 z-scale (config [output].z_exaggeration x
+horizontal scale — the normalized rule), VERTICAL walls with an optional
+45-deg bottom chamfer ([print].bottom_chamfer_mm; 0 = off, slice with
+elephant-foot compensation ON), clearance per side against the cavity
 walls and against each other.
+
+All physical print knobs (clearance, base, floor, chamfer, poke-hole
+diameter, land-min) come from config [print], SHARED with the P5 final
+build (p5_final.py) so coupon-validated tuning transfers 1:1.
 
 VERSION STAMPS (version_stamp.py): every part's bottom layer carries a
 mirrored debossed tag (0.4 mm deep) -- frame: "<tag> <date> <1:scale>
@@ -99,18 +103,6 @@ RIM_MM = 8.0             # real-geography band beyond the window (~36 km)
 # NE) and the Sierra enters only as a minor east-edge strip.
 CENTER_KM = (-190.0, -25.0)
 PX_MM = 0.05             # print-space raster resolution (mm/px)
-CLEARANCE_MM = 0.15      # piece shrink per side (vs cavity and each other)
-BASE_MM = 3.0            # water surface above print bottom (ahl: 2.0-3.0,
-                         # building at 3.0 until he settles)
-FLOOR_MM = 1.2           # tray floor thickness (continuous under pieces)
-PIECE_SLAB_MM = BASE_MM - FLOOR_MM   # piece base slab: rests on the floor
-POKE_D_MM = 8.0          # poke-hole diameter (through the floor)
-POKE_MARGIN_MM = 1.5     # extra margin between hole edge and cavity wall
-LAND_MIN_MM = 0.2        # coast-body min height above datum (one layer, so
-                         # near-sea-level coast land still reads yellow)
-Z_RELIEF_150 = 5.0       # G2: CA max elevation -> 5 mm relief at ...
-Z_NS_150 = 150.0         # ... 150 mm N-S (factor constant across sizes)
-P15_PX_MM = 0.12         # p15_engraved's grid, replicated for max_elev_ca
 PAD_KM = 40.0            # D13 window pads (p2_layout.py)
 WEST_PAD_KM = 67.5
 MAX_TRI_AREA_MM2 = 0.08  # terrain triangulation density
@@ -120,7 +112,6 @@ SIMPLIFY_MM = 0.02       # polygon simplification tolerance
 EDT_SMOOTH_PX = 0.8      # gaussian on the distance field (anti-jaggies)
 OVERLAP_MM = 0.05        # internal z-overlap of the water body's 2 solids
 
-CLEAR_PX = CLEARANCE_MM / PX_MM
 PAD_PX = 12
 N_PX = int(round(WINDOW_MM / PX_MM))
 RIM_PX = int(round(RIM_MM / PX_MM))
@@ -139,9 +130,25 @@ DATA = base.DATA
 OUT = ROOT / "out"
 OUT_DIR = OUT / "p4_mini"
 
-_OUTPUT_CFG = tomllib.loads((ROOT / "config.toml").read_text())["output"]
+_CFG_ALL = tomllib.loads((ROOT / "config.toml").read_text())
+_OUTPUT_CFG = _CFG_ALL["output"]
 TOTAL_NS_MM = _OUTPUT_CFG["total_ns_mm"]
 BUILD_TAG = _OUTPUT_CFG.get("build_tag", "T0")
+Z_EXAG = _OUTPUT_CFG["z_exaggeration"]   # G2 normalized rule
+
+# Shared physical print knobs (config [print]): the coupon and the P5
+# final build MUST read the same values so coupon-validated tuning
+# transfers 1:1.
+_PRINT_CFG = _CFG_ALL["print"]
+CLEARANCE_MM = _PRINT_CFG["clearance_per_side_mm"]
+BASE_MM = _PRINT_CFG["base_mm"]           # water surface above bottom
+FLOOR_MM = _PRINT_CFG["floor_mm"]         # tray floor (D16)
+CHAMFER_MM = _PRINT_CFG["bottom_chamfer_mm"]  # 45-deg piece bottom edge
+POKE_D_MM = _PRINT_CFG["poke_hole_d_mm"]
+LAND_MIN_MM = _PRINT_CFG["land_min_mm"]
+PIECE_SLAB_MM = BASE_MM - FLOOR_MM   # piece base slab: rests on the floor
+POKE_MARGIN_MM = 1.5     # extra margin between hole edge and cavity wall
+CLEAR_PX = CLEARANCE_MM / PX_MM
 
 
 # ------------------------------------------------------- region generation
@@ -196,25 +203,11 @@ def d13_scale():
     return TOTAL_NS_MM / (ns_m * 1000.0), (slice(r0, r1), slice(c0, c1)), ns_m
 
 
-def g2_z_scale(reg, sea, dem, win):
-    """G2 vertical rule, computed the way p15_engraved.py does: resample
-    the D13 window to the 150 mm/0.12 mm print grid, take CA's max
-    elevation there, set relief = 5 mm at that peak for the 150 mm print,
-    then scale relief proportionally to this build's N-S extent
-    (TOTAL_NS_MM) — i.e. the exaggeration FACTOR is held constant."""
-    row_sl, col_sl = win
-    reg_w, dem_w, sea_w = reg[win], dem[win], sea[win]
-    out_h = int(round(Z_NS_150 / P15_PX_MM))
-    out_w = int(round(dem_w.shape[1] * out_h / dem_w.shape[0]))
-    rr = (np.arange(out_h) + 0.5) * dem_w.shape[0] / out_h - 0.5
-    cc = (np.arange(out_w) + 0.5) * dem_w.shape[1] / out_w - 0.5
-    grid = np.meshgrid(rr, cc, indexing="ij")
-    dem_p = ndimage.map_coordinates(np.where(sea_w, 0.0, dem_w).astype(
-        np.float32), grid, order=1)
-    reg_p = ndimage.map_coordinates(reg_w, grid, order=0)
-    max_elev_ca = float(dem_p[reg_p > 0].max())
-    z_per_m = (Z_RELIEF_150 / max_elev_ca) * (TOTAL_NS_MM / Z_NS_150)
-    return z_per_m, max_elev_ca
+def g2_z_per_m(s):
+    """G2 normalized rule (config [output].z_exaggeration): print z per
+    meter of true elevation = z_exaggeration x horizontal scale.  s is
+    the unitless print-mm-per-ground-mm scale; 1 m ground = 1000 mm."""
+    return Z_EXAG * s * 1000.0
 
 
 # ------------------------------------------------------------ window build
@@ -235,21 +228,17 @@ def window_rasters(reg, sea, dem, s, cx, cy):
     return regw, seaw, demw
 
 
-def fill_and_contiguity(regw, seaw, notes, s, cx, cy):
+def fill_and_contiguity(regw, seaw, notes, where_km, fill_mask=None):
     """(1) no-region land -> nearest region; (2) mountains/valley/desert =
-    one in-window component each (minor fragments -> most-bordering
-    neighbor); coast fragments are fine (they anchor to the frame)."""
-    def where_km(comp):
-        rows, cols = np.where(comp)
-        f = lambda xm, ym: (
-            (cx + (xm - WINDOW_MM / 2) / (s * 1000)) / 1000,
-            (cy + (ym - WINDOW_MM / 2) / (s * 1000)) / 1000)
-        (ax0, ay0) = f(cols.min() * PX_MM, WINDOW_MM - rows.max() * PX_MM)
-        (ax1, ay1) = f(cols.max() * PX_MM, WINDOW_MM - rows.min() * PX_MM)
-        return (f"Albers x [{ax0:.0f}, {ax1:.0f}] km, "
-                f"y [{ay0:.0f}, {ay1:.0f}] km")
-
+    one component each (minor fragments -> most-bordering neighbor);
+    coast fragments are fine (they anchor to the frame).  where_km(comp)
+    -> human-readable location string (caller-supplied: the print->Albers
+    mapping differs between the coupon and P5).  fill_mask limits step
+    (1) to those cells (P5: only CA land gets a region; other land is
+    the gray body)."""
     unassigned = (regw == 0) & ~seaw
+    if fill_mask is not None:
+        unassigned &= fill_mask
     if unassigned.any():
         _, (ri, ci) = ndimage.distance_transform_edt(
             regw == 0, return_indices=True)
@@ -416,12 +405,33 @@ def triangulate(poly, flags):
     return B["vertices"], B["triangles"]
 
 
-def solid_mesh(poly, top_fn, z_bottom=0.0, quality=True, stamp=None):
+def _cdt_down(pts, segs, holes):
+    """'p'-flag CDT of a PSLG (no Steiner points, asserted), faces
+    flipped to wind CW seen from +z (downward-facing surfaces)."""
+    A = {"vertices": np.asarray(pts, float),
+         "segments": np.asarray(segs, np.int32)}
+    if holes:
+        A["holes"] = np.asarray(holes, float)
+    B = tr.triangulate(A, "p")
+    bv, bf = B["vertices"], B["triangles"].astype(np.int64)
+    assert len(bv) == len(pts), "Steiner point appeared on a 'p' CDT"
+    a = bv[bf[:, 0]]
+    cross = ((bv[bf[:, 1]] - a)[:, 0] * (bv[bf[:, 2]] - a)[:, 1]
+             - (bv[bf[:, 1]] - a)[:, 1] * (bv[bf[:, 2]] - a)[:, 0])
+    bf[cross > 0] = bf[cross > 0][:, ::-1]
+    return bf
+
+
+def solid_mesh(poly, top_fn, z_bottom=0.0, quality=True, stamp=None,
+               chamfer=0.0):
     """Watertight solid over a (Multi)Polygon: top from top_fn(xy)->z,
     flat bottom at z_bottom, vertical walls. quality=False -> boundary-
     only CDT (flat prisms need no interior refinement). stamp: optional
     version_stamp.Stamp debossed into the bottom of the part containing
-    its rectangle (bottom rebuilt via version_stamp.stamped_bottom)."""
+    its rectangle (bottom rebuilt via version_stamp.stamped_bottom).
+    chamfer > 0: G4 45-degree bottom edge chamfer -- walls stay vertical
+    down to z_bottom + chamfer, then slope inward to the bottom outline
+    inset by `chamfer` (elephant-foot relief; [print].bottom_chamfer_mm)."""
     flags = f"pq25a{MAX_TRI_AREA_MM2:.6f}" if quality else "p"
     bodies = []
     stamped = False
@@ -438,6 +448,65 @@ def solid_mesh(poly, top_fn, z_bottom=0.0, quality=True, stamp=None):
         _, inv, cnt = np.unique(und, axis=0, return_inverse=True,
                                 return_counts=True)
         be = edges[cnt[inv] == 1]
+        inset = None
+        if chamfer > 1e-9:
+            cand = part.buffer(-chamfer)
+            if (cand.geom_type == "Polygon" and not cand.is_empty
+                    and not part.interiors and not cand.interiors):
+                inset = cand
+            else:
+                print("  !! chamfer skipped for one part (inset is not a "
+                      "simple polygon) -- vertical wall to the plate there")
+        if inset is not None:
+            # vertical wall to z_bottom+chamfer, 45-deg annulus to the
+            # inset outline at z_bottom, then the (optionally stamped)
+            # inset bottom; all boundary chains shared exactly, welded
+            bidx = np.unique(be)
+            n_b = len(bidx)
+            bmap = np.full(nv, -1, np.int64)
+            bmap[bidx] = nv + np.arange(n_b)
+            z_ch = float(z_bottom) + chamfer
+            P, Q = be[:, 0], be[:, 1]
+            walls = np.vstack([np.stack([P, bmap[P], bmap[Q]], 1),
+                               np.stack([P, bmap[Q], Q], 1)])
+            ir = np.asarray(inset.exterior.coords)[:-1]
+            keep = np.ones(len(ir), bool)
+            keep[1:] = np.linalg.norm(np.diff(ir, axis=0), axis=1) > 1e-9
+            ir = ir[keep]
+            remap = np.full(nv, -1, np.int64)
+            remap[bidx] = np.arange(n_b)
+            iids = n_b + np.arange(len(ir))
+            iseg = np.column_stack([iids, np.roll(iids, -1)])
+            hp = polylabel(inset, 0.05)
+            ann_f = _cdt_down(np.vstack([v2[bidx], ir]),
+                              np.vstack([remap[be], iseg]), [[hp.x, hp.y]])
+            ann_verts = np.column_stack([
+                np.vstack([v2[bidx], ir]),
+                np.concatenate([np.full(n_b, z_ch),
+                                np.full(len(ir), float(z_bottom))])])
+            iseg0 = np.column_stack([np.arange(len(ir)),
+                                     np.roll(np.arange(len(ir)), -1)])
+            if stamp is not None and inset.contains(stamp.rect):
+                stamped = True
+                bverts, bfaces = vstamp.stamped_bottom(inset, ir, iseg0,
+                                                       stamp, z_bottom)
+            else:
+                bfaces = _cdt_down(ir, iseg0, None)
+                bverts = np.column_stack(
+                    [ir, np.full(len(ir), float(z_bottom))])
+            blocks = [np.column_stack([v2, ztop]),
+                      np.column_stack([v2[bidx], np.full(n_b, z_ch)]),
+                      ann_verts, bverts]
+            offs = np.cumsum([0] + [len(b) for b in blocks])
+            faces = np.vstack([f, walls, ann_f + offs[2],
+                               bfaces + offs[3]])
+            verts, faces = vstamp.weld(np.vstack(blocks), faces)
+            mesh = trimesh.Trimesh(vertices=verts, faces=faces,
+                                   process=False)
+            if mesh.volume < 0:
+                mesh.invert()
+            bodies.append(mesh)
+            continue
         if stamp is not None and part.contains(stamp.rect):
             # bottom rebuilt with the deboss; walls end on the same
             # boundary vertex chain the CDT reuses, then weld
@@ -474,12 +543,13 @@ def solid_mesh(poly, top_fn, z_bottom=0.0, quality=True, stamp=None):
     return trimesh.util.concatenate(bodies) if len(bodies) > 1 else bodies[0]
 
 
-def make_terrain_fn(dem, s, cx, cy, z_per_m, z_datum, floor_mm=0.0):
-    """(x_mm, y_mm) window coords -> top z: z_datum + relief (clamped to
-    sea level; floor_mm = minimum height above datum, for the coast)."""
+def make_terrain_fn(dem, s, gx0, gy0, z_per_m, z_datum, floor_mm=0.0):
+    """(x_mm, y_mm) print coords -> top z: z_datum + relief (clamped to
+    sea level; floor_mm = minimum height above datum, for the coast).
+    (gx0, gy0) = ground (Albers m) coordinates of print (0, 0)."""
     def h(xy):
-        gx = cx + (xy[:, 0] - WINDOW_MM / 2) / (s * 1000.0)
-        gy = cy + (xy[:, 1] - WINDOW_MM / 2) / (s * 1000.0)
+        gx = gx0 + xy[:, 0] / (s * 1000.0)
+        gy = gy0 + xy[:, 1] / (s * 1000.0)
         cols = (gx - base.META["x_min"]) / base.META["res"] - 0.5
         rows = (base.META["y_max"] - gy) / base.META["res"] - 0.5
         e = ndimage.map_coordinates(dem.astype(np.float32), [rows, cols],
@@ -489,10 +559,11 @@ def make_terrain_fn(dem, s, cx, cy, z_per_m, z_datum, floor_mm=0.0):
 
 
 # ------------------------------------------------------------- poke holes
-def poke_points(nom_poly):
-    """Two deep-interior points for the floor poke-holes: pole of
-    inaccessibility of the shrunk-by-(radius+margin) cavity, then the
-    admissible point farthest from it."""
+def poke_points(nom_poly, n=2):
+    """n deep-interior points for the floor poke-holes: pole of
+    inaccessibility of the shrunk-by-(radius+margin) cavity, then
+    greedily the admissible points farthest from those already chosen
+    (max-min distance)."""
     margin = POKE_D_MM / 2 + POKE_MARGIN_MM
     allowed = nom_poly.buffer(-margin)
     while allowed.is_empty and margin > POKE_D_MM / 2:
@@ -500,19 +571,21 @@ def poke_points(nom_poly):
         allowed = nom_poly.buffer(-margin)
     parts = sorted(getattr(allowed, "geoms", [allowed]),
                    key=lambda p: p.area, reverse=True)
-    p1 = polylabel(parts[0], 0.05)
-    best, best_d = None, -1.0
+    chosen = [polylabel(parts[0], 0.05)]
+    cands = []
     for part in parts:
         x0, y0, x1, y1 = part.bounds
-        xs = np.arange(x0, x1, 1.5)
-        ys = np.arange(y0, y1, 1.5)
-        for x in xs:
-            for y in ys:
+        for x in np.arange(x0, x1, 1.5):
+            for y in np.arange(y0, y1, 1.5):
                 pt = Point(x, y)
-                if part.contains(pt) and pt.distance(p1) > best_d:
-                    best, best_d = pt, pt.distance(p1)
-    p2 = best if best is not None else p1
-    return [p1, p2]
+                if part.contains(pt):
+                    cands.append(pt)
+    while len(chosen) < n and cands:
+        best = max(cands, key=lambda p: min(p.distance(c) for c in chosen))
+        if min(best.distance(c) for c in chosen) < POKE_D_MM + 2.0:
+            break                    # too crowded for another hole
+        chosen.append(best)
+    return chosen
 
 
 # --------------------------------------------------------------- 3MF writer
@@ -775,13 +848,11 @@ def main():
     dem = np.load(DATA / "dem_ca_albers_250m.npy")
     reg, sea = load_regions(dem)
     s, d13_win, d13_ns_m = d13_scale()
-    z_per_m, max_elev_ca = g2_z_scale(reg, sea, dem, d13_win)
-    exag = z_per_m / (s * 1000.0)   # s unitless; s*1000 = print mm per m
+    z_per_m = g2_z_per_m(s)   # config [output].z_exaggeration (G2 norm.)
     print(f"final-product scale: 1:{1 / s / 1e6:.4f}M "
           f"({TOTAL_NS_MM:g} mm over the {d13_ns_m / 1000:.1f} km D13 "
-          f"window)\nG2 z-scale: CA max elev {max_elev_ca:.0f} m -> "
-          f"{max_elev_ca * z_per_m:.2f} mm relief here "
-          f"({z_per_m:.6f} mm/m, {exag:.1f}x vertical exaggeration)")
+          f"window)\nG2 z-scale: {Z_EXAG:g}x vertical exaggeration "
+          f"(config) -> {z_per_m:.6f} mm per m of elevation")
 
     cx, cy = CENTER_KM[0] * 1000.0, CENTER_KM[1] * 1000.0
     ground_km = WINDOW_MM / s / 1e6
@@ -809,7 +880,18 @@ def main():
         regw[des] = regw[ri, ci][des]
         notes.append(f"desert fringe {area:.1f} mm^2 folded into nearest "
                      "region (no desert piece in the mini)")
-    regw = fill_and_contiguity(regw, seaw, notes, s, cx, cy)
+
+    def where_km(comp):
+        rows, cols = np.where(comp)
+        f = lambda xm, ym: (
+            (cx + (xm - WINDOW_MM / 2) / (s * 1000)) / 1000,
+            (cy + (ym - WINDOW_MM / 2) / (s * 1000)) / 1000)
+        (ax0, ay0) = f(cols.min() * PX_MM, WINDOW_MM - rows.max() * PX_MM)
+        (ax1, ay1) = f(cols.max() * PX_MM, WINDOW_MM - rows.min() * PX_MM)
+        return (f"Albers x [{ax0:.0f}, {ax1:.0f}] km, "
+                f"y [{ay0:.0f}, {ay1:.0f}] km")
+
+    regw = fill_and_contiguity(regw, seaw, notes, where_km)
 
     max_e_win = float(demw[~seaw].max())
     print(f"max elev in window {max_e_win:.0f} m -> terrain top "
@@ -910,7 +992,7 @@ def main():
     for name in ("mountains", "valley"):
         piece = geo[f"{name}_piece"]
         stamps[name] = vstamp.make_stamp(
-            stamp_texts[name], piece.buffer(-0.8),
+            stamp_texts[name], piece.buffer(-(0.8 + CHAMFER_MM)),
             anchor=polylabel(piece, 0.05))
     print(f"\nversion stamps ({vstamp.DEPTH_MM:g} mm deboss, mirrored, "
           "into each bottom layer):")
@@ -936,8 +1018,11 @@ def main():
 
     # ---- meshes ---------------------------------------------------------
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    terrain_piece = make_terrain_fn(dem, s, cx, cy, z_per_m, PIECE_SLAB_MM)
-    terrain_coast = make_terrain_fn(dem, s, cx, cy, z_per_m, BASE_MM,
+    gx0 = cx - (WINDOW_MM / 2) / (s * 1000.0)   # ground coords of print
+    gy0 = cy - (WINDOW_MM / 2) / (s * 1000.0)   # (0, 0) (window origin)
+    terrain_piece = make_terrain_fn(dem, s, gx0, gy0, z_per_m,
+                                    PIECE_SLAB_MM)
+    terrain_coast = make_terrain_fn(dem, s, gx0, gy0, z_per_m, BASE_MM,
                                     floor_mm=LAND_MIN_MM)
 
     ok = True
@@ -991,11 +1076,13 @@ def main():
     print("\nremovable pieces:")
     for name in ("mountains", "valley"):
         piece = geo[f"{name}_piece"]
-        mesh = solid_mesh(piece, terrain_piece, 0.0, stamp=stamps[name])
+        mesh = solid_mesh(piece, terrain_piece, 0.0, stamp=stamps[name],
+                          chamfer=CHAMFER_MM)
         path = OUT_DIR / f"{name}.stl"
         mesh.export(path)
         ok &= report_mesh(name, mesh)
-        zok, zlev = vstamp.verify_stamp_levels(mesh, stamps[name])
+        zok, zlev = vstamp.verify_stamp_levels(mesh, stamps[name],
+                                               extra=(CHAMFER_MM,))
         ok &= zok
         print(f"    stamp z-levels {zlev} mm -> depth exactly "
               f"{vstamp.DEPTH_MM:g}: {zok}")
