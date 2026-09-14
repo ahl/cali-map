@@ -302,6 +302,17 @@ PIECES (mountains/valley/desert STLs — single color)
 FINAL 225 x 250 FRAME ONLY
 - [ ] Brim ~4 mm (the 250 mm N-S size reserved bed room for it)
 
+## Filament logistics (ahl 2026-09-14)
+
+- GREEN (valley): plentiful — the valley is the designated tuning piece
+  (cheap + reprintable), which the enclosed-zero-clearance design
+  already exploits.
+- BROWN (mountains) and YELLOW (desert): SCARCE — print those final
+  pieces ONCE, from validated parameters. Do NOT burn them on coupons:
+  test-print pieces in green/any plentiful color (fit doesn't care).
+  The mountains piece is also the biggest filament consumer of the
+  three; if a reprint risk appears, order more brown before P6.
+
 ## Print sessions
 
 - **T1 (2026-09-14, in progress):** ahl printing the mini-frame set
