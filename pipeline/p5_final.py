@@ -183,12 +183,12 @@ def main():
     notes = []
     # Census CA polygon is the land authority: regions live only on CA
     # land; every other land cell is the gray body (D15).
-    spill = (regw > 0) & ~caw & ~seaw
+    spill = (regw > 0) & ~caw & ~wet
     if spill.any():
         notes.append(f"cleared {spill.sum() * PX_MM ** 2:.1f} mm^2 of "
                      "region spill outside the Census CA polygon -> gray")
     regw[~caw] = 0
-    ca_land = caw & ~seaw
+    ca_land = caw & ~wet
 
     def to_albers_km(xm, ym):
         return ((GX0 + xm / (s * 1000.0)) / 1000.0,
@@ -201,7 +201,7 @@ def main():
         return (f"Albers x [{ax0:.0f}, {ax1:.0f}] km, "
                 f"y [{ay0:.0f}, {ay1:.0f}] km")
 
-    regw = p4.fill_and_contiguity(regw, seaw, notes, where_km,
+    regw = p4.fill_and_contiguity(regw, wet, notes, where_km,
                                   fill_mask=ca_land)
 
     # ---- polygons -------------------------------------------------------
@@ -254,7 +254,7 @@ def main():
         kr0, kr1 = int((NS_MM - ky1) / PX_MM), int((NS_MM - ky0) / PX_MM)
         kc0, kc1 = int(kx0 / PX_MM), int(kx1 / PX_MM)
         f_ca = float(caw[kr0:kr1, kc0:kc1].mean())
-        f_sea = float(seaw[kr0:kr1, kc0:kc1].mean())
+        f_sea = float(wet[kr0:kr1, kc0:kc1].mean())
         print(f"\nkey (D19): {KEY['width_mm']:g} x {KEY['height_mm']:g} mm "
               f"at {tuple(KEY['center_mm'])}, x[{kx0:.1f},{kx1:.1f}] "
               f"y[{ky0:.1f},{ky1:.1f}]\n"
@@ -352,7 +352,7 @@ def main():
         rr = np.clip(np.round((NS_MM - yi) / PX_MM - 0.5).astype(int),
                      0, ny - 1)
         cc = np.clip(np.round(xi / PX_MM - 0.5).astype(int), 0, nx - 1)
-        on_land = ~seaw[rr, cc]
+        on_land = ~wet[rr, cc]
         assert not on_land.any(), (
             f"rose ink over land: {on_land.sum()} cells, first at "
             f"({xi[on_land][0] if on_land.any() else 0:.1f}, "

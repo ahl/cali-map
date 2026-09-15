@@ -318,15 +318,25 @@ def window_rasters(reg, sea, dem, s, cx, cy):
     return regw, seaw, demw, landw
 
 
-def fill_and_contiguity(regw, seaw, notes, where_km, fill_mask=None):
+def fill_and_contiguity(regw, wet, notes, where_km, fill_mask=None):
     """(1) no-region land -> nearest region; (2) mountains/valley/desert =
     one component each (minor fragments -> most-bordering neighbor);
     coast fragments are fine (they anchor to the frame).  where_km(comp)
     -> human-readable location string (caller-supplied: the print->Albers
     mapping differs between the coupon and P5).  fill_mask limits step
     (1) to those cells (P5: only CA land gets a region; other land is
-    the gray body)."""
-    unassigned = (regw == 0) & ~seaw
+    the gray body).
+
+    `wet` must be the SAME water mask the bodies use (land_authority(),
+    not the DEM mask): the land it reclaims -- the SF Bay baylands --
+    carries no region id from build_regions, since the DEM called it
+    sea. Filling against the DEM mask leaves those cells at region 0, so
+    they never become coast and fall through to the gray body (P5: they
+    printed TAN) or to water (P4: unchanged, still teal). Filling
+    against the polygon mask hands them to their nearest region instead.
+    This only ADDS region to cells that were water; boundaries between
+    existing regions do not move."""
+    unassigned = (regw == 0) & ~wet
     if fill_mask is not None:
         unassigned &= fill_mask
     if unassigned.any():
@@ -338,8 +348,8 @@ def fill_and_contiguity(regw, seaw, notes, where_km, fill_mask=None):
     for _ in range(4):
         changed = False
         for rid in (base.VALLEY, base.DESERT, base.MOUNTAINS, base.COAST):
-            mask = (regw == rid) | (seaw if rid == base.COAST
-                                    else np.zeros_like(seaw))
+            mask = (regw == rid) | (wet if rid == base.COAST
+                                    else np.zeros_like(wet))
             lab, n = ndimage.label(mask)
             if n <= 1:
                 continue
@@ -1715,7 +1725,7 @@ def main():
         return (f"Albers x [{ax0:.0f}, {ax1:.0f}] km, "
                 f"y [{ay0:.0f}, {ay1:.0f}] km")
 
-    regw = fill_and_contiguity(regw, seaw, notes, where_km)
+    regw = fill_and_contiguity(regw, wet, notes, where_km)
 
     max_e_win = float(demw[~seaw].max())
     print(f"max elev in window {max_e_win:.0f} m -> terrain top "

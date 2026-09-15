@@ -633,6 +633,22 @@ coast/mountains line are untouched. The fuller fix (feeding the polygon
 mask into `build_regions`' `shore_dist` so the band is measured from the
 true shoreline) is deliberately NOT done.
 
+**Second half of the fix — the reclaimed land needs a REGION, not just
+land status (ahl spotted it in the P5 preview: "a new color (tan) that
+I expect should be yellow").** `build_regions` never gave those cells a
+region id, because the DEM called them sea, so they stayed at region 0.
+`fill_and_contiguity`'s "no-region land -> nearest region" pass then
+skipped them too, since it also tested against the DEM mask. With no
+region they could not be coast, and fell through to whatever came next:
+in P5 the gray body (tan), in P4 the water body (still teal -- which is
+why ahl saw P4 as unchanged, despite the Bay being its whole window).
+Fix: `fill_and_contiguity` takes the SAME water mask the bodies use, so
+the reclaimed cells get their nearest region -- coast, around the Bay.
+This only ADDS region to cells that were water; boundaries between
+existing regions do not move. Fill grew 7.8 -> 29.4 mm^2 in P5 and to
+213 mm^2 in the Bay-centred P4 window, and the gray body went from 6
+parts to 1.
+
 **Side effects, all benign:** the polygon coastline is much smoother
 than the DEM one, so the gray body dropped ~13% of its triangles
 (949k -> 826k). Re-cutting coast out of gray AFTER the 0.05 mm
