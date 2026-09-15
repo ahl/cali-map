@@ -108,29 +108,48 @@ PIECE_NAME = {"Mountain": "mountains", "Valley": "valley",
 
 
 # ---------------------------------------------------------------- layout
-def layout():
+def layout(plate_w=None, plate_h=None, pocket_d=None):
     """Row geometry: plate size, pocket centers, and the label-recess
     rectangle (with each row's text baseline position inside it, LOCAL
-    to the recess's own SW corner -- what render_label() draws)."""
+    to the recess's own SW corner -- what render_label() draws).
+
+    With no arguments the plate is sized to fit the text (the standalone
+    coupon).  Pass plate_w/plate_h to lay the same five rows out inside
+    a GIVEN rectangle instead -- that is the P5 path, where the key's
+    footprint comes from config [key] and the rows have to fit it.  The
+    row pitch then divides the available height evenly, and the caller's
+    width sets how much room the label recess gets."""
     ff = ca._font_file(FONT)
     widths = {}
     for lab in LABELS:
         g = ca._letter_poly(lab, ff, CAP_MM, ca.CHORD_TOL_MM)
         widths[lab] = g.bounds[2] - g.bounds[0]
     text_w = max(widths.values())
+    pocket_d = POCKET_D_MM if pocket_d is None else pocket_d
 
-    row_pitch = POCKET_D_MM + ROW_GAP_MM
-    plate_h = 2 * MARGIN_MM + 5 * POCKET_D_MM + 4 * ROW_GAP_MM
-    plate_w = (MARGIN_MM + POCKET_D_MM + TEXT_GAP_MM + text_w
-              + TEXT_MARGIN_MM + MARGIN_MM)
+    if plate_h is None:
+        plate_h = 2 * MARGIN_MM + 5 * pocket_d + 4 * ROW_GAP_MM
+    if plate_w is None:
+        plate_w = (MARGIN_MM + pocket_d + TEXT_GAP_MM + text_w
+                   + TEXT_MARGIN_MM + MARGIN_MM)
+    # rows fill the usable height evenly, whatever it is
+    usable_h = plate_h - 2 * MARGIN_MM
+    row_pitch = usable_h / len(LABELS)
+    assert row_pitch >= pocket_d + 0.5, (
+        f"key too short: {len(LABELS)} rows of dia {pocket_d:g} mm need "
+        f"> {len(LABELS) * (pocket_d + 0.5) + 2 * MARGIN_MM:.1f} mm, "
+        f"have {plate_h:.1f}")
 
-    pocket_x = plate_w - MARGIN_MM - POCKET_D_MM / 2
+    pocket_x = plate_w - MARGIN_MM - pocket_d / 2
     recess = {"x0": MARGIN_MM, "y0": MARGIN_MM,
-             "x1": plate_w - MARGIN_MM - POCKET_D_MM - TEXT_GAP_MM,
+             "x1": plate_w - MARGIN_MM - pocket_d - TEXT_GAP_MM,
              "y1": plate_h - MARGIN_MM}
+    assert recess["x1"] - recess["x0"] > 10.0, (
+        f"key too narrow: label recess only "
+        f"{recess['x1'] - recess['x0']:.1f} mm wide")
     rows = []
     for i, lab in enumerate(LABELS):
-        cy = plate_h - MARGIN_MM - POCKET_D_MM / 2 - i * row_pitch
+        cy = plate_h - MARGIN_MM - row_pitch / 2 - i * row_pitch
         rows.append({"label": lab, "pocket_c": (pocket_x, cy),
                      "text_y_local": cy - recess["y0"]})
     return plate_w, plate_h, rows, recess

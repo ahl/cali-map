@@ -76,9 +76,12 @@ out/p4_mini/frame.3mf: $(PIPE)/p4_bay_coupon.py $(PIPE)/version_stamp.py \
 p5: out/p5/frame.3mf
 out/p5/frame.3mf: $(PIPE)/p5_final.py $(PIPE)/p4_bay_coupon.py \
 		$(PIPE)/version_stamp.py $(PIPE)/mesh_common.py \
-		$(PIPE)/compass_art.py $(COMMON) $(DEM) \
+		$(PIPE)/compass_art.py $(PIPE)/key_panel.py $(COMMON) $(DEM) \
 		data/p2_land.npz assets/compass.svg config.toml
 	$(UV) $(PIPE)/p5_final.py
+# ride-alongs of the p5 stage (see the make 3.81 note at the top)
+out/p5/key.stl out/p5/key_label.pdf: out/p5/frame.3mf
+	@touch $@
 
 # ---- Rose-only test coupon: just the compass-rose corner (water disk +
 # ---- raised ink), to test-print a rose design tweak without the whole

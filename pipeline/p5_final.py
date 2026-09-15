@@ -63,7 +63,17 @@ Machinery is imported from p4_bay_coupon (kept runnable itself): region
 cache, D13 scale, polygon extraction, solid meshing (incl. stamps +
 chamfer), poke-holes, 3MF writer, preview helpers.
 
+THE REGION KEY (D19, out/p5/key.stl + out/p5/key_label.pdf): a plate
+that press-fits into its own rectangular recess in the frame over
+Nevada, listing the five regions with a colour-swatch plug beside each.
+Placement and size come from config [key]; the HEIGHT does not -- the
+build scans a band around the key's perimeter and sets the top flush
+with the tallest adjacent terrain, so moving or resizing the key
+re-heights it automatically.  The bottom sits on the tray floor at the
+same z as every piece.  Permanent press fit: no ribs, no poke-hole.
+
 Outputs: out/p5/frame.3mf, out/p5/{mountains,valley,desert}.stl,
+out/p5/key.stl, out/p5/key_label.pdf,
 out/p5_preview.png (assembled / exploded / bottom-with-stamps / rose).
 """
 
@@ -80,6 +90,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import p1_regions as base
 import p4_bay_coupon as p4
 import compass_art
+import key_panel
 import version_stamp as vstamp
 
 # ------------------------------------------------------------------ params
@@ -93,6 +104,33 @@ OUT = p4.OUT
 OUT_DIR = OUT / "p5"
 CFG = p4._CFG_ALL
 COMPASS = CFG.get("compass", {"enabled": False})
+KEY = CFG.get("key", {"enabled": False})
+
+
+def key_rect():
+    """The key's NOMINAL footprint (the frame recess) from config [key]."""
+    cx, cy = KEY["center_mm"]
+    w, h = KEY["width_mm"], KEY["height_mm"]
+    return box(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2)
+
+
+def key_top_relief_mm(rect, terrain_relief, search_mm, step=0.4):
+    """Tallest terrain ADJACENT to `rect` (mm above datum): sample a band
+    `search_mm` wide around its perimeter and take the max relief.  This
+    is what sets the key's height -- ahl 2026-09-15 wants the plate flush
+    with the highest peak next to it, re-scanned whenever the key moves
+    or resizes, so no height is ever configured by hand.  `terrain_relief`
+    is p4.make_terrain_fn with z_datum=0, i.e. it returns relief in mm."""
+    band = rect.buffer(search_mm).difference(rect)
+    minx, miny, maxx, maxy = band.bounds
+    xs = np.arange(minx, maxx + 1e-9, step)
+    ys = np.arange(miny, maxy + 1e-9, step)
+    X, Y = np.meshgrid(xs, ys)
+    pts = np.column_stack([X.ravel(), Y.ravel()])
+    from shapely import contains_xy
+    pts = pts[contains_xy(band, pts[:, 0], pts[:, 1])]
+    assert len(pts), "key perimeter band sampled no points"
+    return float(terrain_relief(pts).max()), len(pts)
 
 PIECES = (("mountains", base.MOUNTAINS, "MTN"),
           ("valley", base.VALLEY, "VAL"),
@@ -191,6 +229,31 @@ def main():
     # water body; where cavities touch, the recess is one basin anyway
     cav_mask = np.isin(regw, [rid for _, rid, _ in PIECES])
     cavities = p4.mask_polygon(cav_mask, 0.0, clip=footprint)
+    # the KEY is a recess in the frame exactly like a piece cavity, so
+    # folding it into `cavities` here gets everything downstream for
+    # free: it becomes a hole in the upper water solid (a recess down to
+    # the tray floor), it is cut out of the gray body, and it is
+    # excluded from the version-stamp's allowed area
+    if KEY.get("enabled", False):
+        geo["key_nom"] = key_rect()
+        kx0, ky0, kx1, ky1 = geo["key_nom"].bounds
+        assert footprint.contains(geo["key_nom"]), "key runs off the frame"
+        assert not geo["key_nom"].intersects(cavities), \
+            "key overlaps a piece cavity"
+        # it is meant to sit on the gray non-CA land (Nevada): check the
+        # rasters rather than trusting the configured coordinates
+        kr0, kr1 = int((NS_MM - ky1) / PX_MM), int((NS_MM - ky0) / PX_MM)
+        kc0, kc1 = int(kx0 / PX_MM), int(kx1 / PX_MM)
+        f_ca = float(caw[kr0:kr1, kc0:kc1].mean())
+        f_sea = float(seaw[kr0:kr1, kc0:kc1].mean())
+        print(f"\nkey (D19): {KEY['width_mm']:g} x {KEY['height_mm']:g} mm "
+              f"at {tuple(KEY['center_mm'])}, x[{kx0:.1f},{kx1:.1f}] "
+              f"y[{ky0:.1f},{ky1:.1f}]\n"
+              f"  footing: {f_ca * 100:.1f}% California, {f_sea * 100:.1f}% "
+              f"water (want 0/0 -- it belongs on gray non-CA land)")
+        assert f_ca < 1e-6 and f_sea < 1e-6, \
+            "key does not sit wholly on gray non-CA land"
+        cavities = cavities.union(geo["key_nom"])
     uw = footprint.difference(cavities)
     uparts = p4._parts(uw, 0.5)
     n_uw = len(list(getattr(uw, "geoms", [uw])))
@@ -479,6 +542,56 @@ def main():
               f"+{p4.RIB_INTERFERENCE_MM:g} mm into the mating face: {site_str}"
               f"  -> {path}")
 
+    # ---- the region KEY: a plate that press-fits into its recess ------
+    key_rows = None
+    if KEY.get("enabled", False):
+        rect = geo["key_nom"]
+        relief_fn = p4.make_terrain_fn(dem, s, GX0, GY0, z_per_m, 0.0)
+        peak_mm, n_samp = key_top_relief_mm(
+            rect, relief_fn, KEY.get("adjacent_search_mm", 10.0))
+        top_local = p4.PIECE_SLAB_MM + peak_mm
+        # PERMANENT press fit (ahl 2026-09-15): no ribs, no poke-hole --
+        # the plate is grown by interference_mm total over the recess
+        inter = KEY.get("interference_mm", 0.0)
+        kx0, ky0, kx1, ky1 = rect.bounds
+        pw = (kx1 - kx0) + inter
+        ph = (ky1 - ky0) + inter
+        pl_w, pl_h, key_rows, lrec = key_panel.layout(
+            plate_w=pw, plate_h=ph, pocket_d=KEY.get("pocket_d_mm", 7.0))
+        recesses = [{"points": key_panel.circle_ring(
+                        *r["pocket_c"], KEY.get("pocket_d_mm", 7.0) / 2),
+                     "depth": KEY.get("pocket_depth_mm", 1.4)}
+                    for r in key_rows]
+        recesses.append({"points": key_panel.rect_ring(
+                            lrec["x0"], lrec["y0"], lrec["x1"], lrec["y1"]),
+                         "depth": KEY.get("label_recess_mm", 0.2)})
+        key_mesh = key_panel.build_plate(pl_w, pl_h, recesses, top_local)
+        key_mesh.apply_translation([kx0 - inter / 2, ky0 - inter / 2, 0.0])
+        kpath = OUT_DIR / "key.stl"
+        key_mesh.export(kpath)
+        ok &= p4.report_mesh("key", key_mesh)
+        print(f"    top scanned from terrain: tallest of {n_samp} samples "
+              f"in a {KEY.get('adjacent_search_mm', 10.0):g} mm band around "
+              f"the perimeter = {peak_mm:.2f} mm of relief "
+              f"({peak_mm / z_per_m:.0f} m)\n"
+              f"    -> plate {pl_w:.2f} x {ph:.2f} x {top_local:.2f} mm "
+              f"(bottom on the tray floor like every piece; top "
+              f"{p4.FLOOR_MM + top_local:.2f} mm above the bed = datum "
+              f"{p4.BASE_MM:g} + {peak_mm:.2f})\n"
+              f"    press fit: recess {kx1 - kx0:g} x {ky1 - ky0:g}, plate "
+              f"+{inter:g} mm total ({inter / 2:g}/side) -- no ribs, no "
+              f"poke-hole, glue optional\n"
+              f"    {len(key_rows)} swatch pockets dia "
+              f"{KEY.get('pocket_d_mm', 7.0):g} x "
+              f"{KEY.get('pocket_depth_mm', 1.4):g} deep; label recess "
+              f"{lrec['x1'] - lrec['x0']:.1f} x {lrec['y1'] - lrec['y0']:.1f}"
+              f" x {KEY.get('label_recess_mm', 0.2):g} deep -> {kpath}")
+        key_panel.OUT_DIR = OUT_DIR       # write the label next to key.stl
+        key_panel.render_label(lrec, key_rows)
+        print("    NOTE plug dimensions are NOT fixed yet (ahl 2026-09-15: "
+              "decide after test-fitting out/key_panel/pocket_coupon.stl); "
+              "the pockets are cut, the plugs are a later step.")
+
     print("\npiece-piece seam gaps (only nominally-adjacent pairs):")
     pnames = [n for n, _, _ in PIECES]
     for i in range(len(pnames)):
@@ -517,7 +630,7 @@ def main():
             p = ring.interpolate(d)
             rib_pts.append({"name": name, "kind": kind, "x": p.x, "y": p.y})
     render_preview(geo, s, holes, stamps, ribbed_geo, rib_pt, rose, rose_c,
-                  EW_MM, rib_pts)
+                  EW_MM, rib_pts, key_rows)
     print(f"\nall bodies/pieces watertight + checks: {ok}")
     if not ok:
         sys.exit(1)
@@ -530,7 +643,7 @@ def main():
 
 # ----------------------------------------------------------------- preview
 def render_preview(geo, s, holes, stamps, ribbed, rib_pt, rose, rose_c,
-                   ew_mm, rib_pts):
+                   ew_mm, rib_pts, key_rows=None):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -570,6 +683,27 @@ def render_preview(geo, s, holes, stamps, ribbed, rib_pt, rose, rose_c,
                 ax.annotate(name, (cc.x, cc.y), color="black", fontsize=9,
                             ha="center", weight="bold", zorder=6)
             p4.add_poly(ax, g, base.COLORS[rid], z=3)
+        # the region KEY: its recess, and the plate sitting in it (shown
+        # lifted out with the pieces in the exploded panel)
+        if "key_nom" in geo:
+            k = geo["key_nom"]
+            if pieces_exploded:
+                p4.add_poly(ax, k, tuple(c * 0.82 for c in p4.WATER_RGB),
+                            z=2)
+                k = affinity.translate(k, 0.0, 45.0)
+            p4.add_poly(ax, k, (0.97, 0.97, 0.95), ec="black", lw=0.5, z=3)
+            for r in key_rows or []:
+                px, py = r["pocket_c"]
+                px += geo["key_nom"].bounds[0]
+                py += geo["key_nom"].bounds[1]
+                if pieces_exploded:
+                    py += 45.0
+                ax.add_patch(plt.Circle(
+                    (px, py), KEY.get("pocket_d_mm", 7.0) / 2,
+                    facecolor="#b9b9b9", edgecolor="black", lw=0.3, zorder=4))
+            kc = k.centroid
+            ax.annotate("key", (kc.x, kc.y + 14), color="black", fontsize=8,
+                        ha="center", weight="bold", zorder=6)
 
     # crush-rib sites in RED -- "pair" (piece-piece) ribs as a triangle
     # (the ones implicated in the T2 too-tight finding), "frame" ribs as

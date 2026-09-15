@@ -202,6 +202,48 @@ p5_mountains = [[54.2, 122.6], [48.2, 240.3], [132.0, 111.2], [169.1, 10.4]]
 p5_valley = [[90.0, 98.1], [53.7, 169.2], [75.0, 165.1], [117.3, 89.6]]
 p5_desert = [[179.5, 27.9], [135.4, 76.4], [124.2, 142.4], [209.5, 62.4]]
 
+[key]
+# Region-colour KEY, inset into the P5 frame over Nevada (ahl 2026-09-15).
+# A rectangular recess in the frame, like a piece cavity, holding a plate
+# that lists the five regions with a colour-swatch plug beside each.
+#
+# PLACEMENT + SIZE are the knobs; everything else derives. Move or resize
+# the key and `make p5` re-scans automatically: the key's TOP HEIGHT is
+# not configured at all, it is measured from the terrain -- see
+# adjacent_search_mm.
+enabled = true
+# Centre in P5 print mm (x east, y north; frame is 225.1 x 250.0).
+# Picked 2026-09-15 by scanning the frame for the largest clear run of
+# gray non-CA land: the open block is 106.5 x 95.5 mm at x[114.5, 221]
+# y[150.5, 246], and this sits in it at lon/lat (-116.2, 40.3) --
+# north-central Nevada, 0% California, 0% water, 14.3 mm clear of the CA
+# border, 23+ mm from the print edges.
+center_mm = [168.0, 198.0]
+width_mm = 56.0
+height_mm = 57.0
+# Top height = flush with the tallest terrain ADJACENT to the key: the
+# build scans a band this wide around the key's perimeter, takes the max
+# elevation, and sets the top to datum + that relief. Re-scanned on every
+# build, so moving the key re-heights it. (At the current spot: peak
+# 3685 m -> top 10.55 mm above the bed.) The bottom always sits on the
+# tray floor at the same z as the other pieces.
+adjacent_search_mm = 10.0
+# PERMANENT press fit (ahl 2026-09-15): no poke-hole under it, no crush
+# ribs -- the key is a legend that never needs to come out, glue
+# optional. The plate is grown by this much TOTAL over the recess
+# (half per side) for the interference. Drop to 0 (or negative, which
+# becomes clearance) if it will not seat.
+interference_mm = 0.05
+# Swatch pockets. Plug dimensions are deliberately NOT fixed here yet --
+# ahl 2026-09-15: decide them after test-fitting out/key_panel/
+# pocket_coupon.stl + insert_sample.stl. The pockets themselves are cut
+# now so the key geometry is final.
+pocket_d_mm = 7.0
+pocket_depth_mm = 1.4
+# Shallow recess for the 2D-PRINTED label (see key_panel.py: FDM at this
+# text size fights the nozzle, so the labels are printed on paper/vinyl).
+label_recess_mm = 0.2
+
 [compass]
 # D17 compass rose — ahl's Illustrator artwork (assets/compass.svg;
 # source compass.ai at repo root; symmetry verified <=0.5% under the
