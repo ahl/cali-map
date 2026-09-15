@@ -689,7 +689,8 @@ def manual_rib_sites(nominal, other_nominal, points, label=""):
 
 
 def add_crush_ribs(piece, nominal, other_nominal, n_ribs, radius_mm,
-                   interference_mm, avoid_points=(), manual_points=None):
+                   interference_mm, avoid_points=(), manual_points=None,
+                   neighbor_pieces=()):
     """Retention crush-ribs (ahl 2026-09-14: pieces must stay seated when
     the tray is tipped; release is via the finger poke-holes, not a
     snug piece fit) -- vertical half-cylinder ribs standing proud of
@@ -698,20 +699,26 @@ def add_crush_ribs(piece, nominal, other_nominal, n_ribs, radius_mm,
     hand-picked (x, y) list from config [print.ribs] -- the normal path),
     else n_ribs sites from the automatic choose_rib_sites heuristic.
 
-    Crest placement is independent of which clearance applied locally:
-    the offset wall sits `clearance_local` inside nominal; a rib
-    protruding (clearance_local + interference_mm) from THAT wall lands
-    at nominal + interference_mm, always -- so every rib is simply a
-    disk of radius `radius_mm` centered (interference_mm - radius_mm)
-    outward from a nominal-boundary sample point (i.e. INSET into the
-    piece by radius_mm - interference_mm when radius_mm > interference_mm,
-    the normal case) and unioned onto `piece`: only the cap beyond
-    piece's own wall becomes new material, a radius_mm-curvature bump
-    whose crest reaches exactly interference_mm past nominal (0 = no
-    ribs). `interference_mm` may be 0 for an enclosed piece's OWN walls
-    -- see ENCLOSED_ZERO_CLEARANCE -- ahl's call was to keep ribs on
-    every piece regardless (the valley still gets ribs against its
-    enclosing neighbor), so this is called uniformly per piece.
+    `interference_mm` is the OVERLAP WITH THE MATING FACE (ahl
+    2026-09-15) -- how deep the rib presses into whatever it bumps
+    against -- not a fixed offset from nominal.  That distinction is the
+    whole point: the mating face is only AT nominal for a frame wall
+    (the cavity is cut at nominal).  A sibling PIECE has been clearance-
+    cut too, so its face has retreated `clearance_neighbor` past nominal,
+    and a rib measured from nominal would fall short by exactly that
+    much -- which is how T3's pair ribs silently ended up with 0.04 mm
+    of air between them and the valley.  So each rib measures the real
+    distance from its nominal point to the actual mating surface
+    (`neighbor_pieces`, the AS-CUT sibling polygons; 0 for a frame wall,
+    since the cavity is at nominal) and lands its crest that far plus
+    `interference_mm` -- a true `interference_mm` crush at both
+    interface types, self-correcting when any clearance changes.
+
+    Mechanically each rib is a disk of radius `radius_mm` centred
+    (crest_offset - radius_mm) outward from the nominal sample point and
+    unioned onto `piece`, so only the cap beyond piece's own wall becomes
+    new material: a radius_mm-curvature bump whose crest reaches exactly
+    crest_offset past nominal (interference 0 = no ribs).
 
     Returns (ribbed_piece, sites) where sites is choose_rib_sites' list
     of (arc_length_d, kind), for reporting/preview."""
@@ -728,12 +735,19 @@ def add_crush_ribs(piece, nominal, other_nominal, n_ribs, radius_mm,
         sites = choose_rib_sites(nominal, other_nominal, n_ribs,
                                  avoid_points=avoid_points)
     bumps = []
-    for d, _kind in sites:
+    for d, kind in sites:
         p = ring.interpolate(d)
         p0 = ring.interpolate((d - eps) % length)
         p1 = ring.interpolate((d + eps) % length)
         nx, ny = _outward_normal(nominal, p, (p1.x - p0.x, p1.y - p0.y))
-        k = interference_mm - radius_mm
+        # how far past nominal the MATING face actually sits: 0 against a
+        # frame wall (cavity cut at nominal), else the neighbour's own
+        # clearance, measured off the as-cut sibling geometry
+        face = 0.0
+        if kind == "pair" and neighbor_pieces:
+            face = min(g.distance(p) for g in neighbor_pieces
+                       if not g.is_empty)
+        k = face + interference_mm - radius_mm
         bumps.append(Point(p.x + k * nx, p.y + k * ny)
                     .buffer(radius_mm, quad_segs=16))
     ribbed = unary_union([piece] + bumps).buffer(0)
@@ -1334,13 +1348,22 @@ def add_poly(ax, geom, color, ec="none", lw=0.0, alpha=1.0, z=1):
 MARKUP_PX_PER_MM = 12.0   # out/p4_rib_markup.png resolution
 
 
-def render_rib_markup(geo):
-    """Clean single-panel canvas for ahl's rib MARKUP loop (2026-09-15):
-    the assembled pieces + frame with a labelled 10 mm grid and NO rib
-    markers, so he can drop a dot wherever he wants a rib and hand it
-    back.  Marks are approximate -- each one snaps to the nearest point
-    on that piece's perimeter (manual_rib_sites), so "near the edge" is
-    precise enough.
+MARK_RGB = {"mountains": (116 / 255, 167 / 255, 254 / 255),   # blue
+            "valley": (255 / 255, 134 / 255, 71 / 255)}       # orange
+
+
+def render_rib_markup(geo, sites_mm=None):
+    """Single-panel canvas for ahl's rib MARKUP loop (2026-09-15): the
+    assembled pieces + frame with a labelled 10 mm grid, so he can drop
+    a dot wherever he wants a rib and hand the file back.  Marks are
+    APPROXIMATE -- each one snaps to the nearest point on that piece's
+    perimeter (manual_rib_sites), so "near the edge" is precise enough.
+
+    ROUND-TRIPS: whatever is currently configured in [print.ribs] is
+    drawn back on in the SAME colours ahl marks with (blue = mountains,
+    orange = valley, MARK_RGB), so regenerating this file reproduces his
+    marks instead of wiping them -- the build overwrites it every run.
+    To change placement: move/erase/add dots and hand it back.
 
     The mm <-> pixel mapping is EXACT and documented in the title, so a
     mark can be inverted without guesswork: the axes fill the figure
@@ -1395,15 +1418,22 @@ def render_rib_markup(geo):
                     bbox=dict(boxstyle="round,pad=0.15", fc="white",
                               ec="none", alpha=0.75))
 
+    n_drawn = 0
+    for pname, pts in (sites_mm or {}).items():
+        for x, y in pts:
+            ax.plot(x, y, marker="o", color=MARK_RGB[pname], ms=7,
+                    markeredgecolor="none", zorder=8)
+            n_drawn += 1
+
     path = OUT / "p4_rib_markup.png"
     fig.savefig(path, dpi=100, facecolor="white")
     plt.close(fig)
     w_px = int(round(span * MARKUP_PX_PER_MM))
     print(f"\nrib markup canvas -> {path}  ({w_px} x {w_px} px, "
           f"{MARKUP_PX_PER_MM:g} px/mm, x/y from {lo:g} to {hi:g} mm; "
-          "10 mm grid)\n  mark where you want ribs (a dot near the "
-          "perimeter is enough -- it snaps), then hand the file back; "
-          "red x = thin neck, avoid")
+          f"10 mm grid)\n  {n_drawn} configured rib(s) drawn back on "
+          "(blue = mountains, orange = valley) -- move/erase/add dots and "
+          "hand the file back; red x = thin neck, avoid")
 
 
 def render_preview(geo, s, tj, holes, stamps, ribbed, rib_pt, rose=None,
@@ -1511,7 +1541,7 @@ def render_preview(geo, s, tj, holes, stamps, ribbed, rib_pt, rose=None,
     ax.set_xlim(rib_pt.x - 6, rib_pt.x + 6)
     ax.set_ylim(rib_pt.y - 6, rib_pt.y + 6)
     ax.set_title(f"crush-rib close-up (12 mm): r{RIB_RADIUS_MM:g} mm, "
-                 f"+{RIB_INTERFERENCE_MM:g} mm past nominal (dashed), "
+                 f"+{RIB_INTERFERENCE_MM:g} mm into the mating face (dashed = nominal), "
                  f"{RIBS_PER_PIECE:d} ribs/piece", fontsize=9)
     ax.set_aspect("equal")
     ax.set_xticks([]), ax.set_yticks([])
@@ -1969,7 +1999,8 @@ def main():
             piece, geo[f"{name}_nom"], geo[f"{other_name}_nom"],
             RIBS_PER_PIECE, RIB_RADIUS_MM, RIB_INTERFERENCE_MM,
             avoid_points=pair_pts_so_far,
-            manual_points=RIB_SITES_CFG.get(f"p4_{name}"))
+            manual_points=RIB_SITES_CFG.get(f"p4_{name}"),
+            neighbor_pieces=[geo[f"{other_name}_piece"]])
         ribbed_geo[name] = ribbed
         rib_sites[name] = sites
         ring = geo[f"{name}_nom"].exterior
@@ -2003,13 +2034,45 @@ def main():
               f"{CLEARANCE_MM:g}); vs other piece {gap_piece:.3f} mm "
               f"(nominal {nom_pp:g})\n"
               f"    crush ribs: {len(sites)} x r{RIB_RADIUS_MM:g} mm "
-              f"crest +{RIB_INTERFERENCE_MM:g} mm past nominal: "
+              f"crest +{RIB_INTERFERENCE_MM:g} mm into the mating face: "
               f"{site_str}  -> {path}")
+
+    # Do the pair ribs actually ENGAGE?  At a piece-frame wall the frame
+    # cavity sits at nominal and a rib (crest at nominal + interference)
+    # bites by exactly interference_mm.  At a piece-PIECE seam BOTH
+    # pieces are cut back by their own clearance, so a lone rib crest
+    # only reaches interference_mm past the shared line while the
+    # neighbour's wall is its own clearance behind it -- the rib may not
+    # touch at all.  Compare unribbed vs ribbed gap to see it.
+    raw_gap = geo["mountains_piece"].distance(geo["valley_piece"])
+    rib_gap = ribbed_geo["mountains"].distance(ribbed_geo["valley"])
+    nom_pp = pair_gap_nominal_mm("mountains", "valley")
+    print(f"\npair-rib engagement: mountains/valley gap {raw_gap:.3f} mm "
+          f"unribbed -> {rib_gap:.3f} mm ribbed (nominal {nom_pp:g})")
+    if rib_gap > 1e-6:
+        print(f"  ribs DO NOT TOUCH -- {rib_gap:.3f} mm of air left, so "
+              "they add no piece-piece retention at this clearance")
+    else:
+        # depth of the actual material overlap = how much crush the
+        # print has to absorb at each engaged pair rib
+        for a, b in (("mountains", "valley"), ("valley", "mountains")):
+            nb_edge = geo[f"{b}_piece"].boundary   # incl. holes
+            ov = ribbed_geo[a].intersection(geo[f"{b}_piece"])
+            for g in _parts(ov, min_area=1e-9):
+                # deepest penetration into the neighbour = the overlap
+                # vertex furthest from the neighbour's own wall
+                depth = max(nb_edge.distance(Point(c))
+                            for c in g.exterior.coords)
+                cxy = g.representative_point()
+                print(f"  {a} rib bites {b} {depth:.3f} mm deep "
+                      f"({g.area:.4f} mm^2) at ({cxy.x:.1f}, {cxy.y:.1f})"
+                      f" -- target {RIB_INTERFERENCE_MM:g} mm")
 
     for n in notes:
         print(f"  note: {n}")
 
-    render_rib_markup(geo)
+    render_rib_markup(geo, {n: RIB_SITES_CFG.get(f"p4_{n}") or []
+                            for n in ("mountains", "valley")})
 
     tj = triple_junction_mm(regw)
     mnom = geo["mountains_nom"].exterior
@@ -2022,11 +2085,20 @@ def main():
         for d, kind in rib_sites[name]:
             p = ring.interpolate(d)
             rib_pts.append({"name": name, "kind": kind, "x": p.x, "y": p.y})
+    # nominal vs AS-CUT: the piece is offset inward by its local
+    # clearance on BOTH flanks of a thin neck, so the printed neck is
+    # narrower than the nominal one -- that as-cut number is the
+    # fragility that matters (min_land_width's opening test writes a
+    # spur off as a "corner tip" and misses it)
     print("\nthin-neck check (debug, MIN_RIB_WIDTH_MM = "
-          f"{MIN_RIB_WIDTH_MM:g} mm):")
+          f"{MIN_RIB_WIDTH_MM:g} mm; nominal -> as-cut):")
     for name in ("mountains", "valley"):
-        for x, y, w in thin_spots(geo[f"{name}_nom"]):
-            print(f"    {name:9s} ({x:.1f}, {y:.1f}) width {w:.2f} mm")
+        cut = thin_spots(geo[f"{name}_piece"], threshold_mm=2.5)
+        for x, y, w in thin_spots(geo[f"{name}_nom"], threshold_mm=2.5):
+            near = [c for c in cut if np.hypot(c[0] - x, c[1] - y) < 3.0]
+            cw = f"{min(c[2] for c in near):.2f}" if near else "  -  "
+            print(f"    {name:9s} ({x:5.1f}, {y:5.1f})  nominal {w:.2f} "
+                  f"-> as-cut {cw} mm")
     render_preview(geo, s, tj, holes, stamps, ribbed_geo, rib_pt, rose,
                   rose_c, rib_pts)
     print(f"\nall bodies/pieces watertight: {ok}")

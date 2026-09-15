@@ -187,14 +187,17 @@ land_min_mm = 0.2             # min land height above datum (color opacity)
 # An EMPTY list means no ribs at all on that piece (vs. a DELETED key,
 # which falls back to the automatic placer).
 #
-# P4: cleared 2026-09-15 so out/p4_rib_markup.png renders with no rib
-# markers -- ahl is marking up that canvas by hand; his dots come back
-# here. The placer's last automatic picks, if ever wanted as a starting
-# point again, were:
+# P4: ahl's HAND-MARKED sites, extracted 2026-09-15 from his annotated
+# out/p4_rib_markup.png (blue dots = mountains, orange = valley; exact
+# mark colors (116,167,254) / (255,134,71), each blob 57-67 px, centers
+# converted at 12 px/mm with origin -8 mm). Valley deliberately gets 6,
+# mountains 4. The placer's last automatic picks, if ever wanted as a
+# starting point again, were:
 #   p4_mountains = [[90.5, 0.0], [56.0, 41.1], [22.8, 92.0], [52.4, 56.9]]
 #   p4_valley    = [[85.4, 14.2], [52.0, 100.0], [89.0, 100.0], [100.0, 73.9]]
-p4_mountains = []
-p4_valley = []
+p4_mountains = [[33.2, 100.3], [28.1, 75.5], [58.0, 53.1], [80.6, 0.2]]
+p4_valley = [[55.7, 100.4], [87.5, 100.3], [100.0, 74.6], [99.9, 40.0],
+             [75.2, 28.3], [96.1, 0.3]]
 p5_mountains = [[54.2, 122.6], [48.2, 240.3], [132.0, 111.2], [169.1, 10.4]]
 p5_valley = [[90.0, 98.1], [53.7, 169.2], [75.0, 165.1], [117.3, 89.6]]
 p5_desert = [[179.5, 27.9], [135.4, 76.4], [124.2, 142.4], [209.5, 62.4]]

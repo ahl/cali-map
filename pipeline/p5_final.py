@@ -73,7 +73,7 @@ from pathlib import Path
 import numpy as np
 import trimesh
 from scipy import ndimage
-from shapely.geometry import MultiPolygon, box
+from shapely.geometry import MultiPolygon, Point, box
 from shapely.ops import polylabel, unary_union
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -445,7 +445,9 @@ def main():
         ribbed, sites = p4.add_crush_ribs(
             piece, geo[f"{name}_nom"], other_nom, p4.RIBS_PER_PIECE,
             p4.RIB_RADIUS_MM, p4.RIB_INTERFERENCE_MM,
-            manual_points=p4.RIB_SITES_CFG.get(f"p5_{name}"))
+            manual_points=p4.RIB_SITES_CFG.get(f"p5_{name}"),
+            neighbor_pieces=[geo[f"{o}_piece"] for o, _, _ in PIECES
+                             if o != name])
         ribbed_geo[name] = ribbed
         rib_sites[name] = sites
         mesh = p4.solid_mesh(ribbed, terrain_piece, 0.0,
@@ -474,7 +476,7 @@ def main():
               f"(n={nfar}) min {fmin:.3f} median {fmed:.3f} mm "
               f"(nom {p4.CLEARANCE_MM:g}); crush ribs: "
               f"{len(sites)} x r{p4.RIB_RADIUS_MM:g} mm crest "
-              f"+{p4.RIB_INTERFERENCE_MM:g} mm past nominal: {site_str}"
+              f"+{p4.RIB_INTERFERENCE_MM:g} mm into the mating face: {site_str}"
               f"  -> {path}")
 
     print("\npiece-piece seam gaps (only nominally-adjacent pairs):")
@@ -486,7 +488,22 @@ def main():
                 continue                        # not a shared seam
             gap_ab = geo[f"{a}_piece"].distance(geo[f"{b}_piece"])
             nom_ab = p4.pair_gap_nominal_mm(a, b)
-            print(f"    {a}-{b}: {gap_ab:.3f} mm (nom {nom_ab:g})")
+            rib_ab = ribbed_geo[a].distance(ribbed_geo[b])
+            print(f"    {a}-{b}: {gap_ab:.3f} mm (nom {nom_ab:g}), "
+                  f"{rib_ab:.3f} mm with ribs")
+            # ribs are specified as OVERLAP with the mating face, so each
+            # engaged pair rib should bite RIB_INTERFERENCE_MM -- P5
+            # valley touches no frame at all, so these are its ONLY grip
+            for x, y in ((a, b), (b, a)):
+                edge = geo[f"{y}_piece"].boundary   # incl. holes
+                for g in p4._parts(ribbed_geo[x].intersection(
+                        geo[f"{y}_piece"]), min_area=1e-9):
+                    depth = max(edge.distance(Point(c))
+                                for c in g.exterior.coords)
+                    pt = g.representative_point()
+                    print(f"      {x} rib bites {y} {depth:.3f} mm deep at "
+                          f"({pt.x:.1f}, {pt.y:.1f}) -- target "
+                          f"{p4.RIB_INTERFERENCE_MM:g} mm")
 
     for n in notes:
         print(f"  note: {n}")
@@ -635,7 +652,7 @@ def render_preview(geo, s, holes, stamps, ribbed, rib_pt, rose, rose_c,
     ax.set_xlim(rib_pt.x - 7, rib_pt.x + 7)
     ax.set_ylim(rib_pt.y - 7, rib_pt.y + 7)
     ax.set_title(f"crush-rib close-up (14 mm): r{p4.RIB_RADIUS_MM:g} mm, "
-                 f"+{p4.RIB_INTERFERENCE_MM:g} mm past nominal (dashed), "
+                 f"+{p4.RIB_INTERFERENCE_MM:g} mm into the mating face (dashed = nominal), "
                  f"{p4.RIBS_PER_PIECE:d} ribs/piece", fontsize=9)
 
     # 5: rose close-up
