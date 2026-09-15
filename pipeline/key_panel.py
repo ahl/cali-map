@@ -13,31 +13,38 @@
 #   "py-lib3mf",
 # ]
 # ///
-"""Region-color key panel (ahl 2026-09-14/15) -- a rectangular plate
-that sits in its own cavity in the P5 frame (placement TBD, "somewhere
-over Nevada"; per ahl this step is JUST the standalone piece -- the
-frame cavity subtraction is a follow-on step).
+"""Region-colour key: shared geometry LIBRARY (ahl 2026-09-14/15).
 
-v2 (ahl 2026-09-15): 3D-printed raised text at 3.5 mm cap crowded even
-after narrowing the glyphs (fighting a 0.4 mm nozzle's resolution, not
-a font problem) -- ahl's call: print the labels on a real 2D printer
-instead. So the plate is now SINGLE-COLOR (white, no black text pass):
-five rows in ahl's order (Pacific Ocean, Coastal, Mountain, Valley,
-Desert), each with
+This module builds nothing on its own.  The key is part of the final
+assembly, so it is built by p5_final.py as D19 -- a plate press-fitted
+into its own recess in the P5 frame over Nevada.  The standalone
+key-panel build that used to live here is GONE (ahl 2026-09-15: "get rid
+of the stand-alone key stuff"); what survives is the geometry these
+callers share:
+
+  p5_final.py           layout(), build_plate(), circle_ring(),
+                        rect_ring(), render_label()  -> the real key
+  key_pocket_coupon.py  build_plate(), circle_ring(), insert_mesh()
+                        -> a one-pocket test coupon + its plug
+
+The plate carries five rows in ahl's order (Pacific Ocean, Coastal,
+Mountain, Valley, Desert), each with
 
   - a BLIND circular pocket (recessed into the TOP face only, solid
     floor underneath -- ahl's choice over a through-hole) sized for a
-    small color-matched insert PLUG that prints alongside whichever
-    job already uses that filament (water/coast from frame.3mf,
-    mountain/valley/desert from their piece STLs). Plugs are permanent
-    (ahl 2026-09-15): a deliberate diameter INTERFERENCE for a snug
-    press fit (glue optional, not required), sized taller than the
-    pocket so the plug sits proud once seated -- a felt bump, not
-    flush;
+    small colour-matched PLUG that prints alongside whichever job
+    already uses that filament (water/coast from frame.3mf,
+    mountain/valley/desert from their piece STLs). Plugs are permanent:
+    a deliberate diameter INTERFERENCE for a snug press fit (glue
+    optional), sized taller than the pocket so the plug sits proud once
+    seated -- a felt bump, not flush;
   - a shallow (0.2 mm, one layer) rectangular recess across the text
-    column -- ONE recess spanning all 5 rows -- sized for a printed
-    label (key_label.pdf, exact physical size) to sit in, so its edge
-    doesn't catch and it sits close to flush with the pocket rims.
+    column -- ONE recess spanning all 5 rows -- sized for the printed
+    KEY INSERT (key_insert.pdf, exact physical size) to sit in, so its
+    edge doesn't catch and it sits close to flush with the pocket rims.
+    The labels are 2D-printed because FDM text at this size fights the
+    0.4 mm nozzle: at 3.5 mm cap height Georgia Bold crowded even after
+    narrowing the glyphs.
 
 Geometry: one CDT of the plate rectangle with the 5 pocket circles AND
 the label rectangle as holes (constrained, exact boundary match -- same
@@ -48,12 +55,6 @@ vertical walls. Outer side walls + a flat bottom close the plate. All
 pieces share exact float coordinates and get merged with
 version_stamp.weld (round-and-merge), the convention documented in
 version_stamp.py's module docstring.
-
-Output:
-  out/key_panel/key_panel.stl      single-color plate (white), watertight
-  out/key_panel/insert_sample.stl  one sample plug, for a test-fit print
-  out/key_panel/key_label.pdf      print-at-100% label for the recess
-  out/key_panel/preview.png
 """
 
 import sys
@@ -265,56 +266,6 @@ def insert_mesh(diameter, height, seg=48):
     return m
 
 
-def main():
-    plate_w, plate_h, rows, recess = layout()
-    print(f"key panel: {plate_w:.1f} x {plate_h:.1f} x "
-          f"{PLATE_THICKNESS_MM:g} mm, {len(rows)} rows, pocket dia "
-          f"{POCKET_D_MM:g} mm\n"
-          f"  insert plugs: dia {INSERT_D_MM:g} mm ({POCKET_D_MM:g} + "
-          f"{INSERT_INTERFERENCE_MM:g} mm interference -- press fit, "
-          "permanent, glue optional) x height "
-          f"{INSERT_HEIGHT_MM:g} mm ({POCKET_DEPTH_MM:g} mm seated + "
-          f"{INSERT_BUMP_MM:g} mm proud bump)\n"
-          f"  label recess: {recess['x1'] - recess['x0']:.1f} x "
-          f"{recess['y1'] - recess['y0']:.1f} mm, {LABEL_RECESS_MM:g} mm "
-          "deep -- print out/key_panel/key_label.pdf at 100% and trim "
-          "to fit")
-
-    recesses = [{"points": circle_ring(*r["pocket_c"], POCKET_D_MM / 2),
-                "depth": POCKET_DEPTH_MM} for r in rows]
-    recesses.append({"points": rect_ring(recess["x0"], recess["y0"],
-                                         recess["x1"], recess["y1"]),
-                     "depth": LABEL_RECESS_MM})
-    plate = build_plate(plate_w, plate_h, recesses, PLATE_THICKNESS_MM)
-    print(f"  plate: watertight={plate.is_watertight} "
-          f"volume={plate.volume:.1f} mm^3")
-    assert plate.is_watertight
-    if plate.volume < 0:
-        plate.invert()
-
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    stl_path = OUT_DIR / "key_panel.stl"
-    plate.export(stl_path)
-    print(f"-> {stl_path}")
-
-    insert = insert_mesh(INSERT_D_MM, INSERT_HEIGHT_MM)
-    assert insert.is_watertight
-    insert_path = OUT_DIR / "insert_sample.stl"
-    insert.export(insert_path)
-    print(f"-> {insert_path} (one sample plug, print-and-test-fit before "
-          "committing to 5 filament colors)")
-
-    render_label(recess, rows)
-    render_preview(plate_w, plate_h, rows, recess)
-    print("\nnext (not done here): 5 plugs (dia "
-          f"{INSERT_D_MM:g} mm x {INSERT_HEIGHT_MM:g} mm, same shape as "
-          "insert_sample.stl) added to whichever print already carries "
-          "each filament -- Pacific Ocean/Coastal to frame.3mf "
-          f"(extruders {ROSE_EXTRUDERS}), Mountain/Valley/Desert to their "
-          f"piece STLs ({PIECE_NAME}); then cut this plate's footprint as "
-          "a cavity into the P5 frame, placement TBD over Nevada.")
-
-
 # ------------------------------------------------------------- 2D label
 def render_label(recess, rows):
     """Print-at-100% PDF sized exactly to the label recess, text rows
@@ -335,44 +286,7 @@ def render_label(recess, rows):
         ax.text(1.0, r["text_y_local"], r["label"], fontfamily="Georgia",
                 fontweight="bold", fontsize=CAP_MM * 3.4, va="center",
                 ha="left")
-    path = OUT_DIR / "key_label.pdf"
+    path = OUT_DIR / "key_insert.pdf"
     fig.savefig(path, facecolor="white")
     plt.close(fig)
     print(f"-> {path} ({w:.1f} x {h:.1f} mm, print at 100%/actual size)")
-
-
-# ------------------------------------------------------------------ preview
-def render_preview(plate_w, plate_h, rows, recess):
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    fig, ax = plt.subplots(figsize=(plate_w / 20, plate_h / 20), dpi=200)
-    ax.set_facecolor("#dcdcdc")
-    ax.add_patch(plt.Rectangle((0, 0), plate_w, plate_h,
-                               facecolor="#f4f4f0", edgecolor="black",
-                               lw=0.5, zorder=1))
-    ax.add_patch(plt.Rectangle((recess["x0"], recess["y0"]),
-                               recess["x1"] - recess["x0"],
-                               recess["y1"] - recess["y0"],
-                               facecolor="#e8e8e2", edgecolor="#999999",
-                               lw=0.4, ls=":", zorder=2))
-    for r in rows:
-        ax.add_patch(plt.Circle(r["pocket_c"], POCKET_D_MM / 2,
-                                facecolor="#bdbdbd", edgecolor="black",
-                                lw=0.4, zorder=3))
-        ax.text(recess["x0"] + 1.0, recess["y0"] + r["text_y_local"],
-               r["label"], fontfamily="Georgia", fontweight="bold",
-               fontsize=CAP_MM * 3.4, va="center", ha="left", zorder=4)
-    ax.set_xlim(0, plate_w)
-    ax.set_ylim(0, plate_h)
-    ax.set_aspect("equal")
-    ax.axis("off")
-    path = OUT_DIR / "preview.png"
-    fig.savefig(path, bbox_inches="tight", facecolor=fig.get_facecolor())
-    plt.close(fig)
-    print(f"-> {path}")
-
-
-if __name__ == "__main__":
-    main()

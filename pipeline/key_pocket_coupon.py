@@ -13,12 +13,19 @@
 #   "py-lib3mf",
 # ]
 # ///
-"""Key-panel pocket test coupon (ahl 2026-09-15) -- a tiny square with
-just ONE blind pocket, same size/depth as key_panel.py's real ones, to
-test-fit insert_sample.stl's plug (interference + proud-bump height)
-before committing to the full 5-row plate.
+"""Key-pocket test coupon (ahl 2026-09-15): a tiny square carrying ONE
+blind pocket, plus the plug that goes in it -- print both, press them
+together, and decide the final plug dimensions before the real key
+(D19, built into p5_final.py) commits to five filament colours.
 
-Output: out/key_panel/pocket_coupon.stl
+Pocket geometry is taken from config [key] so the coupon always matches
+the real key's pockets. Plug dimensions are the OPEN question this
+coupon exists to answer, so they live here:
+
+    plug diameter = pocket + INSERT_INTERFERENCE_MM   (press fit)
+    plug height   = pocket depth + INSERT_BUMP_MM     (stands proud)
+
+Outputs: out/key_coupon/{pocket_coupon.stl, plug.stl}
 """
 
 import sys
@@ -26,30 +33,56 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import key_panel as kp
+import p4_bay_coupon as p4c
+
+OUT_DIR = p4c.ROOT / "out" / "key_coupon"
+KEY = p4c._CFG_ALL.get("key", {})
+
+POCKET_D_MM = KEY.get("pocket_d_mm", 7.0)
+POCKET_DEPTH_MM = KEY.get("pocket_depth_mm", 1.4)
+PLATE_THICKNESS_MM = POCKET_DEPTH_MM + 1.2   # + solid floor under it
+MARGIN_MM = 5.0
+
+# --- the knobs under test (ahl is deciding these from this print) ---
+INSERT_INTERFERENCE_MM = 0.05   # plug dia = pocket dia + this (press fit,
+                                # permanent, glue optional)
+INSERT_BUMP_MM = 0.4            # how far the plug stands proud once
+                                # seated -- a felt bump, matching the
+                                # compass rose's validated raised height
+INSERT_D_MM = POCKET_D_MM + INSERT_INTERFERENCE_MM
+INSERT_HEIGHT_MM = POCKET_DEPTH_MM + INSERT_BUMP_MM
 
 
 def main():
-    side = kp.POCKET_D_MM + 2 * kp.MARGIN_MM
+    side = POCKET_D_MM + 2 * MARGIN_MM
     center = (side / 2, side / 2)
-    recesses = [{"points": kp.circle_ring(*center, kp.POCKET_D_MM / 2),
-                "depth": kp.POCKET_DEPTH_MM}]
-    coupon = kp.build_plate(side, side, recesses, kp.PLATE_THICKNESS_MM)
-    print(f"pocket coupon: {side:.1f} x {side:.1f} x "
-          f"{kp.PLATE_THICKNESS_MM:g} mm, pocket dia {kp.POCKET_D_MM:g} "
-          f"mm x {kp.POCKET_DEPTH_MM:g} mm deep (matches key_panel.py)\n"
-          f"  watertight={coupon.is_watertight} volume={coupon.volume:.1f} "
-          "mm^3")
+    recesses = [{"points": kp.circle_ring(*center, POCKET_D_MM / 2),
+                "depth": POCKET_DEPTH_MM}]
+    coupon = kp.build_plate(side, side, recesses, PLATE_THICKNESS_MM)
     assert coupon.is_watertight
     if coupon.volume < 0:
         coupon.invert()
+    plug = kp.insert_mesh(INSERT_D_MM, INSERT_HEIGHT_MM)
+    assert plug.is_watertight
 
-    kp.OUT_DIR.mkdir(parents=True, exist_ok=True)
-    path = kp.OUT_DIR / "pocket_coupon.stl"
-    coupon.export(path)
-    print(f"-> {path}")
-    print("test with out/key_panel/insert_sample.stl (dia "
-          f"{kp.INSERT_D_MM:g} mm x {kp.INSERT_HEIGHT_MM:g} mm) -- "
-          "regenerate that via `uv run pipeline/key_panel.py` if stale")
+    print(f"key pocket coupon: {side:.1f} x {side:.1f} x "
+          f"{PLATE_THICKNESS_MM:g} mm, pocket dia {POCKET_D_MM:g} x "
+          f"{POCKET_DEPTH_MM:g} deep (from config [key], so it matches "
+          f"the real key)\n"
+          f"  plug: dia {INSERT_D_MM:g} mm ({POCKET_D_MM:g} + "
+          f"{INSERT_INTERFERENCE_MM:g} interference) x {INSERT_HEIGHT_MM:g} "
+          f"mm tall ({POCKET_DEPTH_MM:g} seated + {INSERT_BUMP_MM:g} proud)\n"
+          f"  watertight: coupon {coupon.is_watertight}, plug "
+          f"{plug.is_watertight}")
+
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    for name, mesh in (("pocket_coupon", coupon), ("plug", plug)):
+        path = OUT_DIR / f"{name}.stl"
+        mesh.export(path)
+        print(f"-> {path}")
+    print("press the plug into the coupon: too loose or too tight, tune "
+          "INSERT_INTERFERENCE_MM / INSERT_BUMP_MM here, then carry the "
+          "settled numbers into the real key's plugs.")
 
 
 if __name__ == "__main__":

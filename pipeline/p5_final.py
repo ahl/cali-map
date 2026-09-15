@@ -63,7 +63,7 @@ Machinery is imported from p4_bay_coupon (kept runnable itself): region
 cache, D13 scale, polygon extraction, solid meshing (incl. stamps +
 chamfer), poke-holes, 3MF writer, preview helpers.
 
-THE REGION KEY (D19, out/p5/key.stl + out/p5/key_label.pdf): a plate
+THE REGION KEY (D19, out/p5/key.stl + out/p5/key_insert.pdf): a plate
 that press-fits into its own rectangular recess in the frame over
 Nevada, listing the five regions with a colour-swatch plug beside each.
 Placement and size come from config [key]; the HEIGHT does not -- the
@@ -73,7 +73,7 @@ re-heights it automatically.  The bottom sits on the tray floor at the
 same z as every piece.  Permanent press fit: no ribs, no poke-hole.
 
 Outputs: out/p5/frame.3mf, out/p5/{mountains,valley,desert}.stl,
-out/p5/key.stl, out/p5/key_label.pdf,
+out/p5/key.stl, out/p5/key_insert.pdf,
 out/p5_preview.png (assembled / exploded / bottom-with-stamps / rose).
 """
 
@@ -549,7 +549,21 @@ def main():
         relief_fn = p4.make_terrain_fn(dem, s, GX0, GY0, z_per_m, 0.0)
         peak_mm, n_samp = key_top_relief_mm(
             rect, relief_fn, KEY.get("adjacent_search_mm", 10.0))
+        # Z BOOKKEEPING (ahl asked 2026-09-15 whether the key was sized
+        # off the print plane rather than off where it actually sits):
+        # key.stl is exported in PIECE-LOCAL z, bottom at 0, exactly like
+        # mountains/valley/desert.stl -- that z=0 is the RECESS FLOOR,
+        # which is the top of the tray floor, FLOOR_MM above the bed. So
+        # the plate's own height must be measured from the recess floor,
+        # not from the bed: slab (BASE_MM - FLOOR_MM) gets it up to the
+        # water datum, then the adjacent relief on top of that. Asserted
+        # against the terrain in global coords just below.
         top_local = p4.PIECE_SLAB_MM + peak_mm
+        key_top_global = p4.FLOOR_MM + top_local
+        peak_top_global = p4.BASE_MM + peak_mm
+        assert abs(key_top_global - peak_top_global) < 1e-9, (
+            f"key top {key_top_global:.4f} mm != adjacent terrain top "
+            f"{peak_top_global:.4f} mm (both above the bed)")
         # PERMANENT press fit (ahl 2026-09-15): no ribs, no poke-hole --
         # the plate is grown by interference_mm total over the recess
         inter = KEY.get("interference_mm", 0.0)
@@ -575,9 +589,13 @@ def main():
               f"the perimeter = {peak_mm:.2f} mm of relief "
               f"({peak_mm / z_per_m:.0f} m)\n"
               f"    -> plate {pl_w:.2f} x {ph:.2f} x {top_local:.2f} mm "
-              f"(bottom on the tray floor like every piece; top "
-              f"{p4.FLOOR_MM + top_local:.2f} mm above the bed = datum "
-              f"{p4.BASE_MM:g} + {peak_mm:.2f})\n"
+              f"tall in the STL (z from 0, like every piece)\n"
+              f"    z check: the STL's z=0 is the RECESS FLOOR, "
+              f"{p4.FLOOR_MM:g} mm above the bed -- so seated, the key "
+              f"spans {p4.FLOOR_MM:g}..{key_top_global:.2f} mm and its top "
+              f"matches the tallest adjacent terrain at "
+              f"{peak_top_global:.2f} mm (datum {p4.BASE_MM:g} + "
+              f"{peak_mm:.2f}) exactly\n"
               f"    press fit: recess {kx1 - kx0:g} x {ky1 - ky0:g}, plate "
               f"+{inter:g} mm total ({inter / 2:g}/side) -- no ribs, no "
               f"poke-hole, glue optional\n"
@@ -589,7 +607,7 @@ def main():
         key_panel.OUT_DIR = OUT_DIR       # write the label next to key.stl
         key_panel.render_label(lrec, key_rows)
         print("    NOTE plug dimensions are NOT fixed yet (ahl 2026-09-15: "
-              "decide after test-fitting out/key_panel/pocket_coupon.stl); "
+              "decide after test-fitting out/key_coupon/); "
               "the pockets are cut, the plugs are a later step.")
 
     print("\npiece-piece seam gaps (only nominally-adjacent pairs):")

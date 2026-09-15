@@ -235,8 +235,8 @@ adjacent_search_mm = 10.0
 # becomes clearance) if it will not seat.
 interference_mm = 0.05
 # Swatch pockets. Plug dimensions are deliberately NOT fixed here yet --
-# ahl 2026-09-15: decide them after test-fitting out/key_panel/
-# pocket_coupon.stl + insert_sample.stl. The pockets themselves are cut
+# ahl 2026-09-15: decide them after test-fitting out/key_coupon/
+# {pocket_coupon,plug}.stl. The pockets themselves are cut
 # now so the key geometry is final.
 pocket_d_mm = 7.0
 pocket_depth_mm = 1.4
