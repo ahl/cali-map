@@ -28,8 +28,10 @@ property of the printer and profile, not something to derive -- so
 print the ladder, find the plug that seats firmly by hand without
 force, and put that number in config.
 
-The POCKETS stay at the key's real diameter ([key].pocket_d_mm); only
-the PLUGS vary, since the pocket is what the key is committed to.
+The POCKET is a DESIGN dimension -- the key's row layout is built around
+it -- so it is not a fit knob and stays at [key].pocket_d_mm. Only the
+PLUGS vary, and [key].plug_d_mm is an absolute diameter rather than an
+offset, so there is exactly one number to tune.
 
 Orientation: the coupon has a small INDEX DIMPLE beside pocket #1, the
 smallest plug. Plugs print in the same order, smallest first.
@@ -57,12 +59,14 @@ MARGIN_MM = 4.0
 PITCH_MM = POCKET_D_MM + 5.0                 # pocket-to-pocket spacing
 INDEX_D_MM = 1.6                             # orientation dimple
 
-# The ladder: plug diameter = POCKET_D_MM + step. NEGATIVE is clearance.
-# Centred on clearance, not interference, because +0.05 was already too
-# tight -- the true zero is somewhere below 0 once print growth is
-# accounted for. The winner goes into config [key].plug_interference_mm,
-# which both this coupon and the real P5 plug read.
-LADDER_MM = [-0.30, -0.25, -0.20, -0.15, -0.10, -0.05, 0.00]
+# The ladder of PLUG diameters to try. The pocket is fixed at the key's
+# design size and is not a fit knob (ahl 2026-09-15: "just pick the
+# pocket size and we'll try several plugs"), so these are absolute
+# diameters -- the winner goes straight into [key].plug_d_mm, which the
+# real P5 plug reads. Spanning below the pocket because a 5.05 mm plug
+# was already far too tight: with print growth the usable range sits
+# under nominal, and the plug is glued, so it need not grip on its own.
+LADDER_D_MM = [4.70, 4.75, 4.80, 4.85, 4.90, 4.95, 5.00]
 
 # from config, for the final (single-plug) geometry the key ships
 INSERT_BUMP_MM = KEY.get("plug_proud_mm", 0.4)
@@ -70,7 +74,7 @@ INSERT_HEIGHT_MM = POCKET_DEPTH_MM + INSERT_BUMP_MM
 
 
 def main():
-    n = len(LADDER_MM)
+    n = len(LADDER_D_MM)
     width = 2 * MARGIN_MM + (n - 1) * PITCH_MM + POCKET_D_MM
     height = 2 * MARGIN_MM + POCKET_D_MM
     cy = height / 2
@@ -88,8 +92,8 @@ def main():
         coupon.invert()
 
     plugs = []
-    for i, step in enumerate(LADDER_MM):
-        m = kp.insert_mesh(POCKET_D_MM + step, INSERT_HEIGHT_MM)
+    for i, d in enumerate(LADDER_D_MM):
+        m = kp.insert_mesh(d, INSERT_HEIGHT_MM)
         m.apply_translation([xs[i], cy, 0.0])
         assert m.is_watertight
         plugs.append(m)
@@ -100,9 +104,9 @@ def main():
           f"[key]); {n} plugs, {INSERT_HEIGHT_MM:g} mm tall, flat-topped")
     print(f"  plate {width:.1f} x {height:.1f} x {PLATE_THICKNESS_MM:g} mm; "
           f"index dimple marks plug #1")
-    for i, step in enumerate(LADDER_MM, start=1):
-        print(f"    #{i}  plug dia {POCKET_D_MM + step:5.2f} mm  "
-              f"({step:+.2f} vs pocket)")
+    for i, d in enumerate(LADDER_D_MM, start=1):
+        print(f"    #{i}  plug dia {d:5.2f} mm  "
+              f"({d - POCKET_D_MM:+.2f} vs the {POCKET_D_MM:g} mm pocket)")
     print(f"  coupon watertight {coupon.is_watertight}, plugs watertight "
           f"{ladder.is_watertight}")
 
@@ -114,8 +118,8 @@ def main():
     print("\nprint both, press each plug into its own pocket, and pick the "
           "one that seats firmly BY HAND with no force (it is glued and "
           "permanent, so it does not need to grip on its own).\n"
-          "then set [key].plug_interference_mm to that step -- the real "
-          "P5 plug (out/p5/key_plug.stl) reads the same knob.")
+          "then set [key].plug_d_mm to that diameter -- the real P5 plug "
+          "(out/p5/key_plug.stl) reads the same knob.")
 
 
 if __name__ == "__main__":

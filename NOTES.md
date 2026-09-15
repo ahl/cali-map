@@ -690,9 +690,15 @@ profile -- not derivable, so it gets measured.
 -0.30 to 0.00 mm against pockets at the key's real diameter, in one
 print, with an index dimple marking plug #1. Pick the one that seats
 firmly BY HAND (the plug is glued and permanent -- it does not need to
-grip on its own) and set `[key].plug_interference_mm` to that step; the
-real P5 plug reads the same knob. Config currently holds -0.15 as an
-un-measured PLACEHOLDER so the build stays runnable.
+grip on its own) and set `[key].plug_d_mm` to that diameter; the real
+P5 plug reads the same knob. Config holds 4.85 as an un-measured
+PLACEHOLDER so the build stays runnable.
+ONE fit knob, not two (ahl 2026-09-15: "just pick the pocket size and
+we'll try several plugs"): `pocket_d_mm` is a DESIGN dimension -- the
+key's row layout is built around it -- so it is never touched to chase
+fit, and `plug_d_mm` is an absolute diameter rather than an offset from
+it. The build asserts the two stay within 0.5 mm, so if the pocket ever
+moves for layout reasons the plug value cannot silently orphan.
 
 ## Observation log (noted, NOT to be acted on unless ahl says so)
 

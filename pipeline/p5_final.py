@@ -634,8 +634,17 @@ def main():
         # file, printed five times in the five region colours -- the
         # geometry is identical, only the filament differs, so there is
         # nothing to gain from five copies of the same cylinder.
-        plug_d = KEY.get("pocket_d_mm", 5.0) + \
-            KEY.get("plug_interference_mm", 0.05)
+        # the pocket is a DESIGN dimension (the row layout is built on
+        # it), so fit is tuned on the plug alone and plug_d_mm is an
+        # absolute diameter. Guard it against the pocket anyway, so a
+        # future layout change to pocket_d_mm cannot silently leave this
+        # value orphaned at the wrong size.
+        pocket_d = KEY.get("pocket_d_mm", 5.0)
+        plug_d = KEY.get("plug_d_mm", pocket_d - 0.15)
+        assert abs(plug_d - pocket_d) < 0.5, (
+            f"[key].plug_d_mm {plug_d:g} is {abs(plug_d - pocket_d):.2f} mm "
+            f"off pocket_d_mm {pocket_d:g} -- re-fit it (see "
+            "out/key_coupon/) rather than letting it drift")
         plug_h = KEY.get("pocket_depth_mm", 1.4) + \
             KEY.get("plug_proud_mm", 0.4)
         plug = key_panel.insert_mesh(plug_d, plug_h)
@@ -649,9 +658,9 @@ def main():
               "      print FIVE of it, one per region colour: Pacific "
               "Ocean = water, Coastal = coast, then the mountains, "
               "valley and desert piece colours.\n"
-              "      dimensions are still PROVISIONAL -- [key]."
-              "plug_interference_mm / plug_proud_mm, pending ahl's "
-              "out/key_coupon/ test fit.")
+              "      dimensions are still PROVISIONAL -- [key].plug_d_mm "
+              "/ plug_proud_mm, pending ahl's out/key_coupon/ fit "
+              "ladder.")
 
     print("\npiece-piece seam gaps (only nominally-adjacent pairs):")
     pnames = [n for n, _, _ in PIECES]
