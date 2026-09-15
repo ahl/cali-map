@@ -316,7 +316,12 @@ def main():
     piece_nom = {name: geo[f"{name}_nom"] for name, _, _ in PIECES}
     target_n = {name: (3 if piece_nom[name].area > POKE3_AREA_MM2 else 2)
                 for name in piece_nom}
-    centers, holes = p4.plan_poke_holes(piece_nom, target_n)
+    manual_poke = [pt for n, _, _ in PIECES
+                   for pt in (p4.POKE_SITES_CFG.get(f"p5_{n}") or [])]
+    if manual_poke:
+        centers, holes = p4.manual_poke_holes(piece_nom, manual_poke)
+    else:
+        centers, holes = p4.plan_poke_holes(piece_nom, target_n)
     circles = []
     for pt in centers:
         circ = pt.buffer(p4.POKE_D_MM / 2, quad_segs=24)
@@ -715,6 +720,17 @@ def main():
         for d, kind in rib_sites[name]:
             p = ring.interpolate(d)
             rib_pts.append({"name": name, "kind": kind, "x": p.x, "y": p.y})
+    # rib MARKUP canvas -- same loop as P4: ahl moves the dots, they get
+    # extracted back into config [print.ribs]. P5's are still the
+    # automatic placer's picks, unlike P4's which are hand-placed.
+    p4.rib_markup_canvas(
+        OUT / "p5_rib_markup.png", geo,
+        [(n, rid) for n, rid, _ in PIECES], (0.0, 0.0), (EW_MM, NS_MM),
+        sites_mm={n: p4.RIB_SITES_CFG.get(f"p5_{n}") or []
+                  for n, _, _ in PIECES},
+        neck_of=tuple(n for n, _, _ in PIECES), px_per_mm=8.0, grid=20,
+        poke_mm=[(pt.x, pt.y) for pt in centers])
+
     render_preview(geo, s, holes, stamps, ribbed_geo, rib_pt, rose, rose_c,
                   EW_MM, rib_pts, key_rows, key_recess)
     print(f"\nall bodies/pieces watertight + checks: {ok}")

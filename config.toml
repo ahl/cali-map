@@ -198,9 +198,25 @@ land_min_mm = 0.2             # min land height above datum (color opacity)
 p4_mountains = [[33.2, 100.3], [28.1, 75.5], [58.0, 53.1], [80.6, 0.2]]
 p4_valley = [[55.7, 100.4], [87.5, 100.3], [100.0, 74.6], [99.9, 40.0],
              [75.2, 28.3], [96.1, 0.3]]
+# P5: still the AUTOMATIC placer's picks, unlike P4's which are ahl's.
+# Mark them on out/p5_rib_markup.png to replace with hand placement.
 p5_mountains = [[54.2, 122.6], [48.2, 240.3], [132.0, 111.2], [169.1, 10.4]]
 p5_valley = [[90.0, 98.1], [53.7, 169.2], [75.0, 165.1], [117.3, 89.6]]
 p5_desert = [[179.5, 27.9], [135.4, 76.4], [124.2, 142.4], [209.5, 62.4]]
+
+[print.poke_holes]
+# MANUAL finger-hole centres (18 mm, [print].poke_hole_d_mm), keyed
+# "p4_<piece>" / "p5_<piece>" -- the same markup loop as the ribs, and
+# drawn on the same canvas at TRUE size so a hole and a rib can be
+# judged against each other in one pass (ahl 2026-09-15).
+#
+# Unlike a rib, a hole does NOT snap: an 18 mm circle either fits where
+# you put it or it does not, so the build validates instead of nudging.
+# It asserts the whole circle clears the frame cavity wall by
+# [print].poke_hole_d_mm / POKE_MARGIN_MM, that holes do not crowd each other, and that
+# every piece ends up with at least one hole to push it out by.
+# Any piece with no list falls back to the automatic planner, so leaving
+# this section empty keeps today's behaviour.
 
 [key]
 # Region-colour KEY, inset into the P5 frame over Nevada (ahl 2026-09-15).

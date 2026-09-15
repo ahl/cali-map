@@ -502,6 +502,26 @@ FINAL 225 x 250 FRAME ONLY
   is just the uniform pair clearance landing on an already-thin spot.
   ahl's call: do NOT modify the spur geometry (D11 pass stays deferred)
   — fix it with tolerance + rib placement only. See the T3 spec below.
+- **Manual placement covers POKE HOLES too, on the same canvas (ahl
+  2026-09-15: "can I also place the finger holes in this same pass?").**
+  config `[print.poke_holes]`, keyed like the ribs; any piece with no
+  list falls back to the automatic planner. Holes are drawn on the
+  markup canvas at TRUE 18 mm size with a + centre, so a hole and a rib
+  can be judged against each other in one pass. Unlike a rib a hole does
+  NOT snap -- an 18 mm circle either fits or it does not -- so
+  `manual_poke_holes` VALIDATES instead of nudging: the whole circle
+  must clear the cavity wall by POKE_MARGIN_MM, holes must be >= 20 mm
+  apart, and every piece must end up with at least one. All three
+  asserts were deliberately tripped to check the messages are
+  actionable.
+- **P5 rib markup canvas (`out/p5_rib_markup.png`).** P4 and P5 now
+  share one renderer (`p4_bay_coupon.rib_markup_canvas`) so the two
+  cannot drift. CURRENT sites are drawn COLOUR-FREE -- white fill,
+  black edge, one shape per piece (o mountains, s valley, ^ desert) --
+  because ahl picks his own mark colours; that also sidesteps a real
+  collision, since an orange mark is only L1 32 from the desert region
+  fill (242,153,71) and a purple only 78 from mountains magenta. P5's
+  rib sites are still the automatic placer's picks, unlike P4's.
 - **Rib-site visualization added (ahl 2026-09-15):** both
   `p4_bay_coupon.render_preview` and `p5_final.render_preview` now mark
   every crush-rib site in red on the assembled + exploded panels

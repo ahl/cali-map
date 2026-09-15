@@ -185,6 +185,10 @@ RIBS_PER_PIECE = _PRINT_CFG.get("ribs_per_piece", 4)
 # "p4_<piece>" / "p5_<piece>"; a missing/empty list = use the automatic
 # placer for that piece (ahl 2026-09-15)
 RIB_SITES_CFG = _PRINT_CFG.get("ribs", {})
+# config [print.poke_holes]: manual finger-hole centres, keyed
+# "p4_<piece>" / "p5_<piece>"; a missing/empty list = use the automatic
+# planner (ahl 2026-09-15, placing them by hand alongside the ribs)
+POKE_SITES_CFG = _PRINT_CFG.get("poke_holes", {})
 LAND_MIN_MM = _PRINT_CFG["land_min_mm"]
 COMPASS = _CFG_ALL.get("compass", {"enabled": False})
 ROSE_STYLE = COMPASS.get("style", "raised")   # "flush" | "raised"
@@ -1204,6 +1208,50 @@ def seam_hole(nom_a, nom_b, cav_union, allowed, min_len_mm=None,
     return best_pt
 
 
+def manual_poke_holes(nom, points, label=""):
+    """MANUAL poke-hole placement (ahl 2026-09-15), the same idea as
+    manual_rib_sites: hand-picked (x, y) centres from the markup canvas,
+    validated rather than searched for.  Unlike a rib a hole does NOT
+    snap -- an 18 mm circle either fits where it was put or it does not,
+    so a bad one is an error, not something to nudge.
+
+    Each centre must sit far enough inside the removable-piece union
+    that the whole circle clears the frame cavity wall by
+    POKE_MARGIN_MM, and holes must not crowd each other.  Returns
+    plan_poke_holes' (centers, credit) shape."""
+    names = list(nom)
+    cav_union = unary_union(list(nom.values()))
+    margin = POKE_D_MM / 2 + POKE_MARGIN_MM
+    allowed = cav_union.buffer(-margin)
+    centers, credit = [], {n: [] for n in names}
+    for x, y in points:
+        pt = Point(float(x), float(y))
+        assert allowed.contains(pt), (
+            f"{label}poke hole ({x:g}, {y:g}): an {POKE_D_MM:g} mm circle "
+            f"there does not clear the cavity wall by {POKE_MARGIN_MM:g} mm "
+            f"(it is {cav_union.boundary.distance(pt) - POKE_D_MM / 2:+.1f} "
+            "mm short) -- move it inward")
+        for q in centers:
+            d = pt.distance(q)
+            assert d >= POKE_D_MM + 2.0, (
+                f"{label}poke holes ({x:g}, {y:g}) and ({q.x:.1f}, "
+                f"{q.y:.1f}) are {d:.1f} mm apart; need "
+                f"{POKE_D_MM + 2.0:g} mm")
+        circ = pt.buffer(POKE_D_MM / 2, quad_segs=24)
+        served = [n for n in names if nom[n].intersects(circ)]
+        assert served, f"{label}poke hole ({x:g}, {y:g}) is under no piece"
+        for n in served:
+            credit[n].append(pt)
+        centers.append(pt)
+        print(f"    [poke] {label}manual ({x:g}, {y:g}) -> serves "
+              f"{'+'.join(served)}"
+              + ("  [seam hole]" if len(served) > 1 else ""))
+    empty = [n for n in names if not credit[n]]
+    assert not empty, (f"{label}no poke hole under: {', '.join(empty)} -- "
+                       "every piece needs one to push it out")
+    return centers, credit
+
+
 def plan_poke_holes(nom, target_n, seam_min_len_mm=None):
     """Plans finger-sized poke-hole CENTERS (config [print].poke_hole_d_mm
     = 18 mm, ahl 2026-09-14: THE disassembly mechanism) through the frame
@@ -1384,92 +1432,139 @@ def add_poly(ax, geom, color, ec="none", lw=0.0, alpha=1.0, z=1):
 MARKUP_PX_PER_MM = 12.0   # out/p4_rib_markup.png resolution
 
 
-MARK_RGB = {"mountains": (116 / 255, 167 / 255, 254 / 255),   # blue
-            "valley": (255 / 255, 134 / 255, 71 / 255)}       # orange
+# Existing rib sites are drawn COLOUR-FREE -- white fill, black edge,
+# one shape per piece -- so that any saturated colour on the page is
+# unambiguously one of ahl's marks (he picks his own colours; ahl
+# 2026-09-15). Shapes, not colours, also sidestep the collision that
+# made an orange mark unusable on P5: the desert region fill is
+# (242,153,71), only L1 32 away from it.
+MARK_SHAPE = {"mountains": "o", "valley": "s", "desert": "^"}
 
 
-def render_rib_markup(geo, sites_mm=None):
-    """Single-panel canvas for ahl's rib MARKUP loop (2026-09-15): the
-    assembled pieces + frame with a labelled 10 mm grid, so he can drop
-    a dot wherever he wants a rib and hand the file back.  Marks are
-    APPROXIMATE -- each one snaps to the nearest point on that piece's
-    perimeter (manual_rib_sites), so "near the edge" is precise enough.
+def rib_markup_canvas(path, geo, pieces, lo_xy, hi_xy, sites_mm=None,
+                      neck_of=(), px_per_mm=MARKUP_PX_PER_MM, grid=10,
+                      poke_mm=()):
+    """Shared renderer behind the rib MARKUP loop -- P4 and P5 both use
+    it, so the two canvases cannot drift apart.
 
-    ROUND-TRIPS: whatever is currently configured in [print.ribs] is
-    drawn back on in the SAME colours ahl marks with (blue = mountains,
-    orange = valley, MARK_RGB), so regenerating this file reproduces his
-    marks instead of wiping them -- the build overwrites it every run.
-    To change placement: move/erase/add dots and hand it back.
+    Marks are APPROXIMATE: each one snaps to the nearest point on that
+    piece's perimeter (manual_rib_sites), so "near the edge" is enough.
 
-    The mm <-> pixel mapping is EXACT and documented in the title, so a
-    mark can be inverted without guesswork: the axes fill the figure
-    edge-to-edge (no tight-bbox cropping) over x, y in
-    [-RIM_MM, WINDOW_MM + RIM_MM], at MARKUP_PX_PER_MM px/mm, y up.
-    So for a mark at pixel (px, py) in a W x H image:
-        x_mm = -RIM_MM + px / MARKUP_PX_PER_MM
-        y_mm = -RIM_MM + (H - py) / MARKUP_PX_PER_MM
+    Whatever is configured in [print.ribs] is drawn back on, so the
+    canvas always shows the CURRENT placement and regenerating never
+    loses information -- the build overwrites this file every run, but
+    the positions live in config. Those markers are deliberately
+    colour-free (white fill, black edge, one shape per piece) so that
+    any saturated colour on the page is unambiguously one of ahl's
+    marks; he picks his own colours.
+
+    The mm <-> pixel mapping is EXACT and reported by the build: the
+    axes fill the figure edge-to-edge (no tight-bbox crop) over
+    [lo_xy, hi_xy] at px_per_mm, y up. For a mark at pixel (px, py) in a
+    W x H image:
+        x_mm = lo_x + px / px_per_mm
+        y_mm = lo_y + (H - py) / px_per_mm
     """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    lo, hi = -RIM_MM, WINDOW_MM + RIM_MM
-    span = hi - lo
-    size_in = span * MARKUP_PX_PER_MM / 100.0      # at dpi=100
-    fig = plt.figure(figsize=(size_in, size_in), dpi=100)
+    lox, loy = lo_xy
+    hix, hiy = hi_xy
+    W = int(round((hix - lox) * px_per_mm))
+    H = int(round((hiy - loy) * px_per_mm))
+    fig = plt.figure(figsize=(W / 100.0, H / 100.0), dpi=100)
     ax = fig.add_axes([0, 0, 1, 1])
-    ax.set_xlim(lo, hi)
-    ax.set_ylim(lo, hi)
+    ax.set_xlim(lox, hix)
+    ax.set_ylim(loy, hiy)
     ax.set_aspect("equal")
     ax.set_facecolor("#ffffff")
 
     add_poly(ax, geo["water_visible"], WATER_RGB)
     add_poly(ax, geo["gray"], GRAY_RGB, z=2)
     add_poly(ax, geo["coast_nom"], base.COLORS[base.COAST], z=2)
-    for name in ("mountains", "valley"):
-        rid = {v: k for k, v in REGION_NAME.items()}[name]
+    # the key recess belongs to neither the gray body nor the water, so
+    # nothing else fills it -- draw it so it does not read as a hole
+    if "key_nom" in geo:
+        add_poly(ax, geo["key_nom"], (0.93, 0.93, 0.91), ec="black",
+                 lw=0.8, z=2)
+        kc = geo["key_nom"].centroid
+        ax.annotate("key", (kc.x, kc.y), fontsize=9, color="#555",
+                    ha="center", va="center", zorder=3)
+    for name, rid in pieces:
         add_poly(ax, geo[f"{name}_piece"], base.COLORS[rid], z=3)
-        x, y = geo[f"{name}_nom"].exterior.xy
-        ax.plot(x, y, color="black", lw=1.0, zorder=4)
+        for ring in _all_rings(geo[f"{name}_nom"]):
+            ax.plot(*np.asarray(ring.coords).T, color="black", lw=1.0,
+                    zorder=4)
 
-    for v in np.arange(np.ceil(lo / 10) * 10, hi + 1e-9, 10):
+    for v in np.arange(np.ceil(lox / grid) * grid, hix + 1e-9, grid):
         ax.axvline(v, color="#4a4a4a", lw=0.5, alpha=0.45, zorder=5)
-        ax.axhline(v, color="#4a4a4a", lw=0.5, alpha=0.45, zorder=5)
-        ax.annotate(f"{v:g}", (v, lo + 0.6), fontsize=7, color="#222",
+        ax.annotate(f"{v:g}", (v, loy + 0.6), fontsize=7, color="#222",
                     ha="center", zorder=6)
-        ax.annotate(f"{v:g}", (lo + 0.6, v), fontsize=7, color="#222",
+    for v in np.arange(np.ceil(loy / grid) * grid, hiy + 1e-9, grid):
+        ax.axhline(v, color="#4a4a4a", lw=0.5, alpha=0.45, zorder=5)
+        ax.annotate(f"{v:g}", (lox + 0.6, v), fontsize=7, color="#222",
                     va="center", zorder=6)
+
     # one marker per physical neck: thin_spots reports each side of the
-    # same pinch separately, so cluster anything within 3 mm and keep
-    # the narrowest
-    necks = sorted(thin_spots(geo["mountains_nom"]), key=lambda t: t[2])
+    # same pinch separately, so cluster within 3 mm and keep the
+    # narrowest
     shown = []
-    for x, y, w in necks:
-        if any(np.hypot(x - sx, y - sy) < 3.0 for sx, sy, _ in shown):
-            continue
-        shown.append((x, y, w))
-        ax.plot(x, y, marker="x", color="#c81e1e", ms=10, mew=2.0, zorder=7)
-        ax.annotate(f"{w:.2f} mm neck", (x + 2.0, y), fontsize=8,
-                    color="#c81e1e", va="center", zorder=7,
-                    bbox=dict(boxstyle="round,pad=0.15", fc="white",
-                              ec="none", alpha=0.75))
+    for nm in neck_of:
+        for x, y, w in sorted(thin_spots(geo[f"{nm}_nom"]),
+                              key=lambda t: t[2]):
+            if any(np.hypot(x - sx, y - sy) < 3.0 for sx, sy, _ in shown):
+                continue
+            shown.append((x, y, w))
+            ax.plot(x, y, marker="x", color="#c81e1e", ms=10, mew=2.0,
+                    zorder=7)
+            ax.annotate(f"{w:.2f} mm neck", (x + 2.0, y), fontsize=8,
+                        color="#c81e1e", va="center", zorder=7,
+                        bbox=dict(boxstyle="round,pad=0.15", fc="white",
+                                  ec="none", alpha=0.75))
+
+    # poke holes at TRUE 18 mm size -- the point of drawing them here is
+    # to see whether a finger hole actually fits where you want it, and
+    # whether it collides with a rib (ahl 2026-09-15, placing both in
+    # one pass)
+    for x, y in poke_mm:
+        ax.add_patch(plt.Circle((x, y), POKE_D_MM / 2, fill=False,
+                                edgecolor="black", linestyle=":", lw=1.2,
+                                zorder=6))
+        ax.plot(x, y, marker="+", color="black", ms=7, mew=1.0, zorder=6)
 
     n_drawn = 0
     for pname, pts in (sites_mm or {}).items():
         for x, y in pts:
-            ax.plot(x, y, marker="o", color=MARK_RGB[pname], ms=7,
-                    markeredgecolor="none", zorder=8)
+            ax.plot(x, y, marker=MARK_SHAPE.get(pname, "o"), color="white",
+                    markeredgecolor="black", markeredgewidth=1.0, ms=8,
+                    zorder=8)
             n_drawn += 1
 
-    path = OUT / "p4_rib_markup.png"
     fig.savefig(path, dpi=100, facecolor="white")
     plt.close(fig)
-    w_px = int(round(span * MARKUP_PX_PER_MM))
-    print(f"\nrib markup canvas -> {path}  ({w_px} x {w_px} px, "
-          f"{MARKUP_PX_PER_MM:g} px/mm, x/y from {lo:g} to {hi:g} mm; "
-          f"10 mm grid)\n  {n_drawn} configured rib(s) drawn back on "
-          "(blue = mountains, orange = valley) -- move/erase/add dots and "
-          "hand the file back; red x = thin neck, avoid")
+    shapes = ", ".join(f"{MARK_SHAPE.get(n, 'o')} {n}" for n, _ in pieces)
+    poke_note = (f"\n  {len(poke_mm)} poke hole(s) as dotted "
+                 f"{POKE_D_MM:g} mm circles with a + centre -- move these "
+                 "too if you like, in a FOURTH colour" if poke_mm else "")
+    print(f"\nrib markup canvas -> {path}  ({W} x {H} px, "
+          f"{px_per_mm:g} px/mm, x {lox:g}..{hix:g}, y {loy:g}..{hiy:g} mm; "
+          f"{grid:g} mm grid)\n  {n_drawn} CURRENT rib(s) from config "
+          f"[print.ribs], drawn white-on-black, one shape per piece "
+          f"({shapes})\n  mark yours in ANY saturated "
+          "colours, one per piece, and say which is which; everything "
+          "drawn here is white/black/pale so your colour is unambiguous. "
+          "red x = thin neck, avoid" + poke_note)
+    return W, H
+
+
+def render_rib_markup(geo, sites_mm=None, poke_mm=()):
+    """P4's rib markup canvas -- see rib_markup_canvas()."""
+    return rib_markup_canvas(
+        OUT / "p4_rib_markup.png", geo,
+        [("mountains", base.MOUNTAINS), ("valley", base.VALLEY)],
+        (-RIM_MM, -RIM_MM), (WINDOW_MM + RIM_MM, WINDOW_MM + RIM_MM),
+        sites_mm=sites_mm, neck_of=("mountains",), poke_mm=poke_mm)
 
 
 def render_preview(geo, s, tj, holes, stamps, ribbed, rib_pt, rose=None,
@@ -1801,7 +1896,12 @@ def main():
     piece_nom = {n: geo[f"{n}_nom"] for n in ("mountains", "valley")}
     wall_margin = POKE_D_MM / 2 + POKE_MARGIN_MM
     target_n = {n: 2 for n in piece_nom}   # ~1-2 holes credited per piece
-    centers, holes = plan_poke_holes(piece_nom, target_n)
+    manual_poke = [pt for n in piece_nom
+                   for pt in (POKE_SITES_CFG.get(f"p4_{n}") or [])]
+    if manual_poke:
+        centers, holes = manual_poke_holes(piece_nom, manual_poke)
+    else:
+        centers, holes = plan_poke_holes(piece_nom, target_n)
     circles = []
     for pt in centers:
         circ = pt.buffer(POKE_D_MM / 2, quad_segs=24)
@@ -2114,7 +2214,8 @@ def main():
         print(f"  note: {n}")
 
     render_rib_markup(geo, {n: RIB_SITES_CFG.get(f"p4_{n}") or []
-                            for n in ("mountains", "valley")})
+                            for n in ("mountains", "valley")},
+                      poke_mm=[(p.x, p.y) for p in centers])
 
     tj = triple_junction_mm(regw)
     mnom = geo["mountains_nom"].exterior
