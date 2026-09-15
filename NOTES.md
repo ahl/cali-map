@@ -597,6 +597,51 @@ FINAL 225 x 250 FRAME ONLY
   a curvy stretch already self-interlocks — plus a floor of one pair
   rib, with `ribs_per_piece`/`min_rib_width_mm` applying only to it.
 
+## Land/sea authority — the coast-printed-as-water bug (FIXED 2026-09-15)
+
+**Symptom (ahl, from the T1 frame print):** parts of the coastal region
+printed as WATER (teal) instead of coast.
+
+**Cause:** the project had TWO notions of sea and the mesh builds were
+using the wrong one.
+- `p1_regions.ocean_mask()` — every cell at or below 0 m that floods
+  from the Pacific. Pure elevation, so genuinely-dry land lying at or
+  below sea level reads as ocean.
+- `p2_land.py` — Census state polygons + Natural Earth countries, which
+  its own docstring calls "THE authority on what is California and what
+  is US land".
+
+p4/p5 had adopted p2_land's `ca_mask` but never its `land_mask`, so
+bodies were still assigned off the DEM mask. **out/p2_land_qa.png is
+literally a picture of this**: gray hillshade, blue sea, black Census CA
+outline, brown political borders, and RED wherever the two definitions
+disagree. The big red blobs are the SF Bay baylands.
+
+**Measured:** 544 km^2 that the polygons call land the DEM called sea —
+**445 km^2 of it inside California**, in 1182 patches. Largest: south
+Bay/Alviso 112, Napa-Sonoma marsh 95, Petaluma marsh 25 + 23, Humboldt
+Bay 12 km^2 — i.e. diked baylands and salt ponds, dry land sitting at or
+below sea level. (808 km^2 goes the other way, a thin fringe where the
+DEM reads above 0 outside the polygon coastline.)
+
+**Fix — MINIMAL, by ahl's call** ("so we don't have to start back at
+square 1 on the region boundaries"): `p4_bay_coupon.land_authority()`
+loads p2_land's `land_mask`, and that drives BODY assignment only —
+`coast_nom`, the gray land body, and the compass rose's on-land check.
+The REGION rasters keep the DEM mask, so the coast band and the
+coast/mountains line are untouched. The fuller fix (feeding the polygon
+mask into `build_regions`' `shore_dist` so the band is measured from the
+true shoreline) is deliberately NOT done.
+
+**Side effects, all benign:** the polygon coastline is much smoother
+than the DEM one, so the gray body dropped ~13% of its triangles
+(949k -> 826k). Re-cutting coast out of gray AFTER the 0.05 mm
+morphological opening was needed: the opening is a subset geometrically
+but not in floating point, and on the more intricate polygon coastline
+it left ~700 sub-micron slivers straddling the shared boundary, which
+tripped the coast/gray disjointness assert. The two filament bodies are
+now disjoint by construction rather than by an epsilon.
+
 ## Observation log (noted, NOT to be acted on unless ahl says so)
 
 - **PLA translucency at thin land (ahl 2026-09-14):** near-datum coastal

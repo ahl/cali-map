@@ -275,6 +275,29 @@ def g2_z_per_m(s):
 
 
 # ------------------------------------------------------------ window build
+def land_authority():
+    """The POLYGON land mask from p2_land.py -- Census state polygons +
+    Natural Earth countries, which p2_land declares "THE authority on
+    what is California and what is US land" (and which its QA render
+    out/p2_land_qa.png marks in red where it disagrees with the DEM).
+
+    ahl 2026-09-15, from the T1 frame print: parts of the coastal region
+    printed as WATER.  Cause: p1_regions.ocean_mask() calls every cell at
+    or below 0 m that floods from the Pacific "sea", so genuinely-dry
+    land that sits at or below sea level reads as ocean -- 445 km^2 of it
+    inside California, concentrated in the diked baylands and salt ponds
+    around SF Bay (south Bay/Alviso, the Napa-Sonoma and Petaluma
+    marshes) plus Humboldt Bay.  P5 had adopted p2_land's ca_mask but
+    never its land_mask; this closes that gap.
+
+    Used ONLY to assign BODIES (what is coast/gray land vs water).  The
+    REGION rasters keep using the DEM mask, so region boundaries -- the
+    coast band, the coast/mountains line -- are untouched (ahl: "minimal,
+    so we don't have to start back at square 1 on the region
+    boundaries")."""
+    return np.load(DATA / "p2_land.npz")["land_mask"]
+
+
 def window_rasters(reg, sea, dem, s, cx, cy):
     """Rasters over the FULL footprint (window + band), print grid."""
     x_mm = (np.arange(N_FP) + 0.5) * PX_MM - RIM_MM
@@ -289,7 +312,10 @@ def window_rasters(reg, sea, dem, s, cx, cy):
                                    order=0, mode="nearest").astype(bool)
     demw = ndimage.map_coordinates(dem.astype(np.float32), [R, C],
                                    order=1, mode="nearest")
-    return regw, seaw, demw
+    landw = ndimage.map_coordinates(land_authority().astype(np.uint8),
+                                    [R, C], order=0,
+                                    mode="nearest").astype(bool)
+    return regw, seaw, demw, landw
 
 
 def fill_and_contiguity(regw, seaw, notes, where_km, fill_mask=None):
@@ -1655,10 +1681,16 @@ def main():
 
     notes = []
     # full-footprint rasters; window views drive pieces/cavities/coast
-    regw_fp, seaw_fp, demw_fp = window_rasters(reg, sea, dem, s, cx, cy)
+    regw_fp, seaw_fp, demw_fp, landw_fp = window_rasters(
+        reg, sea, dem, s, cx, cy)
+    # BODY assignment uses the POLYGON land authority (land_authority());
+    # the REGION rasters keep the DEM mask, so region boundaries are
+    # unchanged. See land_authority() for why.
+    wet_fp = ~landw_fp
     win_sl = (slice(RIM_PX, -RIM_PX), slice(RIM_PX, -RIM_PX))
     regw = regw_fp[win_sl].copy()
     seaw = seaw_fp[win_sl].copy()
+    wet = wet_fp[win_sl].copy()
     demw = demw_fp[win_sl]
     if (regw == base.DESERT).any():
         # desert is out of scope for the mini (no desert piece/cavity);
@@ -1706,7 +1738,7 @@ def main():
                          piece_pair_clear_px(name)),
             name, notes)
         geo[f"{name}_piece"] = piece
-    coast_nom = mask_polygon((regw == base.COAST) & ~seaw, 0.0)
+    coast_nom = mask_polygon((regw == base.COAST) & ~wet, 0.0)
     parts = _parts(coast_nom, MIN_COAST_PART_MM2)
     dropped = (len(list(getattr(coast_nom, "geoms", [coast_nom])))
                - len(parts))
@@ -1721,7 +1753,7 @@ def main():
 
     # gray body: ALL land in the outer band, regardless of region --
     # real geography continuing past the window to the print edge
-    land_fp = mask_polygon(~seaw_fp, 0.0, origin_mm=-RIM_MM, clip=footprint)
+    land_fp = mask_polygon(~wet_fp, 0.0, origin_mm=-RIM_MM, clip=footprint)
     gray = land_fp.difference(window_box) if land_fp is not None else None
     gparts = _parts(gray, MIN_COAST_PART_MM2) if gray is not None else []
     n_crumb = (len(list(getattr(gray, "geoms", [gray]))) - len(gparts)
@@ -1802,7 +1834,7 @@ def main():
                               - 0.5).astype(int), 0, N_FP - 1)
         cc = np.clip(np.round((xi + RIM_MM) / PX_MM - 0.5).astype(int),
                      0, N_FP - 1)
-        on_land = ~seaw_fp[rr, cc]
+        on_land = ~wet_fp[rr, cc]
         assert not on_land.any(), (
             f"rose ink over land: {on_land.sum()} cells, first at "
             f"({xi[on_land][0] if on_land.any() else 0:.1f}, "

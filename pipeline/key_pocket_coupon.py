@@ -46,9 +46,13 @@ MARGIN_MM = 5.0
 # --- the knobs under test (ahl is deciding these from this print) ---
 INSERT_INTERFERENCE_MM = 0.05   # plug dia = pocket dia + this (press fit,
                                 # permanent, glue optional)
-INSERT_BUMP_MM = 0.4            # how far the plug stands proud once
-                                # seated -- a felt bump, matching the
-                                # compass rose's validated raised height
+INSERT_BUMP_MM = 0.4            # how far the plug's FLAT top stands
+                                # proud of the plate once seated -- you
+                                # feel the step at its rim. The plug is a
+                                # plain cylinder, NOT domed (ahl
+                                # 2026-09-15: a dome would just print as
+                                # ridge lines); this number is only how
+                                # far it sticks up.
 INSERT_D_MM = POCKET_D_MM + INSERT_INTERFERENCE_MM
 INSERT_HEIGHT_MM = POCKET_DEPTH_MM + INSERT_BUMP_MM
 
@@ -71,7 +75,7 @@ def main():
           f"the real key)\n"
           f"  plug: dia {INSERT_D_MM:g} mm ({POCKET_D_MM:g} + "
           f"{INSERT_INTERFERENCE_MM:g} interference) x {INSERT_HEIGHT_MM:g} "
-          f"mm tall ({POCKET_DEPTH_MM:g} seated + {INSERT_BUMP_MM:g} proud)\n"
+          f"mm tall, flat-topped ({POCKET_DEPTH_MM:g} seated + {INSERT_BUMP_MM:g} proud)\n"
           f"  watertight: coupon {coupon.is_watertight}, plug "
           f"{plug.is_watertight}")
 

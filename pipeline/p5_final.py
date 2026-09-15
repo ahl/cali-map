@@ -172,6 +172,12 @@ def main():
                                    mode="nearest").astype(bool)
     caw = ndimage.map_coordinates(ca.astype(np.uint8), [R, C], order=0,
                                   mode="nearest").astype(bool)
+    # BODY assignment uses the POLYGON land authority; the REGION rasters
+    # keep the DEM `seaw`, so region boundaries do not move. See
+    # p4.land_authority() for the T1-print defect this fixes.
+    wet = ~ndimage.map_coordinates(p4.land_authority().astype(np.uint8),
+                                   [R, C], order=0,
+                                   mode="nearest").astype(bool)
     del C, R
 
     notes = []
@@ -216,7 +222,7 @@ def main():
                              clip=footprint), name, notes)
         assert geo[f"{name}_piece"].geom_type == "Polygon", \
             f"{name} piece is not one part"
-    coast_nom = p4.mask_polygon((regw == base.COAST) & ~seaw, 0.0,
+    coast_nom = p4.mask_polygon((regw == base.COAST) & ~wet, 0.0,
                                 clip=footprint)
     parts = p4._parts(coast_nom, p4.MIN_COAST_PART_MM2)
     n_all = len(list(getattr(coast_nom, "geoms", [coast_nom])))
@@ -271,7 +277,7 @@ def main():
     # Mexico coasts, cavity walls) are coincident by construction --
     # independently contoured coast/gray masks overlap by sub-pixel
     # wiggle along those lines
-    land_nom = p4.mask_polygon(~seaw, 0.0, clip=footprint)
+    land_nom = p4.mask_polygon(~wet, 0.0, clip=footprint)
     gray = land_nom.difference(cavities).difference(geo["coast_nom"])
     # the difference of near-coincident contours (land vs coast/cavity
     # along the CA border) leaves micro-filament slivers attached to the
@@ -280,6 +286,13 @@ def main():
     # 0.1 mm and never expands beyond the difference, so coast/gray
     # stay exactly disjoint (concave corners rounded < 0.05 mm)
     gray = gray.buffer(-0.05).buffer(0.05)
+    # the opening is a subset GEOMETRICALLY but not in floating point:
+    # it renders the shared coast/gray boundary with fresh vertices, and
+    # on the polygon coastline (far more intricate than the old DEM one)
+    # that left ~700 sub-micron slivers straddling the line. Re-cut coast
+    # out AFTER the opening so the two filament bodies are disjoint by
+    # construction rather than by an epsilon.
+    gray = gray.difference(geo["coast_nom"])
     gall = list(getattr(gray, "geoms", [gray]))
     gparts = p4._parts(gray, p4.MIN_COAST_PART_MM2)
     if len(gall) - len(gparts):
