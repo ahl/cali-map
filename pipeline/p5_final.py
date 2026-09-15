@@ -67,9 +67,9 @@ THE REGION KEY (D19, out/p5/key.stl + out/p5/key_insert.pdf): a plate
 that press-fits into its own rectangular recess in the frame over
 Nevada, listing the five regions with a colour-swatch plug beside each.
 Placement and size come from config [key]; the HEIGHT does not -- the
-build scans a band around the key's perimeter and sets the top flush
-with the tallest adjacent terrain, so moving or resizing the key
-re-heights it automatically.  The bottom sits on the tray floor at the
+build walks the key's BOUNDARY and sets the top flush with the tallest
+terrain it meets there, so moving or resizing the key re-heights it
+automatically.  The bottom sits on the tray floor at the
 same z as every piece.  Permanent press fit: no ribs, no poke-hole.
 
 Outputs: out/p5/frame.3mf, out/p5/{mountains,valley,desert}.stl,
@@ -114,22 +114,25 @@ def key_rect():
     return box(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2)
 
 
-def key_top_relief_mm(rect, terrain_relief, search_mm, step=0.4):
-    """Tallest terrain ADJACENT to `rect` (mm above datum): sample a band
-    `search_mm` wide around its perimeter and take the max relief.  This
-    is what sets the key's height -- ahl 2026-09-15 wants the plate flush
-    with the highest peak next to it, re-scanned whenever the key moves
-    or resizes, so no height is ever configured by hand.  `terrain_relief`
-    is p4.make_terrain_fn with z_datum=0, i.e. it returns relief in mm."""
-    band = rect.buffer(search_mm).difference(rect)
-    minx, miny, maxx, maxy = band.bounds
-    xs = np.arange(minx, maxx + 1e-9, step)
-    ys = np.arange(miny, maxy + 1e-9, step)
-    X, Y = np.meshgrid(xs, ys)
-    pts = np.column_stack([X.ravel(), Y.ravel()])
-    from shapely import contains_xy
-    pts = pts[contains_xy(band, pts[:, 0], pts[:, 1])]
-    assert len(pts), "key perimeter band sampled no points"
+def key_top_relief_mm(rect, terrain_relief, step=0.1):
+    """Max terrain relief (mm above datum) ON the key's BOUNDARY: walk
+    the rectangle's perimeter at `step` spacing and take the tallest
+    value found.
+
+    ahl 2026-09-15, clarifying "flush with the highest peak adjacent to
+    it": adjacent means the terrain the key's edge actually meets --
+    each point along the boundary line -- NOT terrain merely nearby.
+    (An earlier version sampled a band around the perimeter and so
+    picked up peaks standing off from the key, making it taller than
+    the terrain it touches.)  Re-scanned every build, so moving or
+    resizing the key re-heights it and no height is configured by hand.
+    `terrain_relief` is p4.make_terrain_fn with z_datum=0, i.e. it
+    returns relief in mm."""
+    ring = rect.exterior
+    n = max(8, int(np.ceil(ring.length / step)))
+    pts = np.array([[p.x, p.y] for p in
+                    (ring.interpolate(d) for d in
+                     np.linspace(0.0, ring.length, n, endpoint=False))])
     return float(terrain_relief(pts).max()), len(pts)
 
 PIECES = (("mountains", base.MOUNTAINS, "MTN"),
@@ -547,8 +550,7 @@ def main():
     if KEY.get("enabled", False):
         rect = geo["key_nom"]
         relief_fn = p4.make_terrain_fn(dem, s, GX0, GY0, z_per_m, 0.0)
-        peak_mm, n_samp = key_top_relief_mm(
-            rect, relief_fn, KEY.get("adjacent_search_mm", 10.0))
+        peak_mm, n_samp = key_top_relief_mm(rect, relief_fn)
         # Z BOOKKEEPING (ahl asked 2026-09-15 whether the key was sized
         # off the print plane rather than off where it actually sits):
         # key.stl is exported in PIECE-LOCAL z, bottom at 0, exactly like
@@ -584,10 +586,9 @@ def main():
         kpath = OUT_DIR / "key.stl"
         key_mesh.export(kpath)
         ok &= p4.report_mesh("key", key_mesh)
-        print(f"    top scanned from terrain: tallest of {n_samp} samples "
-              f"in a {KEY.get('adjacent_search_mm', 10.0):g} mm band around "
-              f"the perimeter = {peak_mm:.2f} mm of relief "
-              f"({peak_mm / z_per_m:.0f} m)\n"
+        print(f"    top scanned from terrain: tallest of {n_samp} points "
+              f"walked along the key's BOUNDARY = {peak_mm:.2f} mm of "
+              f"relief ({peak_mm / z_per_m:.0f} m)\n"
               f"    -> plate {pl_w:.2f} x {ph:.2f} x {top_local:.2f} mm "
               f"tall in the STL (z from 0, like every piece)\n"
               f"    z check: the STL's z=0 is the RECESS FLOOR, "
