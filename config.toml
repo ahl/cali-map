@@ -251,13 +251,19 @@ pocket_depth_mm = 1.4
 # numbers that print is meant to settle. They live here, not in the
 # coupon script, so the coupon and the real P5 plugs can never drift
 # apart: one edit moves both.
-#   plug diameter = pocket_d_mm + plug_interference_mm  (press fit)
+#   plug diameter = pocket_d_mm + plug_interference_mm  (NEGATIVE
+#                   = clearance, which is where this landed)
 #   plug height   = pocket_depth_mm + plug_proud_mm
 # The plug is a plain flat-topped CYLINDER, never domed -- a dome at
 # this size just prints as ridge lines (ahl 2026-09-15). plug_proud_mm
 # is only how far the flat top stands above the plate; you feel the
 # step at its rim.
-plug_interference_mm = 0.05
+# -0.15 is a PLACEHOLDER mid-ladder guess, NOT yet measured. +0.05 was
+# tried and was far too tight -- ahl forced it in and deformed the plug
+# (a nominal 5 mm pocket prints undersize, so designed interference
+# becomes much more in plastic). Print out/key_coupon/{pocket,plug}_
+# ladder.stl and set this to the step that seats firmly by hand.
+plug_interference_mm = -0.15
 plug_proud_mm = 0.4
 # Title + region text. Title cap matches the compass rose's N/E/S/W
 # letters ([compass].letter_cap_mm); it wraps over as many lines as the

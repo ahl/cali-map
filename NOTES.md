@@ -678,6 +678,22 @@ without guesswork; they go to overrides/*.geojson and build_regions
 applies them, moving one boundary without touching a global knob.
   uv run pipeline/region_markup.py [west south east north]
 
+**Key swatch plugs: +0.05 mm interference was FAR too tight (ahl
+2026-09-15, from the pocket coupon).** He forced it in and deformed the
+plug. Cause is the usual FDM small-hole behaviour, not the number being
+slightly off: a nominal 5 mm pocket prints UNDERSIZE (the inner
+perimeter's extrusion overlaps into the bore) while the plug prints
+slightly oversize, so a few hundredths of designed interference becomes
+a few tenths in plastic. How much is a property of ahl's printer and
+profile -- not derivable, so it gets measured.
+`pipeline/key_pocket_coupon.py` is now a fit LADDER: seven plugs from
+-0.30 to 0.00 mm against pockets at the key's real diameter, in one
+print, with an index dimple marking plug #1. Pick the one that seats
+firmly BY HAND (the plug is glued and permanent -- it does not need to
+grip on its own) and set `[key].plug_interference_mm` to that step; the
+real P5 plug reads the same knob. Config currently holds -0.15 as an
+un-measured PLACEHOLDER so the build stays runnable.
+
 ## Observation log (noted, NOT to be acted on unless ahl says so)
 
 - **PLA translucency at thin land (ahl 2026-09-14):** near-datum coastal

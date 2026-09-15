@@ -13,23 +13,35 @@
 #   "py-lib3mf",
 # ]
 # ///
-"""Key-pocket test coupon (ahl 2026-09-15): a tiny square carrying ONE
-blind pocket, plus the plug that goes in it -- print both, press them
-together, and decide the final plug dimensions before the real key
-(D19, built into p5_final.py) commits to five filament colours.
+"""Key-pocket fit LADDER (ahl 2026-09-15): one strip of pockets at the
+real key's diameter, and a matching row of plugs at a range of
+diameters, so the right plug size is MEASURED in one print instead of
+guessed one print at a time.
 
-Pocket geometry is taken from config [key] so the coupon always matches
-the real key's pockets. Plug dimensions are the OPEN question this
-coupon exists to answer, so they live here:
+Why a ladder: the first attempt used +0.05 mm of designed interference
+and came out far too tight -- ahl forced it in and deformed the plug.
+That is the usual FDM small-hole story: a nominal 5 mm pocket prints
+undersize (the inner perimeter's extrusion overlaps into the bore) while
+the plug prints slightly oversize, so a few hundredths of *designed*
+interference can be a few tenths in plastic. The size of that error is a
+property of the printer and profile, not something to derive -- so
+print the ladder, find the plug that seats firmly by hand without
+force, and put that number in config.
 
-    plug diameter = pocket + INSERT_INTERFERENCE_MM   (press fit)
-    plug height   = pocket depth + INSERT_BUMP_MM     (stands proud)
+The POCKETS stay at the key's real diameter ([key].pocket_d_mm); only
+the PLUGS vary, since the pocket is what the key is committed to.
 
-Outputs: out/key_coupon/{pocket_coupon.stl, plug.stl}
+Orientation: the coupon has a small INDEX DIMPLE beside pocket #1, the
+smallest plug. Plugs print in the same order, smallest first.
+
+Outputs: out/key_coupon/{pocket_ladder.stl, plug_ladder.stl}
 """
 
 import sys
 from pathlib import Path
+
+import numpy as np
+import trimesh
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import key_panel as kp
@@ -38,50 +50,72 @@ import p4_bay_coupon as p4c
 OUT_DIR = p4c.ROOT / "out" / "key_coupon"
 KEY = p4c._CFG_ALL.get("key", {})
 
-POCKET_D_MM = KEY.get("pocket_d_mm", 7.0)
+POCKET_D_MM = KEY.get("pocket_d_mm", 5.0)
 POCKET_DEPTH_MM = KEY.get("pocket_depth_mm", 1.4)
 PLATE_THICKNESS_MM = POCKET_DEPTH_MM + 1.2   # + solid floor under it
-MARGIN_MM = 5.0
+MARGIN_MM = 4.0
+PITCH_MM = POCKET_D_MM + 5.0                 # pocket-to-pocket spacing
+INDEX_D_MM = 1.6                             # orientation dimple
 
-# The knobs this coupon exists to settle. They live in config [key]
-# (not here) so the coupon and the real P5 plugs cannot drift apart --
-# see the comment there.
-INSERT_INTERFERENCE_MM = KEY.get("plug_interference_mm", 0.05)
+# The ladder: plug diameter = POCKET_D_MM + step. NEGATIVE is clearance.
+# Centred on clearance, not interference, because +0.05 was already too
+# tight -- the true zero is somewhere below 0 once print growth is
+# accounted for. The winner goes into config [key].plug_interference_mm,
+# which both this coupon and the real P5 plug read.
+LADDER_MM = [-0.30, -0.25, -0.20, -0.15, -0.10, -0.05, 0.00]
+
+# from config, for the final (single-plug) geometry the key ships
 INSERT_BUMP_MM = KEY.get("plug_proud_mm", 0.4)
-INSERT_D_MM = POCKET_D_MM + INSERT_INTERFERENCE_MM
 INSERT_HEIGHT_MM = POCKET_DEPTH_MM + INSERT_BUMP_MM
 
 
 def main():
-    side = POCKET_D_MM + 2 * MARGIN_MM
-    center = (side / 2, side / 2)
-    recesses = [{"points": kp.circle_ring(*center, POCKET_D_MM / 2),
-                "depth": POCKET_DEPTH_MM}]
-    coupon = kp.build_plate(side, side, recesses, PLATE_THICKNESS_MM)
-    assert coupon.is_watertight
+    n = len(LADDER_MM)
+    width = 2 * MARGIN_MM + (n - 1) * PITCH_MM + POCKET_D_MM
+    height = 2 * MARGIN_MM + POCKET_D_MM
+    cy = height / 2
+    xs = [MARGIN_MM + POCKET_D_MM / 2 + i * PITCH_MM for i in range(n)]
+
+    recesses = [{"points": kp.circle_ring(x, cy, POCKET_D_MM / 2),
+                "depth": POCKET_DEPTH_MM} for x in xs]
+    # index dimple beside pocket #1 (the smallest plug)
+    recesses.append({"points": kp.circle_ring(
+        MARGIN_MM + POCKET_D_MM / 2, MARGIN_MM / 2, INDEX_D_MM / 2),
+        "depth": POCKET_DEPTH_MM})
+    coupon = kp.build_plate(width, height, recesses, PLATE_THICKNESS_MM)
+    assert coupon.is_watertight, "pocket ladder not watertight"
     if coupon.volume < 0:
         coupon.invert()
-    plug = kp.insert_mesh(INSERT_D_MM, INSERT_HEIGHT_MM)
-    assert plug.is_watertight
 
-    print(f"key pocket coupon: {side:.1f} x {side:.1f} x "
-          f"{PLATE_THICKNESS_MM:g} mm, pocket dia {POCKET_D_MM:g} x "
-          f"{POCKET_DEPTH_MM:g} deep (from config [key], so it matches "
-          f"the real key)\n"
-          f"  plug: dia {INSERT_D_MM:g} mm ({POCKET_D_MM:g} + "
-          f"{INSERT_INTERFERENCE_MM:g} interference) x {INSERT_HEIGHT_MM:g} "
-          f"mm tall, flat-topped ({POCKET_DEPTH_MM:g} seated + {INSERT_BUMP_MM:g} proud)\n"
-          f"  watertight: coupon {coupon.is_watertight}, plug "
-          f"{plug.is_watertight}")
+    plugs = []
+    for i, step in enumerate(LADDER_MM):
+        m = kp.insert_mesh(POCKET_D_MM + step, INSERT_HEIGHT_MM)
+        m.apply_translation([xs[i], cy, 0.0])
+        assert m.is_watertight
+        plugs.append(m)
+    ladder = trimesh.util.concatenate(plugs)
+
+    print(f"key-pocket FIT LADDER: pockets all {POCKET_D_MM:g} mm dia x "
+          f"{POCKET_DEPTH_MM:g} deep (the real key's size, from config "
+          f"[key]); {n} plugs, {INSERT_HEIGHT_MM:g} mm tall, flat-topped")
+    print(f"  plate {width:.1f} x {height:.1f} x {PLATE_THICKNESS_MM:g} mm; "
+          f"index dimple marks plug #1")
+    for i, step in enumerate(LADDER_MM, start=1):
+        print(f"    #{i}  plug dia {POCKET_D_MM + step:5.2f} mm  "
+              f"({step:+.2f} vs pocket)")
+    print(f"  coupon watertight {coupon.is_watertight}, plugs watertight "
+          f"{ladder.is_watertight}")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    for name, mesh in (("pocket_coupon", coupon), ("plug", plug)):
+    for name, mesh in (("pocket_ladder", coupon), ("plug_ladder", ladder)):
         path = OUT_DIR / f"{name}.stl"
         mesh.export(path)
         print(f"-> {path}")
-    print("press the plug into the coupon: too loose or too tight, tune "
-          "[key].plug_interference_mm / plug_proud_mm in config.toml -- "
-          "that updates this coupon AND the real P5 plugs together.")
+    print("\nprint both, press each plug into its own pocket, and pick the "
+          "one that seats firmly BY HAND with no force (it is glued and "
+          "permanent, so it does not need to grip on its own).\n"
+          "then set [key].plug_interference_mm to that step -- the real "
+          "P5 plug (out/p5/key_plug.stl) reads the same knob.")
 
 
 if __name__ == "__main__":
