@@ -546,7 +546,7 @@ def main():
               f"  -> {path}")
 
     # ---- the region KEY: a plate that press-fits into its recess ------
-    key_rows = None
+    key_rows = key_recess = None
     if KEY.get("enabled", False):
         rect = geo["key_nom"]
         relief_fn = p4.make_terrain_fn(dem, s, GX0, GY0, z_per_m, 0.0)
@@ -572,7 +572,7 @@ def main():
         kx0, ky0, kx1, ky1 = rect.bounds
         pw = (kx1 - kx0) + inter
         ph = (ky1 - ky0) + inter
-        pl_w, pl_h, key_rows, lrec = key_panel.layout(
+        pl_w, pl_h, key_rows, key_recess = key_panel.layout(
             pw, ph, pocket_d=KEY.get("pocket_d_mm", 5.0),
             title=KEY.get("title", key_panel.TITLE),
             title_cap=KEY.get("title_cap_mm", key_panel.TITLE_CAP_MM),
@@ -583,7 +583,7 @@ def main():
                      "depth": KEY.get("pocket_depth_mm", 1.4)}
                     for r in key_rows]
         recesses.append({"points": key_panel.rect_ring(
-                            lrec["x0"], lrec["y0"], lrec["x1"], lrec["y1"]),
+                            key_recess["x0"], key_recess["y0"], key_recess["x1"], key_recess["y1"]),
                          "depth": KEY.get("label_recess_mm", 0.2)})
         key_mesh = key_panel.build_plate(pl_w, pl_h, recesses, top_local)
         key_mesh.apply_translation([kx0 - inter / 2, ky0 - inter / 2, 0.0])
@@ -607,10 +607,10 @@ def main():
               f"    {len(key_rows)} swatch pockets dia "
               f"{KEY.get('pocket_d_mm', 5.0):g} x "
               f"{KEY.get('pocket_depth_mm', 1.4):g} deep; label recess "
-              f"{lrec['x1'] - lrec['x0']:.1f} x {lrec['y1'] - lrec['y0']:.1f}"
+              f"{key_recess['x1'] - key_recess['x0']:.1f} x {key_recess['y1'] - key_recess['y0']:.1f}"
               f" x {KEY.get('label_recess_mm', 0.2):g} deep -> {kpath}")
         key_panel.OUT_DIR = OUT_DIR       # write the label next to key.stl
-        key_panel.render_label(lrec, key_rows)
+        key_panel.render_label(key_recess, key_rows)
         print("    NOTE plug dimensions are NOT fixed yet (ahl 2026-09-15: "
               "decide after test-fitting out/key_coupon/); "
               "the pockets are cut, the plugs are a later step.")
@@ -653,7 +653,7 @@ def main():
             p = ring.interpolate(d)
             rib_pts.append({"name": name, "kind": kind, "x": p.x, "y": p.y})
     render_preview(geo, s, holes, stamps, ribbed_geo, rib_pt, rose, rose_c,
-                  EW_MM, rib_pts, key_rows)
+                  EW_MM, rib_pts, key_rows, key_recess)
     print(f"\nall bodies/pieces watertight + checks: {ok}")
     if not ok:
         sys.exit(1)
@@ -666,7 +666,7 @@ def main():
 
 # ----------------------------------------------------------------- preview
 def render_preview(geo, s, holes, stamps, ribbed, rib_pt, rose, rose_c,
-                   ew_mm, rib_pts, key_rows=None):
+                   ew_mm, rib_pts, key_rows=None, key_recess=None):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -715,18 +715,39 @@ def render_preview(geo, s, holes, stamps, ribbed, rib_pt, rose, rose_c,
                             z=2)
                 k = affinity.translate(k, 0.0, 45.0)
             p4.add_poly(ax, k, (0.97, 0.97, 0.95), ec="black", lw=0.5, z=3)
+            # draw the REAL key contents (ahl 2026-09-15) -- the title
+            # and region names at their true sizes and positions, not a
+            # placeholder label, so the preview shows what gets printed
+            ox = geo["key_nom"].bounds[0]
+            oy = geo["key_nom"].bounds[1] + (45.0 if pieces_exploded else 0.0)
             for r in key_rows or []:
                 px, py = r["pocket_c"]
-                px += geo["key_nom"].bounds[0]
-                py += geo["key_nom"].bounds[1]
-                if pieces_exploded:
-                    py += 45.0
                 ax.add_patch(plt.Circle(
-                    (px, py), KEY.get("pocket_d_mm", 5.0) / 2,
+                    (ox + px, oy + py), KEY.get("pocket_d_mm", 5.0) / 2,
                     facecolor="#b9b9b9", edgecolor="black", lw=0.3, zorder=4))
-            kc = k.centroid
-            ax.annotate("key", (kc.x, kc.y + 14), color="black", fontsize=8,
-                        ha="center", weight="bold", zorder=6)
+            if key_recess is not None:
+                # glyphs as VECTOR OUTLINES in mm, the same way the
+                # compass rose draws its letters -- a matplotlib
+                # fontsize would have to be back-computed from the axes
+                # extent and dpi at draw time, which is fragile; a
+                # TextPath scaled to cap height is exact by construction
+                ff = compass_art._font_file(key_panel.FONT)
+                rx = ox + key_recess["x0"]
+                ry = oy + key_recess["y0"]
+
+                def _mm_text(txt, x, y, cap):
+                    g = compass_art._letter_poly(txt, ff, cap,
+                                                 compass_art.CHORD_TOL_MM)
+                    x0, y0, x1, y1 = g.bounds
+                    p4.add_poly(ax, affinity.translate(
+                        g, x - x0, y - (y0 + y1) / 2), (0.1, 0.1, 0.1), z=5)
+
+                for ln, ty in zip(key_recess["title_lines"],
+                                  key_recess["title_y_local"]):
+                    _mm_text(ln, rx, ry + ty, key_recess["title_cap"])
+                for r in key_rows or []:
+                    _mm_text(r["label"], rx, ry + r["text_y_local"],
+                             key_recess["label_cap"])
 
     # crush-rib sites in RED -- "pair" (piece-piece) ribs as a triangle
     # (the ones implicated in the T2 too-tight finding), "frame" ribs as

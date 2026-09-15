@@ -2,29 +2,30 @@
 
 ## HANDOFF STATE (written 2026-09-14 at a context reset — READ FIRST)
 
-**Where things stand (updated 2026-09-15):** **T3** is BUILT, converged
-(`make -n` clean), all bodies watertight, and CLEARED TO PRINT —
-out/p4_mini/{frame.3mf,mountains.stl,valley.stl}; ahl is about to print
-it. out/p5/ (frame.3mf + 3 piece STLs) is built from the SAME
-parameters. Everything regenerates via `make` (D12); config.toml +
-overrides/ + assets/compass.svg are the complete inputs.
+**Where things stand (updated 2026-09-15):** **T3 IS PRINTED AND THE
+FIT IS SETTLED** — ahl: *"the T3 fit is great. I don't think I'd change
+it at all."* The clearances are now marked LOCKED in config.toml; three
+generations got here (T1 loose, T2 too tight, T3 right), so changing
+them means a new coupon print and a new build_tag, not a casual edit.
 
-**T3 = frame 0.10 / pair 0.20 (symmetric) / ribs 0.05 mm crush,
-hand-placed.** Full spec + rationale in the T3 entry under "Print
-sessions"; the two changes that matter most are the symmetric pair rule
-(no more valley zero-clearance exception) and ribs now being specified
-as OVERLAP WITH THE MATING FACE, which fixed pair ribs that were
-silently 0.04 mm short of touching. **ahl: if T3 feels good, lock these
-clearances in.**
+**THE LOCKED FIT:**
 
-**Awaiting from the T3 print:** overall fit/snugness at the new
-clearances, rib retention when tipped with a from-scratch pair, whether
-frame 0.10 binds (it was 0.15 through T1+T2 and "pretty locked in"),
-18 mm finger-hole ergonomics, 6 mm letter "E" legibility. Each maps to
-a config knob; iterate: bump [output].build_tag, adjust knobs,
-`make p4`. Note T3 moved frame AND pair together, so a too-tight result
-won't isolate which — and the coupon has no desert, so three-piece
-wedging stays untested until P5.
+| interface | gap | rib bite |
+|---|---|---|
+| piece <-> frame | **0.10 mm** (piece shrinks; cavity nominal) | 0.05 mm |
+| piece <-> piece | **0.20 mm** (0.10 each, symmetric) | 0.05 mm |
+
+plus crush ribs r0.4 mm, hand-placed via config `[print.ribs]`, and
+`enclosed_piece_zero_clearance = false` (no valley exception). The two
+changes that made T3 work: the symmetric pair rule, and specifying ribs
+as OVERLAP WITH THE MATING FACE — which fixed pair ribs that were
+silently 0.04 mm short of touching anything.
+
+**What T3 did NOT exercise** (so the fit is proven only this far): the
+P4 coupon is MOUNTAINS + VALLEY + FRAME. Desert, three-piece wedging,
+and the full 225 x 250 frame are still unproven — they arrive with P5.
+Also unconfirmed from this print: 18 mm finger-hole ergonomics and
+6 mm rose-letter "E" legibility (ahl did not comment either way).
 
 **Then the endgame (P6):** full-size mountains DRESS REHEARSAL in a
 plentiful color (decides flat-vs-VERTICAL printing — see Filament
@@ -524,8 +525,19 @@ FINAL 225 x 250 FRAME ONLY
   zero-clearance to desert — both premature, both undone before the T3
   decisions below. Desert's zero-clearance (for the mountains+desert
   snug-fit goal) stays parked as its own future decision.
-- **T3 spec — FINAL, built and cleared to print (ahl 2026-09-15).**
-  `build_tag` = "T3"; `make p4 p5` converged, all bodies watertight.
+- **T3 (2026-09-15): PRINTED — "the fit is great. I don't think I'd
+  change it at all" (ahl). The clearances are LOCKED.** Frame 0.10 does
+  not bind (it was 0.15 through T1+T2), the symmetric 0.20 pair gap is
+  right, and the ribs — biting 0.05 mm into the mating face, hand-placed
+  — retain properly. This is the end of the T1(loose) -> T2(too tight)
+  -> T3(right) sequence; config.toml marks these LOCKED, and changing
+  one means a fresh coupon print + build_tag, not an edit. Caveats
+  carried forward: the coupon has no desert, so three-piece wedging and
+  the mountains<->desert seam are still unproven, as is the full
+  225 x 250 frame; and 18 mm poke-hole ergonomics / 6 mm rose-letter
+  legibility went uncommented.
+  Spec as built: `build_tag` = "T3"; `make p4 p5` converged, all bodies
+  watertight.
 
   | interface | gap | contributors | rib bite |
   |---|---|---|---|

@@ -101,42 +101,39 @@ stamps_enabled = false
 
 [print]
 # Physical print parameters — shared by the P4 coupon AND the P5 final
-# build, so coupon-validated values transfer 1:1. Adjust after each test
-# print; `make` regenerates everything affected.
-clearance_per_side_mm = 0.10  # piece shrink vs the FRAME (frame = nominal;
-                              # total piece-frame gap = this value).
-                              # T1/T2 verdict: 0.15 "pretty locked in" --
-                              # T3 (ahl 2026-09-15): lowered to 0.10,
-                              # relying on ribs (unchanged: r0.4 mm,
-                              # +0.05 mm interference) to do more of the
-                              # retention work at a tighter base fit.
-                              # Needs a re-print to confirm it isn't too
-                              # tight now that ribs are added on top.
-clearance_pair_per_side_mm = 0.10   # piece shrink along PIECE-PIECE shared
-                              # borders, contributed by BOTH sides
-                              # (symmetric -- see enclosed_piece_zero_
-                              # clearance below, now OFF). History:
-                              # 0.15/side symmetric (T1) = 0.30 total ->
-                              # loose valley. 0.08 (T2) with valley
-                              # taking ZERO (enclosed rule) = 0.08 total
-                              # -> too tight TOGETHER. 0.15 with the
-                              # enclosed rule = 0.15 total, matching the
-                              # "especially nice and snug" T2-valley/
-                              # T1-mountain pairing, but ahl wants a
-                              # cleaner symmetric rule instead of relying
-                              # on the enclosed exception. T3 (this
-                              # value): 0.10/side BOTH contributing =
-                              # 0.20 total -- needs a re-print to confirm.
-enclosed_piece_zero_clearance = false  # ahl 2026-09-15: T3 removes the
-                              # valley exception -- back to BOTH pieces
-                              # contributing clearance_pair_per_side_mm
-                              # symmetrically (like T1), just at a
-                              # smaller per-side value than T1 used.
-                              # History: true for T2 (a piece FULLY
-                              # ENCLOSED by another -- touching no frame,
-                              # i.e. the valley -- took ZERO clearance,
-                              # its neighbor's clearance_pair_per_side_mm
-                              # did all the work).
+# build, so coupon-validated values transfer 1:1.
+#
+# ============================ LOCKED ============================
+# The FIT NUMBERS below are SETTLED as of the T3 coupon print
+# (ahl 2026-09-15: "the T3 fit is great. I don't think I'd change it at
+# all"). Three generations got here -- T1 loose, T2 too tight, T3 right
+# -- so do NOT casually re-tune them; a change means a new coupon print
+# and a new build_tag. What T3 actually exercised: the P4 coupon, i.e.
+# MOUNTAINS + VALLEY + FRAME at final scale. Still unproven at P5:
+# desert, three-piece wedging, and the full 225 x 250 frame.
+#   piece <-> frame : 0.10 total (piece shrinks; cavity is nominal)
+#   piece <-> piece : 0.20 total (0.10 each, symmetric)
+#   crush ribs      : r0.4 mm, 0.05 mm bite INTO the mating face
+# ================================================================
+clearance_per_side_mm = 0.10  # LOCKED T3. Piece shrink vs the FRAME
+                              # (frame = nominal, so this IS the whole
+                              # gap). Was 0.15 through T1+T2 ("pretty
+                              # locked in"); 0.10 relies on the ribs for
+                              # retention and does not bind.
+clearance_pair_per_side_mm = 0.10   # LOCKED T3. Piece shrink along
+                              # PIECE-PIECE borders, contributed by BOTH
+                              # sides -> 0.20 total. History: 0.15/side
+                              # symmetric (T1) = 0.30 -> loose valley;
+                              # 0.08 with the valley taking ZERO (T2)
+                              # = 0.08 -> too tight TOGETHER, and the
+                              # pair ribs were jamming hard because
+                              # valley sat exactly on the nominal line.
+enclosed_piece_zero_clearance = false  # LOCKED T3. No valley exception:
+                              # both pieces contribute symmetrically.
+                              # Under the old rule 100% of the pair gap
+                              # (and of the relief at the fragile
+                              # Petaluma spur) came off mountains alone.
+                              # History: true for T2 only.
 base_mm = 3.0                 # water surface height above print bottom
 floor_mm = 1.2                # tray floor under everything (D16)
 bottom_chamfer_mm = 0.0       # 45-deg chamfer at piece bottom edges
@@ -148,9 +145,12 @@ poke_hole_d_mm = 18.0         # extraction holes through the floor —
                               # was 8.0/pushrod-sized). Holes MAY span
                               # piece-piece seams; keep >= 1.5 mm from
                               # frame cavity walls.
-rib_interference_mm = 0.05    # crush-rib proudness on piece walls (the
-                              # retention mechanism: pieces hold when
-                              # tipped, release via poke holes; 0 = off)
+rib_interference_mm = 0.05    # LOCKED T3. How deep a crush rib bites
+                              # INTO THE MATING FACE (not an offset from
+                              # nominal -- see add_crush_ribs): the
+                              # retention mechanism, so pieces hold when
+                              # tipped and release via the poke holes.
+                              # 0 = no ribs.
 rib_radius_mm = 0.4           # crush-rib half-cylinder radius
 ribs_per_piece = 4            # flat count -- only used for pieces with NO
                               # manual [print.ribs] list (see below);
