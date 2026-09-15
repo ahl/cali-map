@@ -1,46 +1,109 @@
 # California Topo Puzzle Map — Design Log
 
-## HANDOFF STATE (written 2026-09-14 at a context reset — READ FIRST)
+## HANDOFF STATE (rewritten 2026-09-15 — READ FIRST)
 
-**Where things stand (updated 2026-09-15):** **T3 IS PRINTED AND THE
-FIT IS SETTLED** — ahl: *"the T3 fit is great. I don't think I'd change
-it at all."* The clearances are now marked LOCKED in config.toml; three
-generations got here (T1 loose, T2 too tight, T3 right), so changing
-them means a new coupon print and a new build_tag, not a casual edit.
+**Everything is BUILT, CONVERGED (`make -n` clean) and WATERTIGHT.**
+config.toml + overrides/ + assets/compass.svg are the complete inputs;
+`make` (D12) regenerates exactly what is stale.
 
-**THE LOCKED FIT:**
+**The fit is SETTLED and print-validated.** ahl on the T3 coupon: *"the
+T3 fit is great. I don't think I'd change it at all."* Marked LOCKED in
+config with a banner; changing one means a fresh coupon print and a new
+build_tag, not an edit.
 
 | interface | gap | rib bite |
 |---|---|---|
-| piece <-> frame | **0.10 mm** (piece shrinks; cavity nominal) | 0.05 mm |
+| piece <-> frame | **0.10 mm** (piece shrinks; cavity is nominal) | 0.05 mm |
 | piece <-> piece | **0.20 mm** (0.10 each, symmetric) | 0.05 mm |
 
-plus crush ribs r0.4 mm, hand-placed via config `[print.ribs]`, and
-`enclosed_piece_zero_clearance = false` (no valley exception). The two
-changes that made T3 work: the symmetric pair rule, and specifying ribs
-as OVERLAP WITH THE MATING FACE — which fixed pair ribs that were
-silently 0.04 mm short of touching anything.
+Crush ribs r0.4 mm, hand-placed. Poke holes 18 mm, hand-placed. The two
+changes that made T3 work: the symmetric pair rule (no valley
+exception), and specifying ribs as OVERLAP WITH THE MATING FACE, which
+fixed pair ribs that were silently 0.04 mm short of touching anything.
 
-**What T3 did NOT exercise** (so the fit is proven only this far): the
-P4 coupon is MOUNTAINS + VALLEY + FRAME. Desert, three-piece wedging,
-and the full 225 x 250 frame are still unproven — they arrive with P5.
-Also unconfirmed from this print: 18 mm finger-hole ergonomics and
-6 mm rose-letter "E" legibility (ahl did not comment either way).
+**P5 is fully specified and has NEVER BEEN PRINTED.** That is the next
+milestone and the main remaining risk: everything validated so far came
+from the P4 coupon, which is mountains + valley + frame at final scale.
+P5 additionally has the desert, three-piece wedging, the 225 x 250 mm
+frame, and the key.
 
-**Then the endgame (P6):** full-size mountains DRESS REHEARSAL in a
-plentiful color (decides flat-vs-VERTICAL printing — see Filament
-logistics / vertical-printing notes) -> final prints: frame (4-color,
-brim ~4 mm), valley green, desert yellow, mountains brown LAST (scarce
-filament, print once).
+**P5 outputs** (`make p5`): frame.3mf (5 parts: coast / floor / water /
+gray / black rose — floor and water split so ironing can target the
+visible water top only), mountains/valley/desert.stl, key.stl,
+key_plug.stl, key_insert.pdf, p5_preview.png, p5_rib_markup.png.
+
+**Hand placement is done for P5** (ahl's markup, extracted 2026-09-15):
+ribs mountains 11 / valley 0 / desert 4; poke holes mountains 5 /
+valley 2 / desert 3, one of them a mountains+valley seam hole.
+VALLEY CARRIES NO RIBS ON PURPOSE — it touches no frame in P5 (nearest
+approach 1.7 mm) and every mountains/valley rib was put on the
+mountains side, which grips the joint either way since a rib bites the
+mating face whichever piece carries it. Valley is therefore held
+ENTIRELY by the mountains interface; if it ever feels loose, that is
+the place to look.
+
+**Recent fixes worth not re-breaking:**
+- LAND AUTHORITY: bodies now follow p2_land's polygon `land_mask`, not
+  the DEM `elev<=0` mask. Fixed 445 km^2 inside CA (SF Bay baylands)
+  printing as WATER. Region BOUNDARIES still use the DEM mask by ahl's
+  call, so this was a body-assignment fix only. See the dedicated
+  section below.
+- RING BUG: all rib machinery walked `.exterior` only, so marks on the
+  mountains/valley seam (an INTERIOR ring — mountains holds the valley
+  in a hole) snapped 17-24 mm away, and the automatic placer could
+  never put a pair rib there at all. Sites are now
+  `(ring_idx, arc_length, kind)`.
+- The key: 68 x 66 mm over Nevada, top auto-scanned to sit flush with
+  the terrain on its own boundary, permanent press fit, 5 mm swatch
+  pockets each with a 2.5 mm poke hole, plug 4.90 mm (MEASURED off a
+  fit ladder), 2D-printed insert with cut line and border.
+
+**NEXT, in order:**
+1. **Print the P5 frame.** The big unknown. Watch: brim (see below),
+   bed adhesion on a 225 x 250 footprint, 4-colour seam quality, and
+   whether the key recess prints cleanly.
+2. **Print the P5 pieces** and check three-piece assembly — the wedging
+   ahl described (pieces pushing on each other), the mountains<->desert
+   seam, and valley retention with no ribs of its own.
+3. **Assemble the key**: plugs into pockets (poke holes underneath if
+   one goes in wrong), then the paper insert, then press the key in.
+4. Then P6 endgame: mountains DRESS REHEARSAL in a plentiful colour
+   (decides flat vs VERTICAL printing) -> final prints, mountains brown
+   LAST (scarce filament, one shot).
+
+**KNOWN RISKS going into the P5 print:**
+- **Brim is 3 mm, which lands on EXACTLY 256.0 mm** — the bed edge,
+  zero margin. 4 mm overflows by 2 mm. If the printable area is even
+  slightly under nominal or the plate is off-centre, the brim clips.
+  Fallbacks: 2 mm (254.0), or brimless — the tray floor gives
+  full-footprint bed contact.
+- **The mountains piece has a ~0.88 mm neck near Bakersfield** (~2
+  extrusion widths), plus ~1.04 mm at Petaluma. D11's long-flagged
+  fragility, never fixed, on the print-once brown piece. Located
+  precisely; `thin_spots()` reports them every build.
+- The T3 fit was validated on the P4 coupon only (see above).
+- Piece shapes shifted slightly since ahl printed T3 (the land fix).
+  The fit NUMBERS still transfer — they are offsets applied to whatever
+  shape results — but the printed coupon is no longer byte-identical.
+- `plug_proud_mm` (0.4) is still an eyeball value; the plug DIAMETER is
+  measured.
+- The key insert has not been printed on paper yet — border and cut
+  line are untested in the hand.
 
 **Open items parked deliberately:**
-- D11 per-scale min-width pass NEVER RAN — and the "somewhere" is now
-  LOCATED: the mountains spur at Petaluma/Sonoma just N of San Pablo
-  Bay, 0.94 mm wide (P4 window (50.1, 76.6) = lon/lat -122.19, 38.86;
-  `p4_bay_coupon.thin_spots()` reports it every build). T2's
-  too-tight-together finding traces here. ahl 2026-09-15: deliberately
-  NOT modifying the spur — he wants to keep the shape; T3 addresses it
-  with tolerance + rib placement instead. Still parked.
+- D11 per-scale min-width pass NEVER RAN — and the necks are now
+  LOCATED and measured, from the exported STLs, on the P5 pieces:
+      mountains 0.88 mm  Bakersfield, valley's south tip (-119.49, 35.21)
+      mountains 1.04 mm  Petaluma (-122.20, 38.90)  [the T2 spur]
+      mountains 1.49 mm  Carquinez/Suisun (-122.24, 38.24)
+      valley    1.12 / 1.19 mm at those same two seams
+      desert    1.51 mm  Mono Lake (-119.42, 38.59)
+  All of them sit on the mountains/valley seam except the desert one.
+  The WORST is Bakersfield, not Petaluma. ahl 2026-09-15 is deliberately
+  NOT reshaping them — T3 addressed the fit with tolerance + rib
+  placement instead, and it worked. Still parked, but note the 0.88 mm
+  one is on the print-once brown piece. `thin_spots()` reports necks
+  every build (all rings, since 2026-09-15).
 - Full-depth bodies (gray under pieces / land color to the floor):
   revisit per ahl after judging translucency + teal cavity floors in
   prints; spec sketched in the T1 session note.
@@ -65,9 +128,22 @@ filament, print once).
 - Gap measurements: global minima at triple junctions are ARTIFACTS
   (two clearance regimes meeting at a point); judge fit by the
   seam-excluded medians the builds now print.
-- ahl's markup loop: he draws on any render (red=mountains,
-  orange=coast, or edge lines), the marks get extracted into
-  overrides/*.geojson, and build_regions applies them — see [overrides].
+- ahl's markup loop, now used for THREE things — he draws on a render,
+  the marks get extracted, nothing is hand-typed:
+    * REGIONS: red=mountains / orange=coast / edge lines ->
+      overrides/*.geojson, applied by build_regions. Canvas:
+      `pipeline/region_markup.py` (contours + hillshade + current
+      region lines, exactly georeferenced).
+    * RIBS and POKE HOLES -> config [print.ribs] / [print.poke_holes].
+      Canvas: out/p4_rib_markup.png, out/p5_rib_markup.png (one shared
+      renderer). CURRENT sites are drawn COLOUR-FREE (white fill, black
+      edge, one shape per piece) so any saturated colour is ahl's mark;
+      he picks his own colours. Ribs SNAP to the nearest perimeter
+      point; poke holes do NOT (an 18 mm circle either fits or it does
+      not) and are validated instead.
+  Every canvas carries an exact pixel->mm/Albers mapping, printed by
+  the build and/or in a .json sidecar. AVOID orange for marks on P5: it
+  is only L1 32 from the desert region fill.
 - Machine quirks: ahl's shell aliases cp/rm to interactive (use
   /bin/cp, /bin/rm in scripts/background commands); stock make 3.81
   (no grouped targets — ride-alongs use @touch recipes); jj snapshot
@@ -562,7 +638,12 @@ FINAL 225 x 250 FRAME ONLY
   decisions below. Desert's zero-clearance (for the mountains+desert
   snug-fit goal) stays parked as its own future decision.
 - **T3 (2026-09-15): PRINTED — "the fit is great. I don't think I'd
-  change it at all" (ahl). The clearances are LOCKED.** Frame 0.10 does
+  change it at all" (ahl). The clearances are LOCKED.** NOTE the P4
+  geometry has shifted slightly SINCE that print (the land-authority
+  fix moved the coast/water line around the Bay, and the ring fix
+  changed nothing in P4 but is shared code). The fit NUMBERS still
+  transfer — they are offsets — but a reprinted coupon would not be
+  byte-identical to the one in ahl's hand. Frame 0.10 does
   not bind (it was 0.15 through T1+T2), the symmetric 0.20 pair gap is
   right, and the ribs — biting 0.05 mm into the mating face, hand-placed
   — retain properly. This is the end of the T1(loose) -> T2(too tight)
