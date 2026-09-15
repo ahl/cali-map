@@ -2,23 +2,29 @@
 
 ## HANDOFF STATE (written 2026-09-14 at a context reset — READ FIRST)
 
-**Where things stand:** T2 coupon is BUILT, VERIFIED, and CLEARED TO
-PRINT (out/p4_mini/{frame.3mf,mountains.stl,valley.stl}); ahl is about
-to print it. The full final product also exists at out/p5/ (frame.3mf +
-3 piece STLs) built from the SAME parameters. Everything regenerates
-via `make` (D12); config.toml + overrides/ + assets/compass.svg are the
-complete inputs.
+**Where things stand (updated 2026-09-15):** **T3** is BUILT, converged
+(`make -n` clean), all bodies watertight, and CLEARED TO PRINT —
+out/p4_mini/{frame.3mf,mountains.stl,valley.stl}; ahl is about to print
+it. out/p5/ (frame.3mf + 3 piece STLs) is built from the SAME
+parameters. Everything regenerates via `make` (D12); config.toml +
+overrides/ + assets/compass.svg are the complete inputs.
 
-**T2 print findings so far (2026-09-15):** mountains-valley pair fit
-was TOO TIGHT at 0.08 mm total (two ribbed T2 walls closing on the same
-tiny gap) — `clearance_pair_per_side_mm` walked back to 0.10 mm, needs
-a re-print to confirm. Mixed T1/T2 fits great, esp. T2 valley + T1
-mountain (D18's target retention behavior). Still awaiting: rib
-retention when tipped with a from-scratch T2 pair, 18 mm finger-hole
-ergonomics, 6 mm letter "E" legibility (raised rose look already
-resolved via the dedicated rose test coupon, see the ironing entry
-above). Each maps to a config knob; iterate: bump [output].build_tag,
-adjust knobs, `make p4`.
+**T3 = frame 0.10 / pair 0.20 (symmetric) / ribs 0.05 mm crush,
+hand-placed.** Full spec + rationale in the T3 entry under "Print
+sessions"; the two changes that matter most are the symmetric pair rule
+(no more valley zero-clearance exception) and ribs now being specified
+as OVERLAP WITH THE MATING FACE, which fixed pair ribs that were
+silently 0.04 mm short of touching. **ahl: if T3 feels good, lock these
+clearances in.**
+
+**Awaiting from the T3 print:** overall fit/snugness at the new
+clearances, rib retention when tipped with a from-scratch pair, whether
+frame 0.10 binds (it was 0.15 through T1+T2 and "pretty locked in"),
+18 mm finger-hole ergonomics, 6 mm letter "E" legibility. Each maps to
+a config knob; iterate: bump [output].build_tag, adjust knobs,
+`make p4`. Note T3 moved frame AND pair together, so a too-tight result
+won't isolate which — and the coupon has no desert, so three-piece
+wedging stays untested until P5.
 
 **Then the endgame (P6):** full-size mountains DRESS REHEARSAL in a
 plentiful color (decides flat-vs-VERTICAL printing — see Filament
@@ -508,16 +514,47 @@ FINAL 225 x 250 FRAME ONLY
   zero-clearance to desert — both premature, both undone before the T3
   decisions below. Desert's zero-clearance (for the mountains+desert
   snug-fit goal) stays parked as its own future decision.
-- **T3 spec (ahl 2026-09-15), the actual change set:**
-  `clearance_per_side_mm` 0.15 -> **0.10** (lean on ribs for retention
-  at a tighter base fit), `clearance_pair_per_side_mm` 0.08 -> **0.10**
-  with `enclosed_piece_zero_clearance` = **false** — i.e. drop the
-  valley exception and go back to a symmetric rule, BOTH pieces
-  contributing, for 0.20 mm total. Rationale for symmetric: under the
-  enclosed rule 100% of the pair gap (and so 100% of the relief at the
-  spur) came from mountains alone; symmetric spreads it. Both numbers
-  moved at once, so a too-tight T3 won't isolate which — accepted.
-  `build_tag` = "T3".
+- **T3 spec — FINAL, built and cleared to print (ahl 2026-09-15).**
+  `build_tag` = "T3"; `make p4 p5` converged, all bodies watertight.
+
+  | interface | gap | contributors | rib bite |
+  |---|---|---|---|
+  | piece <-> frame | **0.10 mm** | piece only (cavity at nominal) | 0.05 mm |
+  | piece <-> piece | **0.20 mm** | both pieces, 0.10 each | 0.05 mm |
+
+  Changes from T2: `clearance_per_side_mm` 0.15 -> 0.10 (lean on ribs at
+  a tighter base fit); `clearance_pair_per_side_mm` 0.08 -> 0.10 with
+  `enclosed_piece_zero_clearance` -> **false**, dropping the valley
+  exception for a symmetric rule (under the enclosed rule 100% of the
+  pair gap, and so 100% of the relief at the Petaluma spur, came off
+  mountains alone; symmetric spreads it). Ribs r0.4 mm, 0.05 mm crush,
+  hand-placed: P4 mountains 4 (3 frame + 1 pair), P4 valley 6
+  (5 frame + 1 pair), P5 valley all-pair (it touches no frame).
+  Caveats accepted going in: frame and pair both moved at once, so a
+  too-tight T3 won't isolate which; and the coupon has no desert, so
+  the three-piece wedging (and mountains<->desert) is untested until P5.
+  ahl: if T3 feels good, lock these clearances in.
+- **Ribs are specified as OVERLAP WITH THE MATING FACE, not as an offset
+  from nominal (ahl 2026-09-15) — and this caught a real defect.** The
+  old rule put every crest at nominal + interference, which is only
+  correct against a FRAME wall (cavity cut at nominal). A sibling piece
+  is clearance-cut too, so its face has retreated `clearance_neighbor`
+  past nominal and the rib fell short by exactly that much. Measured on
+  T3-as-first-built: pair ribs sat **0.040 mm short of touching** —
+  the mountains/valley seam had ZERO rib retention and would have
+  printed that way unnoticed. (It also retro-explains T2 "too tight
+  together": there valley took ZERO clearance, so its wall sat on the
+  shared line and mountains' pair rib drove a hard 0.05 mm into solid
+  valley material on top of only 0.08 mm of gap. Asymmetric, too —
+  valley's own pair rib was 0.03 mm short and inert.) Now each rib
+  measures the real distance to the as-cut neighbour (`neighbor_pieces`)
+  and lands its crest that far plus the interference, so the knob means
+  "how deep do I crush into whatever I press against" at both interface
+  types and self-corrects when any clearance changes. Frame ribs are
+  unchanged. Verified: P4 0.053/0.050 mm bites, P5 all seven engaged
+  pair ribs 0.050-0.054 mm against a 0.05 target; seam gap 0.17 -> 0.000
+  with ribs. Both builds print a per-rib bite report every run — if a
+  future clearance change ever switches ribs off again, it will say so.
 - **Crush-rib placement is now MANUAL (ahl 2026-09-15).** The automatic
   placer got four rewrites in one session and produced a surprise every
   time — a whole side skipped, two ribs on one spur, every slot going to
