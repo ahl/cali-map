@@ -246,6 +246,14 @@ interference_mm = 0.05
 # was generated at; regenerate out/key_coupon/ before test-fitting.
 pocket_d_mm = 5.0
 pocket_depth_mm = 1.4
+# POKE HOLE through each swatch pocket's floor (ahl 2026-09-15): if a
+# plug goes into the wrong pocket, push it back out from underneath.
+# Only useful while the key is still loose -- it is press-fit
+# permanently into the frame and, by ahl's call, does not need to be
+# recoverable after that, so nothing is drilled through the frame. The
+# plugs are fitted before the key is installed, which is when a mistake
+# would happen. 0 = blind pockets, no hole.
+plug_poke_d_mm = 2.5
 # The PLUGS that drop into those pockets.
 # The POCKET size above is a DESIGN dimension -- the key's row layout is
 # built around it -- so it is NOT a fit knob. Fit is tuned on the plug
@@ -257,14 +265,20 @@ pocket_depth_mm = 1.4
 # size just prints as ridge lines. plug_proud_mm is only how far the flat
 # top stands above the plate; you feel the step at its rim.
 #
-# 4.85 is a PLACEHOLDER, NOT yet measured. A 5.05 mm plug (designed
-# interference) was far too tight -- ahl forced it in and deformed the
-# plug, because a nominal 5 mm pocket prints UNDERSIZE. Print
-# out/key_coupon/{pocket,plug}_ladder.stl and set this to whichever plug
-# seats firmly by hand; it is glued and permanent, so it need not grip on
-# its own. The build asserts this stays near pocket_d_mm, so if the
-# pocket ever moves for layout reasons this value cannot silently orphan.
-plug_d_mm = 4.85
+# MEASURED from the fit ladder (ahl 2026-09-15), not guessed. Result:
+#   4.70 / 4.75 / 4.80  fell out
+#   4.85 / 4.90         went in, solid
+#   4.95                went in, took some effort
+#   5.00                would not go in
+# So the working band is 4.85-4.95 and 4.90 is its CENTRE -- 0.05 mm of
+# margin on both sides. That margin is the point: the real key has FIVE
+# pockets, and pocket-to-pocket and print-to-print variation eats into
+# it, so the edges of the band (4.85, one step from falling out; 4.95,
+# one step from not fitting) are not safe picks.
+# An earlier 5.05 mm plug (designed INTERFERENCE) was far too tight and
+# deformed when forced -- the pocket prints undersize, so the usable
+# range sits below nominal.
+plug_d_mm = 4.90
 plug_proud_mm = 0.4
 # Title + region text. Title cap matches the compass rose's N/E/S/W
 # letters ([compass].letter_cap_mm); it wraps over as many lines as the

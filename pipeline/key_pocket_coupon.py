@@ -59,6 +59,11 @@ MARGIN_MM = 4.0
 PITCH_MM = POCKET_D_MM + 5.0                 # pocket-to-pocket spacing
 INDEX_D_MM = 1.6                             # orientation dimple
 
+# RESULT (ahl 2026-09-15): 4.70/4.75/4.80 fell out, 4.85/4.90 solid,
+# 4.95 went in with effort, 5.00 would not go. Working band 4.85-4.95;
+# [key].plug_d_mm is set to 4.90, its centre. Re-run this ladder if the
+# printer, filament or profile changes -- the band is only 0.15 mm wide.
+#
 # The ladder of PLUG diameters to try. The pocket is fixed at the key's
 # design size and is not a fit knob (ahl 2026-09-15: "just pick the
 # pocket size and we'll try several plugs"), so these are absolute
@@ -80,8 +85,13 @@ def main():
     cy = height / 2
     xs = [MARGIN_MM + POCKET_D_MM / 2 + i * PITCH_MM for i in range(n)]
 
+    # same poke hole the real key's pockets get, so the coupon stays
+    # representative (and so test plugs push back out easily)
+    poke_d = KEY.get("plug_poke_d_mm", 0.0)
     recesses = [{"points": kp.circle_ring(x, cy, POCKET_D_MM / 2),
-                "depth": POCKET_DEPTH_MM} for x in xs]
+                "depth": POCKET_DEPTH_MM,
+                "through": (kp.circle_ring(x, cy, poke_d / 2)
+                            if poke_d > 0 else None)} for x in xs]
     # index dimple beside pocket #1 (the smallest plug)
     recesses.append({"points": kp.circle_ring(
         MARGIN_MM + POCKET_D_MM / 2, MARGIN_MM / 2, INDEX_D_MM / 2),

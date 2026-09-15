@@ -597,9 +597,16 @@ def main():
             label_cap=KEY.get("label_cap_mm", key_panel.CAP_MM),
             insert_border=KEY.get("insert_border_mm",
                                   key_panel.INSERT_BORDER_MM))
+        poke_d = KEY.get("plug_poke_d_mm", 0.0)
+        assert poke_d < KEY.get("pocket_d_mm", 5.0) - 1.0, (
+            f"poke hole {poke_d:g} mm leaves no ledge for the plug to sit "
+            f"on in a {KEY.get('pocket_d_mm', 5.0):g} mm pocket")
         recesses = [{"points": key_panel.circle_ring(
                         *r["pocket_c"], KEY.get("pocket_d_mm", 5.0) / 2),
-                     "depth": KEY.get("pocket_depth_mm", 1.4)}
+                     "depth": KEY.get("pocket_depth_mm", 1.4),
+                     "through": (key_panel.circle_ring(*r["pocket_c"],
+                                                       poke_d / 2)
+                                 if poke_d > 0 else None)}
                     for r in key_rows]
         recesses.append({"points": key_panel.rect_ring(
                             key_recess["x0"], key_recess["y0"], key_recess["x1"], key_recess["y1"]),
@@ -625,7 +632,12 @@ def main():
               f"poke-hole, glue optional\n"
               f"    {len(key_rows)} swatch pockets dia "
               f"{KEY.get('pocket_d_mm', 5.0):g} x "
-              f"{KEY.get('pocket_depth_mm', 1.4):g} deep; label recess "
+              f"{KEY.get('pocket_depth_mm', 1.4):g} deep"
+              + (f", each with a {poke_d:g} mm POKE HOLE through its floor "
+                 f"({(KEY.get('pocket_d_mm', 5.0) - poke_d) / 2:.2f} mm "
+                 "ledge left for the plug to sit on)"
+                 if poke_d > 0 else " (blind)")
+              + "; label recess "
               f"{key_recess['x1'] - key_recess['x0']:.1f} x {key_recess['y1'] - key_recess['y0']:.1f}"
               f" x {KEY.get('label_recess_mm', 0.2):g} deep -> {kpath}")
         key_panel.OUT_DIR = OUT_DIR       # write the label next to key.stl
@@ -662,9 +674,9 @@ def main():
               "      print FIVE of it, one per region colour: Pacific "
               "Ocean = water, Coastal = coast, then the mountains, "
               "valley and desert piece colours.\n"
-              "      dimensions are still PROVISIONAL -- [key].plug_d_mm "
-              "/ plug_proud_mm, pending ahl's out/key_coupon/ fit "
-              "ladder.")
+              "      diameter MEASURED from the out/key_coupon/ fit "
+              "ladder (working band 4.85-4.95; this is its centre). "
+              "plug_proud_mm is still by eye.")
 
     print("\npiece-piece seam gaps (only nominally-adjacent pairs):")
     pnames = [n for n, _, _ in PIECES]

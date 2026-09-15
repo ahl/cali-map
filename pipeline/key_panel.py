@@ -187,13 +187,25 @@ def layout(plate_w, plate_h, pocket_d=None, title=TITLE,
 
 # ------------------------------------------------------------------ mesh
 def build_plate(width, height, recesses, thickness, seg=48):
-    """Rectangle `width` x `height` x `thickness`, with a BLIND recess
-    (its own depth, recessed into the TOP face only -- bottom stays
-    solid) for each entry in `recesses`: {"points": Nx2 CCW ring,
-    "depth": float}. Returns a watertight trimesh.Trimesh."""
+    """Rectangle `width` x `height` x `thickness` with a recess per entry
+    in `recesses`: {"points": Nx2 CCW ring, "depth": float,
+    "through": Nx2 CCW ring or None}.
+
+    A recess is BLIND (solid floor under it) unless it carries a
+    "through" ring, in which case that ring is punched all the way out
+    of the bottom: the recess floor becomes an ANNULUS and the hole gets
+    its own wall down to z=0.  The swatch pockets use this as a POKE
+    HOLE -- ahl 2026-09-15, so a plug pressed into the wrong pocket can
+    be pushed back out from underneath while the key is still loose.
+    (Only while loose: the key is press-fit permanently into the frame,
+    and by ahl's call it does not need to be recoverable after that, so
+    nothing is drilled through the frame.)
+
+    Returns a watertight trimesh.Trimesh."""
     corners = np.array([[0, 0], [width, 0], [width, height], [0, height]],
                        float)
     rings = [r["points"] for r in recesses]
+    thru = [r.get("through") for r in recesses]
 
     pts = np.vstack([corners] + rings) if rings else corners
     segs = [(i, (i + 1) % 4) for i in range(4)]
@@ -216,15 +228,39 @@ def build_plate(width, height, recesses, thickness, seg=48):
     verts = [np.column_stack([tv, np.full(len(tv), thickness)])]
     faces = [tf]
 
-    # bottom cap: same 4 corners, flat solid rectangle (no recesses go
-    # all the way through), normal -z (reverse of the +z convention above)
+    # bottom cap, normal -z. Solid rectangle unless some recess punches
+    # through, in which case those rings are holes in it too.
+    tr_rings = [t for t in thru if t is not None]
     b0 = len(np.vstack(verts))
-    verts.append(np.column_stack([corners, np.zeros(4)]))
-    faces.append(b0 + np.array([[0, 2, 1], [0, 3, 2]]))
+    if not tr_rings:
+        verts.append(np.column_stack([corners, np.zeros(4)]))
+        faces.append(b0 + np.array([[0, 2, 1], [0, 3, 2]]))
+        n_bot = 4
+    else:
+        bpts = np.vstack([corners] + tr_rings)
+        bsegs = [(i, (i + 1) % 4) for i in range(4)]
+        o = 4
+        for ring in tr_rings:
+            k = len(ring)
+            bsegs += [(o + i, o + (i + 1) % k) for i in range(k)]
+            o += k
+        Bb = tr.triangulate(
+            {"vertices": bpts, "segments": np.asarray(bsegs, np.int32),
+             "holes": np.asarray([r.mean(axis=0) for r in tr_rings], float)},
+            "p")
+        bv, bf = Bb["vertices"], Bb["triangles"].astype(np.int64)
+        assert len(bv) == len(bpts), "triangle added Steiner points (bottom)"
+        a = bv[bf[:, 0]]
+        cr = ((bv[bf[:, 1]] - a)[:, 0] * (bv[bf[:, 2]] - a)[:, 1]
+              - (bv[bf[:, 1]] - a)[:, 1] * (bv[bf[:, 2]] - a)[:, 0])
+        bf[cr > 0] = bf[cr > 0][:, ::-1]          # CW from +z -> normal -z
+        verts.append(np.column_stack([bv, np.zeros(len(bv))]))
+        faces.append(b0 + bf)
+        n_bot = len(bv)
 
     # outer side walls: CCW rectangle boundary -> solid on the LEFT of
     # each directed edge -> outward wall = (a_lo,b_lo,b_hi),(a_lo,b_hi,a_hi)
-    w0 = b0 + 4
+    w0 = b0 + n_bot
     verts.append(np.column_stack([corners, np.zeros(4)]))       # lo, z=0
     verts.append(np.column_stack([corners, np.full(4, thickness)]))  # hi
     lo = w0 + np.arange(4)
@@ -241,20 +277,41 @@ def build_plate(width, height, recesses, thickness, seg=48):
     off = 4
     for r in recesses:
         ring, depth = r["points"], r["depth"]
+        hole = r.get("through")
         zf = thickness - depth
         n = len(ring)
         vbase = len(np.vstack(verts))
-        # fan triangulate the floor from the ring's centroid (works for
-        # any star-shaped-from-centroid outline -- true for a circle or
-        # an axis-aligned rectangle, both used here)
-        cx, cy = ring.mean(axis=0)
-        verts.append(np.array([[cx, cy, zf]]))
-        verts.append(np.column_stack([ring, np.full(n, zf)]))
-        center_idx = vbase
-        floor_idx = vbase + 1 + np.arange(n)
-        fan = np.stack([np.full(n, center_idx), floor_idx,
-                        np.roll(floor_idx, -1)], axis=1)
-        faces.append(fan)
+        if hole is None:
+            # fan triangulate the floor from the ring's centroid (works
+            # for any star-shaped-from-centroid outline -- true for a
+            # circle or an axis-aligned rectangle, both used here)
+            cx, cy = ring.mean(axis=0)
+            verts.append(np.array([[cx, cy, zf]]))
+            verts.append(np.column_stack([ring, np.full(n, zf)]))
+            center_idx = vbase
+            floor_idx = vbase + 1 + np.arange(n)
+            faces.append(np.stack([np.full(n, center_idx), floor_idx,
+                                   np.roll(floor_idx, -1)], axis=1))
+        else:
+            # floor is an ANNULUS (poke hole through the middle), then
+            # the hole's own wall straight down to z=0
+            assert len(hole) == n, ("through-ring must match the recess "
+                                    "ring's segment count so the annulus "
+                                    "strips cleanly")
+            verts.append(np.column_stack([ring, np.full(n, zf)]))
+            verts.append(np.column_stack([hole, np.full(n, zf)]))
+            verts.append(np.column_stack([hole, np.zeros(n)]))
+            floor_idx = vbase + np.arange(n)          # outer, at zf
+            in_hi = vbase + n + np.arange(n)          # hole rim, at zf
+            in_lo = vbase + 2 * n + np.arange(n)      # hole rim, at z=0
+            o2, i2 = np.roll(floor_idx, -1), np.roll(in_hi, -1)
+            faces.append(np.concatenate([
+                np.stack([floor_idx, o2, in_hi], axis=1),
+                np.stack([o2, i2, in_hi], axis=1)]))   # annulus, normal +z
+            l2 = np.roll(in_lo, -1)
+            faces.append(np.concatenate([
+                np.stack([in_lo, i2, l2], axis=1),
+                np.stack([in_lo, in_hi, i2], axis=1)]))  # hole wall, inward
 
         top_idx = off + np.arange(n)   # this recess's rim in the top patch
         rwall = []

@@ -98,7 +98,7 @@ set into a frame of the surrounding geography.
 | D6 | Print bed 256×256 mm; whole model ≤ 1000×1000 mm total | Either frame fits one bed, or frame is carved into tiles |
 | D7 | Material: PLA. Fit: snug but disassemblable | Clearance values TBD (see G3) |
 | D8 | Version control: jj (colocated git), repo = this directory | |
-| D19 | **Region KEY (ahl 2026-09-15):** a rectangular plate inset into the P5 frame over NEVADA, carrying a TITLE ("California Regions", 6 mm cap = the same size as the compass rose's N/E/S/W letters, word-wrapped to "California"/"Regions") then, after a gap, the five regions (Pacific Ocean, Coastal, Mountain, Valley, Desert) at a smaller 3 mm cap, each with a 5 mm circular colour-swatch plug beside it. Title layout sets the size: the text column must fit "California" at 6 mm (44.6 mm), which drove the key to 66 x 66 mm (was 56 x 57 before the title). Title and labels share ONE rectangular recess with the pockets in a column to its right, so the paper insert is a plain rectangle with no holes to punch. Cut as a recess exactly like a piece cavity. **PERMANENT press fit** — no crush ribs, no poke-hole, `[key].interference_mm` (0.05 total) of squeeze, glue optional. Bottom sits on the tray floor at the same z as every piece; **top is flush with the tallest terrain ON ITS BOUNDARY** — the build walks the rectangle's perimeter every run and takes the max, so the plate finishes level with the ground it actually abuts and moving/resizing the key re-heights it automatically (there is no height knob; verified by moving the key and watching 6.24 -> 6.69 mm). "Adjacent" means on the boundary line, NOT merely nearby: an earlier band-sampling version picked up a peak standing off from the key and made it 1.2 mm too tall. Labels are 2D-PRINTED (`out/p5/key_insert.pdf`): the page is the recess plus 5 mm of spare paper on every side with a CUT LINE + corner crop marks at the exact recess size, and a 2 mm blank border inside that so type is not flush to the paper edge (ahl 2026-09-15). The border is taken out of the usable text column, which is why the key went 66 -> 68 mm wide — "California" at the 6 mm title cap is 44.6 mm and would not fit a bordered 48 mm column. Sits in a 0.2 mm recess — FDM text at this size fights the 0.4 mm nozzle. Config `[key]`: enabled, center_mm, width_mm, height_mm, adjacent_search_mm, interference_mm, pocket_*, label_recess_mm. Location picked by scanning for the largest clear gray non-CA land block. The swatch PLUG is a plain P5 output too (`out/p5/key_plug.stl`) — ONE flat-topped cylinder, printed five times in the five region colours (Pacific Ocean = water, Coastal = coast, then the three piece colours); ahl lays the real print out by hand in Bambu Studio, so the build does not pack plugs onto a plate or merge them into another part. Plug dimensions live in `[key].plug_interference_mm` / `plug_proud_mm` and are PROVISIONAL — settle them from `pipeline/key_pocket_coupon.py` (-> `out/key_coupon/{pocket_coupon,plug}.stl`), which reads the pocket size from this same config so the coupon always matches the real key. The standalone key-panel build was REMOVED 2026-09-15 (ahl: "get rid of the stand-alone key stuff"); `key_panel.py` is now a pure library shared by p5_final and the coupon. | |
+| D19 | **Region KEY (ahl 2026-09-15):** a rectangular plate inset into the P5 frame over NEVADA, carrying a TITLE ("California Regions", 6 mm cap = the same size as the compass rose's N/E/S/W letters, word-wrapped to "California"/"Regions") then, after a gap, the five regions (Pacific Ocean, Coastal, Mountain, Valley, Desert) at a smaller 3 mm cap, each with a 5 mm circular colour-swatch plug beside it. Each pocket has a 2.5 mm POKE HOLE through its floor (1.25 mm ledge left for the plug): plugs are fitted BEFORE the key goes into the frame, so a plug in the wrong pocket gets pushed back out from underneath while the key is still loose. Nothing is drilled through the frame — ahl 2026-09-15: "people are going to assemble the key first... we don't need to be able to poke the plug out after the key is inserted". Title layout sets the size: the text column must fit "California" at 6 mm (44.6 mm), which drove the key to 66 x 66 mm (was 56 x 57 before the title). Title and labels share ONE rectangular recess with the pockets in a column to its right, so the paper insert is a plain rectangle with no holes to punch. Cut as a recess exactly like a piece cavity. **PERMANENT press fit** — no crush ribs, no poke-hole, `[key].interference_mm` (0.05 total) of squeeze, glue optional. Bottom sits on the tray floor at the same z as every piece; **top is flush with the tallest terrain ON ITS BOUNDARY** — the build walks the rectangle's perimeter every run and takes the max, so the plate finishes level with the ground it actually abuts and moving/resizing the key re-heights it automatically (there is no height knob; verified by moving the key and watching 6.24 -> 6.69 mm). "Adjacent" means on the boundary line, NOT merely nearby: an earlier band-sampling version picked up a peak standing off from the key and made it 1.2 mm too tall. Labels are 2D-PRINTED (`out/p5/key_insert.pdf`): the page is the recess plus 5 mm of spare paper on every side with a CUT LINE + corner crop marks at the exact recess size, and a 2 mm blank border inside that so type is not flush to the paper edge (ahl 2026-09-15). The border is taken out of the usable text column, which is why the key went 66 -> 68 mm wide — "California" at the 6 mm title cap is 44.6 mm and would not fit a bordered 48 mm column. Sits in a 0.2 mm recess — FDM text at this size fights the 0.4 mm nozzle. Config `[key]`: enabled, center_mm, width_mm, height_mm, adjacent_search_mm, interference_mm, pocket_*, label_recess_mm. Location picked by scanning for the largest clear gray non-CA land block. The swatch PLUG is a plain P5 output too (`out/p5/key_plug.stl`) — ONE flat-topped cylinder, printed five times in the five region colours (Pacific Ocean = water, Coastal = coast, then the three piece colours); ahl lays the real print out by hand in Bambu Studio, so the build does not pack plugs onto a plate or merge them into another part. Plug dimensions live in `[key].plug_interference_mm` / `plug_proud_mm` and are PROVISIONAL — settle them from `pipeline/key_pocket_coupon.py` (-> `out/key_coupon/{pocket_coupon,plug}.stl`), which reads the pocket size from this same config so the coupon always matches the real key. The standalone key-panel build was REMOVED 2026-09-15 (ahl: "get rid of the stand-alone key stuff"); `key_panel.py` is now a pure library shared by p5_final and the coupon. | |
 | D18 | **Retention & disassembly (ahl 2026-09-14, from T1):** pieces stay seated through handling (T1: mountains fell out when tipped); the FINGER POKE-HOLES (18 mm, may span piece-piece seams) are THE disassembly mechanism. Retention via crush ribs on piece walls (rib_* knobs; ~0.05 mm interference, tune from T2 print). Clearances split by interface: 0.15 total everywhere (frame 0.15 single-side kept from T1's good fit; piece-pair 0.075/side, was 0.30 total = loose valley). | |
 | D17 | **Compass rose (ahl 2026-09-14):** 8-point nautical rose (4 cardinal + 4 intercardinal, split-shaded points, center circle, outer ring, N/E/S/W serif letters) in the bottom-left Pacific of the Frame. Concept: "compass rose.jpeg". Design source: assets/compass_rose.svg (parametric generator pipeline/compass_rose.py — edit SVG directly or params). **Makes the Frame a 4-COLOR print** (adds black for rose outlines + lettering). Physical size + emboss method decided at placement. | |
 | D16 | **The Frame is a TRAY (ahl 2026-09-13):** a continuous floor (FLOOR_MM = 1.2, 6 layers) runs under the whole footprint; cavities are recesses, not through-holes — pieces rest ON the Frame. Poke-holes (2x 8 mm circles in the floor per piece, at interior points) allow pushing pieces out from below. Pieces carry BASE_MM - FLOOR_MM of slab so all datums/tops align. Water/base height: 3.0 mm proposed for final rigidity (ahl deciding 2.0-3.0); G2 relief rides on top (total max ~11.5 mm at 3.0). | |
@@ -678,27 +678,36 @@ without guesswork; they go to overrides/*.geojson and build_regions
 applies them, moving one boundary without touching a global knob.
   uv run pipeline/region_markup.py [west south east north]
 
-**Key swatch plugs: +0.05 mm interference was FAR too tight (ahl
-2026-09-15, from the pocket coupon).** He forced it in and deformed the
-plug. Cause is the usual FDM small-hole behaviour, not the number being
-slightly off: a nominal 5 mm pocket prints UNDERSIZE (the inner
+**Key swatch plug diameter: MEASURED, settled at 4.90 mm (ahl
+2026-09-15).** First attempt used +0.05 mm of designed INTERFERENCE
+(a 5.05 mm plug) and was far too tight -- ahl forced it in and deformed
+the plug. That is the usual FDM small-hole behaviour, not the number
+being slightly off: a nominal 5 mm pocket prints UNDERSIZE (the inner
 perimeter's extrusion overlaps into the bore) while the plug prints
 slightly oversize, so a few hundredths of designed interference becomes
-a few tenths in plastic. How much is a property of ahl's printer and
-profile -- not derivable, so it gets measured.
-`pipeline/key_pocket_coupon.py` is now a fit LADDER: seven plugs from
--0.30 to 0.00 mm against pockets at the key's real diameter, in one
-print, with an index dimple marking plug #1. Pick the one that seats
-firmly BY HAND (the plug is glued and permanent -- it does not need to
-grip on its own) and set `[key].plug_d_mm` to that diameter; the real
-P5 plug reads the same knob. Config holds 4.85 as an un-measured
-PLACEHOLDER so the build stays runnable.
-ONE fit knob, not two (ahl 2026-09-15: "just pick the pocket size and
-we'll try several plugs"): `pocket_d_mm` is a DESIGN dimension -- the
-key's row layout is built around it -- so it is never touched to chase
-fit, and `plug_d_mm` is an absolute diameter rather than an offset from
-it. The build asserts the two stay within 0.5 mm, so if the pocket ever
-moves for layout reasons the plug value cannot silently orphan.
+a few tenths in plastic. How much is a property of the printer and
+profile, so it was measured rather than derived, with a fit LADDER
+(`pipeline/key_pocket_coupon.py`): seven plugs against pockets at the
+key's real diameter, one print, index dimple marking plug #1.
+
+    4.70 / 4.75 / 4.80   fell out
+    4.85 / 4.90          went in, solid
+    4.95                 went in, took some effort
+    5.00                 would not go in
+
+Working band 4.85-4.95, so `[key].plug_d_mm` = **4.90**, its centre --
+0.05 mm of margin either side. The band edges are NOT safe picks: the
+real key has five pockets, and pocket-to-pocket and print-to-print
+variation eats that margin. Re-run the ladder if printer, filament or
+profile changes; 0.15 mm is a narrow band.
+
+ONE fit knob, not two (ahl: "just pick the pocket size and we'll try
+several plugs"): `pocket_d_mm` is a DESIGN dimension -- the key's row
+layout is built around it -- so it is never touched to chase fit, and
+`plug_d_mm` is an absolute diameter rather than an offset from it. The
+build asserts the two stay within 0.5 mm, so if the pocket ever moves
+for layout reasons the plug value cannot silently orphan.
+`plug_proud_mm` (0.4) is still an eyeball value, not measured.
 
 ## Observation log (noted, NOT to be acted on unless ahl says so)
 
