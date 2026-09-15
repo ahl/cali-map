@@ -195,10 +195,17 @@ ink_min_stroke_mm = 0.45      # dilate artwork ink classes (priority
                               # design, per compass_art.py's comments).
 diameter_mm = 25.0            # outer-ring diameter (ahl 2026-09-14:
                               # half the previous 50)
-# P5 final frame placement (mm from Frame SW corner). Was [48, 55];
-# moved SW because the letters box clipped the mountains cavity and
-# Point Conception coast.
-center_mm = [43.0, 45.0]
+# P5 final frame placement (mm from Frame SW corner). History: [48, 55]
+# clipped the mountains cavity and Point Conception coast -> moved SW;
+# [43, 45] had W ink closer to its edge (17.13 mm) than S ink to its
+# edge (21.06 mm) -- true ink extent (not the letters bbox) is 25.87 mm
+# west / 23.94 mm south of center; [43, 41.1] equalized those (~17.1 mm
+# each). LOCKED IN (ahl 2026-09-14): [32, 30] -- pulled in tight to the
+# SW corner (W/S clearance ~6.1 mm each, still balanced; ink-hull
+# margins to coast/gray/cavities all grew vs. [43, 41.1], so still
+# clear of everything). Does not affect the P4 coupon (its own
+# coupon_center_mm).
+center_mm = [32.0, 30.0]
 # P4 mini-frame placement (mm from coupon SW corner) + smaller diameter
 # for the coupon's tighter Pacific. Was [30, 35] @ 50: the artwork +
 # letters box (~76 mm at dia 50) cannot fit the coupon's ocean pocket

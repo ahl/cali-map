@@ -16,7 +16,7 @@ OVERRIDES := $(wildcard overrides/*.geojson)
 COMMON   := config.toml $(OVERRIDES) $(PIPE)/p1_regions.py
 DEM      := data/dem_ca_albers_250m.npy
 
-.PHONY: all p0 p1 p2 p2layout p15 p15b p4 p5
+.PHONY: all p0 p1 p2 p2layout p15 p15b p4 p5 rose_coupon
 all: p1 p2 p2layout p15 p15b p4 p5
 
 # ---- P0: statewide 250 m heightfield (slow; rebuilds only if p0 changes)
@@ -79,3 +79,13 @@ out/p5/frame.3mf: $(PIPE)/p5_final.py $(PIPE)/p4_bay_coupon.py \
 		$(PIPE)/compass_art.py $(COMMON) $(DEM) \
 		data/p2_land.npz assets/compass.svg config.toml
 	$(UV) $(PIPE)/p5_final.py
+
+# ---- Rose-only test coupon: just the compass-rose corner (water disk +
+# ---- raised ink), to test-print a rose design tweak without the whole
+# ---- frame. No DEM/region deps -- imports p4_bay_coupon for shared
+# ---- config/constants + the 3MF writer only.
+rose_coupon: out/rose_coupon/rose_coupon.3mf
+out/rose_coupon/rose_coupon.3mf: $(PIPE)/rose_coupon.py $(PIPE)/p4_bay_coupon.py \
+		$(PIPE)/compass_art.py $(PIPE)/version_stamp.py config.toml \
+		assets/compass.svg
+	$(UV) $(PIPE)/rose_coupon.py

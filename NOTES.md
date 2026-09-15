@@ -28,7 +28,10 @@ filament, print once).
 - Full-depth bodies (gray under pieces / land color to the floor):
   revisit per ahl after judging translucency + teal cavity floors in
   prints; spec sketched in the T1 session note.
-- Ironing: deferred; route = per-part "Top surfaces" on the WATER body.
+- Ironing: RESOLVED (ahl 2026-09-14, rose test coupon) — per-part "Top
+  surfaces" ironing on the WATER body only, flow 20% at 20 mm/s: "looks
+  fantastic." Roll into frame.3mf's water body for T2/P5 (checklist
+  updated below).
 - Bottom version stamps: DISABLED (two failed styles); revisit only via
   a dedicated small test print.
 - Waterways (D9): deferred to the very end; data ready in
@@ -381,8 +384,24 @@ FRAME (frame.3mf — 4-color)
 - [ ] Infill 20-25% (grid/gyroid)
 - [ ] Do NOT move the frame's parts individually (aligned in absolute
       coords; move the object as a whole only)
-- [ ] Ironing: OFF for now (deferred; later = per-part "Top surfaces"
-      on the WATER body only — "topmost" mode would skip the water)
+- [ ] Ironing: ON, per-part on the WATER body ONLY, ironing TYPE = "top
+      layers"/"top surfaces" (irons every locally-exposed upward face).
+      NOT "topmost surface(s) only" -- ahl found that mode irons
+      nothing on the water part, because it restricts to the single
+      highest Z, which the raised ink shadows (both options are
+      correctly per-part-scoped; this is about Z-filtering within the
+      part, not global vs. per-part). Flow 20% at 20 mm/s. Validated on
+      the rose test coupon 2026-09-14 -- CAVEAT (ahl 2026-09-14): unlike
+      the coupon's single flat disk, the real frame's "water" part is
+      m_floor + m_upper concatenated (p4_bay_coupon.main), so it has
+      TWO disjoint top-facing regions at different Z: the open-water
+      surface (BASE_MM, what we want ironed) AND the cavity floor under
+      mountains/valley/desert (FLOOR_MM, hidden once pieces are seated).
+      "Top surfaces" irons BOTH (it has no Z filter) -- expected
+      harmless (no dimension-critical spec depends on cavity-floor
+      finish; extra smoothness there may even help pieces sit flatter),
+      just extra ironing time on hidden area. Not yet print-tested on
+      the full frame -- confirm at T2/P5.
 
 PIECES (mountains/valley/desert STLs — single color)
 - [ ] Separate plate from the frame (don't ride the color changes)

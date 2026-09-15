@@ -37,8 +37,11 @@ THE FRAME (out/p5/frame.3mf, 4-color Bambu multi-body):
     filament, black (artwork + pipeline-drawn N/E/S/W letter outlines)
     -> the black body (filament 4).  Blue/gray rose ink merges into the
     EXISTING coast/gray bodies (same filament); the frame stays 4
-    bodies.  [compass].style: "flush" = ink inlaid with tops level with
-    the water surface, matching recesses carved into the water top
+    filaments, though water/floor export as two separate 3MF PARTS on
+    filament 2 (so ironing can target the visible water top without
+    the hidden cavity floor under the removable pieces -- see
+    p4_bay_coupon.py).  [compass].style: "flush" = ink inlaid with tops
+    level with the water surface, matching recesses carved into the top
     ([compass].depth_mm) from the SAME triangulation (walls exactly
     coincident); "raised" = ink stands proud on a flat water top.
 
@@ -369,11 +372,14 @@ def main():
         rose_panel = compass_art.RosePanel(rose, rose_c, p4.ROSE_DEPTH)
     m_upper = p4.water_upper_mesh(
         upper_water, rose_panel if p4.ROSE_STYLE == "flush" else None)
-    water_mesh = trimesh.util.concatenate([m_floor, m_upper])
-    ok &= p4.report_mesh("water(+floor)", water_mesh)
+    # kept as two 3MF parts (not concatenated) so Bambu Studio can iron
+    # just the visible open-water top and skip the cavity floor under
+    # the removable pieces -- see p4_bay_coupon.py for the rationale
+    ok &= p4.report_mesh("floor", m_floor)
+    ok &= p4.report_mesh("water", m_upper)
     fs = stamps.get("frame")
     if fs is not None:
-        zok, zlev = vstamp.verify_stamp_levels(water_mesh, fs)
+        zok, zlev = vstamp.verify_stamp_levels(m_floor, fs)
         ok &= zok
         print(f"    frame stamp z-levels {zlev} -> exact "
               f"{vstamp.DEPTH_MM:g}: {zok}")
@@ -415,7 +421,8 @@ def main():
         gray_mesh = trimesh.util.concatenate([gray_mesh, rm["gray"]])
         black_mesh = rm["black"]
     bodies = [("coast", coast_mesh, EXTRUDERS["coast"]),
-              ("water", water_mesh, EXTRUDERS["water"]),
+              ("floor", m_floor, EXTRUDERS["water"]),
+              ("water", m_upper, EXTRUDERS["water"]),
               ("gray", gray_mesh, EXTRUDERS["gray"])]
     if black_mesh is not None:
         bodies.append(("black", black_mesh, EXTRUDERS["black"]))
