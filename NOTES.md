@@ -539,6 +539,56 @@ FINAL 225 x 250 FRAME ONLY
   could become a real fifth piece). Rehearsal print decides; flat
   printing may be good enough.
 
+  **SET ASIDE 2026-09-15** (ahl: "if I'm not happy with how it prints
+  I'll consider vertical printing and maybe redesigning to remove the
+  weak points"). Analysis done then, so it need not be redone:
+
+  *The resolution problem is real.* At 0.2 mm layers elevation
+  quantises to **97.6 m per layer** (z rule 0.002049 mm/m), so the
+  mountains piece renders ALL of California's relief in 42 layers.
+
+  *But the three pieces are completely different problems.* Printed
+  slope after the 9.3x exaggeration, and the share of each piece whose
+  terracing would be wider than 0.5 mm:
+
+      piece      median slope      >0.5 mm terrace @0.2   @0.1
+      mountains  0.706  (35 deg)         29.6%           14.5%
+      desert     0.319  (18 deg)         57.6%           35.2%
+      valley     0.022  (1.3 deg)        96.8%           89.7%
+
+  - mountains/desert have genuinely BIMODAL slope -- steep faces where
+    0.2 mm is already invisible, gentle areas where it terraces. That is
+    what ADAPTIVE layer height is for, and it beats a uniform fine layer
+    (which pays everywhere for a third of the area). Safe on PIECES: the
+    only critical flat z-levels are the bed-contact bottom and the datum
+    plane at 1.8 mm, and a fraction-of-a-layer shift there just seats
+    the piece a hair low, well inside the 0.10 mm clearance. NOT safe on
+    the FRAME -- keep it fixed 0.2: the water datum at 3.0, the rose at
+    exactly +0.4, the key pocket depths and the ironing pass all need
+    flat surfaces landing exactly on layer boundaries, and it is the
+    4-colour print. (This is the reason behind the checklist's "NO
+    adaptive layers" line; it stands for the frame.)
+  - the VALLEY cannot be fixed by slicing at all: 1.3 deg median slope
+    and only **1.28 mm of total relief (6 layers)** across 141 mm. Going
+    to 0.1 mm moves terracing from 96.8% to 89.7% of its area. If it
+    reads wrong the lever is [output].z_exaggeration, not layer height.
+  - if a fixed layer height is preferred over adaptive, **0.1 mm is the
+    only useful step down**: every critical z-dim must be a layer
+    multiple, and 0.15 breaks the rose (0.4/0.15 = 2.67) and the plug's
+    proud height, while 0.08 breaks the 1.8 mm slab. 0.1 divides slab
+    1.8, datum 3.0, floor 1.2, rose 0.4, pocket 1.4, recess 0.2.
+
+  *Why vertical is unattractive HERE specifically*, beyond the cautions
+  already listed: the 0.88 mm neck (D11) would have its layer lines
+  running ACROSS it, so the piece would hang together at its weakest
+  point by inter-layer adhesion -- on the print-once brown filament.
+  The perimeter IS the fit surface, so on edge the bed-contact edge
+  takes elephant-foot squish on a fit face. Supports would land on the
+  terrain being improved. Mountains on edge is 231.6 mm tall and ~10 mm
+  thick (22:1, 1158 layers vs 51). And vertical would help the VALLEY
+  most, where it is least viable: on edge that piece is 141 mm tall and
+  3.08 mm thick, 46:1.
+
 ## Print sessions
 
 - **T1 (2026-09-14, in progress):** ahl printing the mini-frame set
