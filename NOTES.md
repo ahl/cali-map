@@ -425,7 +425,16 @@ PIECES (mountains/valley/desert STLs — single color)
 - [ ] Orientation as imported (terrain up)
 
 FINAL 225 x 250 FRAME ONLY
-- [ ] Brim ~4 mm (the 250 mm N-S size reserved bed room for it)
+- [ ] **BRIM WIDTH — the "~4 mm" in this checklist DOES NOT FIT** (found
+      2026-09-15, before the print, by measuring rather than assuming).
+      The frame is 225.1 x 250.0 mm and brim grows OUTWARD on every side,
+      so on a 256 x 256 bed: 2 mm -> 254.0 fits; **3 mm -> 256.0, exactly
+      the bed edge, zero margin**; 4 mm -> 258.0, **overflows by 2 mm**.
+      The N-S 250 mm is the binding dimension (rotating does not help,
+      it just swaps axes). Decide before printing: drop to 2 mm, go
+      brimless (the tray floor gives full-footprint bed contact, so
+      adhesion may not need one), or shrink [output].total_ns_mm. Note
+      the printable area may also be slightly under the nominal 256.
 
 ## Filament logistics (ahl 2026-09-14)
 

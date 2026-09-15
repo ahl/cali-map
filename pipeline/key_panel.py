@@ -1,18 +1,3 @@
-# /// script
-# requires-python = ">=3.11,<3.14"
-# dependencies = [
-#   "numpy",
-#   "scipy",
-#   "pillow",
-#   "pyproj",
-#   "matplotlib",
-#   "trimesh",
-#   "shapely",
-#   "scikit-image",
-#   "triangle",
-#   "py-lib3mf",
-# ]
-# ///
 """Region-colour key: shared geometry LIBRARY (ahl 2026-09-14/15).
 
 This module builds nothing on its own.  The key is part of the final
@@ -69,43 +54,24 @@ import compass_art as ca
 import p4_bay_coupon as p4c
 import version_stamp as vstamp
 
-OUT_DIR = p4c.ROOT / "out" / "key_panel"
+OUT_DIR = p4c.ROOT / "out" / "key_panel"   # overridden by each caller
 
 LABELS = ["Pacific Ocean", "Coastal", "Mountain", "Valley", "Desert"]
 
+# Layout knobs. Pocket/recess DEPTHS and the plug dimensions are NOT
+# here: p5_final reads the real key's from config [key], and
+# key_pocket_coupon owns the plug numbers it exists to test. Only what
+# the 2D row layout needs lives in this module.
 CAP_MM = 3.5               # label cap height (just sizes the layout --
-                           # no FDM stroke-floor constraint now, it's a
-                           # real printer)
+                           # no FDM stroke-floor constraint, the labels
+                           # are printed on a real printer)
 FONT = "Georgia Bold"      # matches the compass rose
-
-POCKET_D_MM = 7.0          # swatch-insert hole diameter
-POCKET_DEPTH_MM = 1.4      # blind pocket depth (7 layers)
-FLOOR_UNDER_POCKET_MM = 1.2    # solid material left under a pocket floor
-PLATE_THICKNESS_MM = POCKET_DEPTH_MM + FLOOR_UNDER_POCKET_MM  # 2.6
-# ahl 2026-09-15: plugs are PERMANENT (snug friction fit + maybe glue,
-# never removed) -- the opposite goal from the piece/frame clearance
-# (CLEARANCE_MM, meant to come apart by hand), so this is a small
-# INTERFERENCE like the crush ribs (RIB_INTERFERENCE_MM = 0.05 total),
-# not a clearance. Tune after the first test fit, same as the ribs were.
-INSERT_INTERFERENCE_MM = 0.05    # insert dia = pocket dia + this (total)
-INSERT_D_MM = POCKET_D_MM + INSERT_INTERFERENCE_MM
-INSERT_BUMP_MM = 0.4             # proud of the plate top once seated --
-                                 # a felt "bump", matches the rose's
-                                 # validated raised height
-INSERT_HEIGHT_MM = POCKET_DEPTH_MM + INSERT_BUMP_MM
-
-LABEL_RECESS_MM = 0.2      # one layer -- just enough for the label's
-                           # paper/vinyl thickness to sit near-flush
-
-MARGIN_MM = 5.0             # plate edge -> content
-ROW_GAP_MM = 3.0            # gap between pocket circles, row to row
-TEXT_GAP_MM = 3.0           # pocket -> label-recess gap
-TEXT_MARGIN_MM = 2.0        # extra clearance beyond the measured text box
-
-ROSE_EXTRUDERS = {"coast": 1, "water": 2}   # frame.3mf filaments that
-                           # own the Pacific/Coastal swatches
-PIECE_NAME = {"Mountain": "mountains", "Valley": "valley",
-              "Desert": "desert"}            # -> piece STL that owns it
+POCKET_D_MM = 7.0          # default swatch-pocket diameter (callers
+                           # normally pass their own)
+MARGIN_MM = 5.0            # plate edge -> content
+ROW_GAP_MM = 3.0           # gap between pocket circles, row to row
+TEXT_GAP_MM = 3.0          # pocket -> label-recess gap
+TEXT_MARGIN_MM = 2.0       # extra clearance beyond the measured text box
 
 
 # ---------------------------------------------------------------- layout
