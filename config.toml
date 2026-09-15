@@ -218,8 +218,12 @@ enabled = true
 # north-central Nevada, 0% California, 0% water, 14.3 mm clear of the CA
 # border, 23+ mm from the print edges.
 center_mm = [168.0, 198.0]
-width_mm = 56.0
-height_mm = 57.0
+# Sized 2026-09-15 for the title layout: the text column must fit
+# "California" at the 6 mm title cap (44.6 mm), which sets the width;
+# a 2-line title + gap + five 5 mm-pocket rows sets the height. The
+# build asserts both, so a too-small key fails rather than crowds.
+width_mm = 66.0
+height_mm = 66.0
 # NO height knob, by design: the build walks the key's BOUNDARY, takes
 # the tallest terrain it actually meets there, and sets the top flush
 # with it -- so the plate finishes level with the ground it abuts, and
@@ -237,8 +241,18 @@ interference_mm = 0.05
 # ahl 2026-09-15: decide them after test-fitting out/key_coupon/
 # {pocket_coupon,plug}.stl. The pockets themselves are cut
 # now so the key geometry is final.
-pocket_d_mm = 7.0
+# 5 mm swatches (ahl 2026-09-15) -- smaller, to match the smaller region
+# text under the title. NOTE this supersedes the 7 mm the pocket coupon
+# was generated at; regenerate out/key_coupon/ before test-fitting.
+pocket_d_mm = 5.0
 pocket_depth_mm = 1.4
+# Title + region text. Title cap matches the compass rose's N/E/S/W
+# letters ([compass].letter_cap_mm); it wraps over as many lines as the
+# text column needs ("California" / "Regions" at 66 mm wide).
+title = "California Regions"
+title_cap_mm = 6.0
+title_gap_mm = 4.0
+label_cap_mm = 3.0
 # Shallow recess for the 2D-PRINTED label (see key_panel.py: FDM at this
 # text size fights the nozzle, so the labels are printed on paper/vinyl).
 label_recess_mm = 0.2

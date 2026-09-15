@@ -573,9 +573,13 @@ def main():
         pw = (kx1 - kx0) + inter
         ph = (ky1 - ky0) + inter
         pl_w, pl_h, key_rows, lrec = key_panel.layout(
-            plate_w=pw, plate_h=ph, pocket_d=KEY.get("pocket_d_mm", 7.0))
+            pw, ph, pocket_d=KEY.get("pocket_d_mm", 5.0),
+            title=KEY.get("title", key_panel.TITLE),
+            title_cap=KEY.get("title_cap_mm", key_panel.TITLE_CAP_MM),
+            title_gap=KEY.get("title_gap_mm", key_panel.TITLE_GAP_MM),
+            label_cap=KEY.get("label_cap_mm", key_panel.CAP_MM))
         recesses = [{"points": key_panel.circle_ring(
-                        *r["pocket_c"], KEY.get("pocket_d_mm", 7.0) / 2),
+                        *r["pocket_c"], KEY.get("pocket_d_mm", 5.0) / 2),
                      "depth": KEY.get("pocket_depth_mm", 1.4)}
                     for r in key_rows]
         recesses.append({"points": key_panel.rect_ring(
@@ -601,7 +605,7 @@ def main():
               f"+{inter:g} mm total ({inter / 2:g}/side) -- no ribs, no "
               f"poke-hole, glue optional\n"
               f"    {len(key_rows)} swatch pockets dia "
-              f"{KEY.get('pocket_d_mm', 7.0):g} x "
+              f"{KEY.get('pocket_d_mm', 5.0):g} x "
               f"{KEY.get('pocket_depth_mm', 1.4):g} deep; label recess "
               f"{lrec['x1'] - lrec['x0']:.1f} x {lrec['y1'] - lrec['y0']:.1f}"
               f" x {KEY.get('label_recess_mm', 0.2):g} deep -> {kpath}")
@@ -718,7 +722,7 @@ def render_preview(geo, s, holes, stamps, ribbed, rib_pt, rose, rose_c,
                 if pieces_exploded:
                     py += 45.0
                 ax.add_patch(plt.Circle(
-                    (px, py), KEY.get("pocket_d_mm", 7.0) / 2,
+                    (px, py), KEY.get("pocket_d_mm", 5.0) / 2,
                     facecolor="#b9b9b9", edgecolor="black", lw=0.3, zorder=4))
             kc = k.centroid
             ax.annotate("key", (kc.x, kc.y + 14), color="black", fontsize=8,

@@ -72,51 +72,101 @@ MARGIN_MM = 5.0            # plate edge -> content
 ROW_GAP_MM = 3.0           # gap between pocket circles, row to row
 TEXT_GAP_MM = 3.0          # pocket -> label-recess gap
 TEXT_MARGIN_MM = 2.0       # extra clearance beyond the measured text box
+TITLE = "California Regions"
+TITLE_CAP_MM = 6.0         # ahl 2026-09-15: same size as the compass
+                           # rose's N/E/S/W letters ([compass].
+                           # letter_cap_mm). Wraps over as many lines as
+                           # the text column needs.
+TITLE_GAP_MM = 4.0         # space between the title block and the list
+TITLE_LINE_FRAC = 1.35     # title line height / cap
 
 
 # ---------------------------------------------------------------- layout
-def layout(plate_w=None, plate_h=None, pocket_d=None):
-    """Row geometry: plate size, pocket centers, and the label-recess
-    rectangle (with each row's text baseline position inside it, LOCAL
-    to the recess's own SW corner -- what render_label() draws).
+def _wrap(text, ff, cap_mm, max_w):
+    """Greedy word-wrap `text` so every line fits `max_w` at `cap_mm`."""
+    def w(t):
+        b = ca._letter_poly(t, ff, cap_mm, ca.CHORD_TOL_MM).bounds
+        return b[2] - b[0]
+    lines, cur = [], ""
+    for word in text.split():
+        trial = f"{cur} {word}".strip()
+        if cur and w(trial) > max_w:
+            lines.append(cur)
+            cur = word
+        else:
+            cur = trial
+    if cur:
+        lines.append(cur)
+    over = [ln for ln in lines if w(ln) > max_w]
+    assert not over, (f"key too narrow for the title at {cap_mm:g} mm cap: "
+                      f"{over[0]!r} needs {w(over[0]):.1f} mm, have "
+                      f"{max_w:.1f}")
+    return lines, [w(ln) for ln in lines]
 
-    With no arguments the plate is sized to fit the text (the standalone
-    coupon).  Pass plate_w/plate_h to lay the same five rows out inside
-    a GIVEN rectangle instead -- that is the P5 path, where the key's
-    footprint comes from config [key] and the rows have to fit it.  The
-    row pitch then divides the available height evenly, and the caller's
-    width sets how much room the label recess gets."""
+
+def layout(plate_w, plate_h, pocket_d=None, title=TITLE,
+           title_cap=TITLE_CAP_MM, title_gap=TITLE_GAP_MM,
+           label_cap=CAP_MM):
+    """Lay the key out inside a GIVEN plate rectangle (ahl 2026-09-15:
+    the key's footprint comes from config [key], the contents fit it).
+
+    Down the plate: a TITLE at `title_cap` -- ahl asked for the same size
+    as the compass rose's N/E/S/W letters -- word-wrapped over as many
+    lines as it needs, then `title_gap` of space, then the five region
+    rows at the smaller `label_cap`, each with a swatch pocket beside it.
+
+    Across the plate: a right-hand column of pockets, and everything
+    printed (title AND labels) inside ONE rectangular recess to its left,
+    so the paper insert is a plain rectangle with no holes to punch.
+    That makes the recess width, not the plate width, the constraint on
+    the title -- the assert in _wrap fires if the key is too narrow.
+
+    Returns (plate_w, plate_h, rows, recess).  `recess` carries the
+    title lines and their y positions, all LOCAL to the recess's own SW
+    corner, which is the frame render_label() draws in."""
     ff = ca._font_file(FONT)
-    widths = {}
-    for lab in LABELS:
-        g = ca._letter_poly(lab, ff, CAP_MM, ca.CHORD_TOL_MM)
-        widths[lab] = g.bounds[2] - g.bounds[0]
-    text_w = max(widths.values())
     pocket_d = POCKET_D_MM if pocket_d is None else pocket_d
 
-    if plate_h is None:
-        plate_h = 2 * MARGIN_MM + 5 * pocket_d + 4 * ROW_GAP_MM
-    if plate_w is None:
-        plate_w = (MARGIN_MM + pocket_d + TEXT_GAP_MM + text_w
-                   + TEXT_MARGIN_MM + MARGIN_MM)
-    # rows fill the usable height evenly, whatever it is
-    usable_h = plate_h - 2 * MARGIN_MM
-    row_pitch = usable_h / len(LABELS)
-    assert row_pitch >= pocket_d + 0.5, (
-        f"key too short: {len(LABELS)} rows of dia {pocket_d:g} mm need "
-        f"> {len(LABELS) * (pocket_d + 0.5) + 2 * MARGIN_MM:.1f} mm, "
-        f"have {plate_h:.1f}")
-
-    pocket_x = plate_w - MARGIN_MM - pocket_d / 2
     recess = {"x0": MARGIN_MM, "y0": MARGIN_MM,
              "x1": plate_w - MARGIN_MM - pocket_d - TEXT_GAP_MM,
              "y1": plate_h - MARGIN_MM}
-    assert recess["x1"] - recess["x0"] > 10.0, (
-        f"key too narrow: label recess only "
-        f"{recess['x1'] - recess['x0']:.1f} mm wide")
+    rec_w = recess["x1"] - recess["x0"]
+    rec_h = recess["y1"] - recess["y0"]
+    assert rec_w > 10.0, (f"key too narrow: text column only {rec_w:.1f} mm "
+                          f"(plate {plate_w:.1f} - margins - {pocket_d:g} mm "
+                          "pocket column)")
+
+    title_lines, _ = _wrap(title, ff, title_cap, rec_w)
+    line_h = title_cap * TITLE_LINE_FRAC
+    title_h = len(title_lines) * line_h
+
+    # rows share whatever height is left under the title block
+    rows_h = rec_h - title_h - title_gap
+    row_pitch = rows_h / len(LABELS)
+    assert row_pitch >= pocket_d + 0.5, (
+        f"key too short: after a {len(title_lines)}-line title "
+        f"({title_h:.1f} mm) + {title_gap:g} mm gap, {len(LABELS)} rows of "
+        f"dia {pocket_d:g} mm need {len(LABELS) * (pocket_d + 0.5):.1f} mm "
+        f"but only {rows_h:.1f} mm is left (plate {plate_h:.1f})")
+    lab_w = max(ca._letter_poly(l, ff, label_cap, ca.CHORD_TOL_MM).bounds[2]
+                - ca._letter_poly(l, ff, label_cap, ca.CHORD_TOL_MM).bounds[0]
+                for l in LABELS)
+    assert lab_w <= rec_w, (f"region labels need {lab_w:.1f} mm at "
+                            f"{label_cap:g} mm cap, text column is "
+                            f"{rec_w:.1f} mm")
+
+    # title sits at the top of the recess, first line highest
+    recess["title_lines"] = title_lines
+    recess["title_cap"] = title_cap
+    recess["label_cap"] = label_cap
+    recess["title_y_local"] = [rec_h - (i + 0.5) * line_h
+                               for i in range(len(title_lines))]
+
+    pocket_x = plate_w - MARGIN_MM - pocket_d / 2
+    rows_top = recess["y0"] + rows_h
     rows = []
     for i, lab in enumerate(LABELS):
-        cy = plate_h - MARGIN_MM - row_pitch / 2 - i * row_pitch
+        cy = rows_top - (i + 0.5) * row_pitch
         rows.append({"label": lab, "pocket_c": (pocket_x, cy),
                      "text_y_local": cy - recess["y0"]})
     return plate_w, plate_h, rows, recess
@@ -234,8 +284,13 @@ def insert_mesh(diameter, height, seg=48):
 
 # ------------------------------------------------------------- 2D label
 def render_label(recess, rows):
-    """Print-at-100% PDF sized exactly to the label recess, text rows
-    aligned to the same y-coordinates as the pockets."""
+    """The printed KEY INSERT: a PDF sized exactly to the label recess,
+    carrying the title and the region names at the row positions
+    layout() computed.  Print at 100% and drop it into the recess.
+
+    2D-printed rather than moulded in plastic because FDM text at this
+    size fights a 0.4 mm nozzle -- at 3.5 mm cap Georgia Bold crowded
+    even after narrowing the glyphs (ahl 2026-09-15)."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -248,11 +303,20 @@ def render_label(recess, rows):
     ax.set_ylim(0, h)
     ax.set_aspect("equal")
     ax.axis("off")
+    # matplotlib sizes text in POINTS by font size, not cap height;
+    # Georgia's cap is ~0.7 em, so pt = cap_mm / 0.7 / 25.4 * 72
+    pt = lambda cap_mm: cap_mm / 0.7 * 72.0 / 25.4
+    for ln, y in zip(recess["title_lines"], recess["title_y_local"]):
+        ax.text(0.0, y, ln, fontfamily="Georgia", fontweight="bold",
+                fontsize=pt(recess["title_cap"]), va="center", ha="left")
     for r in rows:
-        ax.text(1.0, r["text_y_local"], r["label"], fontfamily="Georgia",
-                fontweight="bold", fontsize=CAP_MM * 3.4, va="center",
-                ha="left")
+        ax.text(0.0, r["text_y_local"], r["label"], fontfamily="Georgia",
+                fontweight="bold", fontsize=pt(recess["label_cap"]),
+                va="center", ha="left")
     path = OUT_DIR / "key_insert.pdf"
     fig.savefig(path, facecolor="white")
     plt.close(fig)
-    print(f"-> {path} ({w:.1f} x {h:.1f} mm, print at 100%/actual size)")
+    print(f"-> {path} ({w:.1f} x {h:.1f} mm, print at 100%/actual size; "
+          f"title {'/'.join(recess['title_lines'])} at "
+          f"{recess['title_cap']:g} mm cap, labels at "
+          f"{recess['label_cap']:g} mm)")
