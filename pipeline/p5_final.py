@@ -444,7 +444,8 @@ def main():
         other_nom = unary_union(sib_noms) if sib_noms else None
         ribbed, sites = p4.add_crush_ribs(
             piece, geo[f"{name}_nom"], other_nom, p4.RIBS_PER_PIECE,
-            p4.RIB_RADIUS_MM, p4.RIB_INTERFERENCE_MM)
+            p4.RIB_RADIUS_MM, p4.RIB_INTERFERENCE_MM,
+            manual_points=p4.RIB_SITES_CFG.get(f"p5_{name}"))
         ribbed_geo[name] = ribbed
         rib_sites[name] = sites
         mesh = p4.solid_mesh(ribbed, terrain_piece, 0.0,
@@ -492,8 +493,14 @@ def main():
 
     mnom = geo["mountains_nom"].exterior
     rib_pt = mnom.interpolate(rib_sites["mountains"][0][0])
+    rib_pts = []
+    for name, _, _ in PIECES:
+        ring = geo[f"{name}_nom"].exterior
+        for d, kind in rib_sites[name]:
+            p = ring.interpolate(d)
+            rib_pts.append({"name": name, "kind": kind, "x": p.x, "y": p.y})
     render_preview(geo, s, holes, stamps, ribbed_geo, rib_pt, rose, rose_c,
-                  EW_MM)
+                  EW_MM, rib_pts)
     print(f"\nall bodies/pieces watertight + checks: {ok}")
     if not ok:
         sys.exit(1)
@@ -506,7 +513,7 @@ def main():
 
 # ----------------------------------------------------------------- preview
 def render_preview(geo, s, holes, stamps, ribbed, rib_pt, rose, rose_c,
-                   ew_mm):
+                   ew_mm, rib_pts):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -516,6 +523,15 @@ def render_preview(geo, s, holes, stamps, ribbed, rib_pt, rose, rose_c,
     ratio = ew_mm / NS_MM
     fig, axes = plt.subplots(1, 5, figsize=(5 * 7.0 * ratio + 3, 8.0),
                              dpi=170)
+
+    # same per-piece explode offset draw_map uses, precomputed once so
+    # the rib markers on the exploded panel track their piece exactly
+    explode_off = {}
+    for name, _, _ in PIECES:
+        c = geo[f"{name}_piece"].centroid
+        v = np.array([c.x - ew_mm / 2, c.y - NS_MM / 2])
+        nv = np.linalg.norm(v)
+        explode_off[name] = (v / nv * 45.0) if nv > 1e-6 else (0.0, 45.0)
 
     def draw_map(ax, pieces_exploded=False):
         ax.set_facecolor("#1c1c22")
@@ -531,15 +547,26 @@ def render_preview(geo, s, holes, stamps, ribbed, rib_pt, rose, rose_c,
                         pt.buffer(p4.POKE_D_MM / 2, quad_segs=24))
                 p4.add_poly(ax, cav,
                             tuple(c * 0.82 for c in p4.WATER_RGB), z=2)
-                c = g.centroid
-                v = np.array([c.x - ew_mm / 2, c.y - NS_MM / 2])
-                nv = np.linalg.norm(v)
-                dx, dy = (v / nv * 45.0) if nv > 1e-6 else (0, 45.0)
+                dx, dy = explode_off[name]
                 g = affinity.translate(g, dx, dy)
                 cc = g.centroid
                 ax.annotate(name, (cc.x, cc.y), color="black", fontsize=9,
                             ha="center", weight="bold", zorder=6)
             p4.add_poly(ax, g, base.COLORS[rid], z=3)
+
+    # crush-rib sites in RED -- "pair" (piece-piece) ribs as a triangle
+    # (the ones implicated in the T2 too-tight finding), "frame" ribs as
+    # a dot; `exploded` applies the SAME per-piece offset draw_map used
+    def draw_ribs(ax, exploded=False):
+        for r in rib_pts:
+            x, y = r["x"], r["y"]
+            if exploded:
+                dx, dy = explode_off[r["name"]]
+                x, y = x + dx, y + dy
+            marker = "^" if r["kind"] == "pair" else "o"
+            ax.plot(x, y, marker=marker, color="red",
+                   markeredgecolor="white", markeredgewidth=0.4,
+                   markersize=5, zorder=7)
 
     rose_colors = {"coast": tuple(base.COLORS[base.COAST])[:3],
                    "gray": p4.GRAY_RGB, "black": (0.12, 0.11, 0.11)}
@@ -557,14 +584,17 @@ def render_preview(geo, s, holes, stamps, ribbed, rib_pt, rose, rose_c,
             ax.add_patch(plt.Circle((pt.x, pt.y), p4.POKE_D_MM / 2,
                                     fill=False, edgecolor="black",
                                     linestyle=":", lw=0.8, zorder=5))
+    draw_ribs(ax)
     ax.set_xlim(-3, ew_mm + 3), ax.set_ylim(-3, NS_MM + 3)
     ax.set_title(f"assembled — 1:{1 / s / 1e6:.3f}M, {ew_mm:.0f} x "
-                 f"{NS_MM:g} mm; dotted = poke-holes", fontsize=10)
+                 f"{NS_MM:g} mm; dotted = poke-holes; red = crush ribs "
+                 "(triangle = pair, dot = frame)", fontsize=10)
 
     # 2: exploded
     ax = axes[1]
     draw_map(ax, pieces_exploded=True)
     draw_rose(ax)
+    draw_ribs(ax, exploded=True)
     ax.set_xlim(-52, ew_mm + 52), ax.set_ylim(-52, NS_MM + 52)
     ax.set_title("exploded (+45 mm) — cavity floors show poke-holes",
                  fontsize=10)

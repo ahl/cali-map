@@ -9,11 +9,16 @@ to print it. The full final product also exists at out/p5/ (frame.3mf +
 via `make` (D12); config.toml + overrides/ + assets/compass.svg are the
 complete inputs.
 
-**Immediately awaited — ahl's T2 print findings:** rib retention when
-tipped (D18), 18 mm finger-hole ergonomics, valley press-fit at 0.08
-total gap (enclosed-zero-clearance rule), raised rose look (vs T1's
-flush under-fill), 6 mm letter "E" legibility. Each maps to a config
-knob; iterate: bump [output].build_tag, adjust knobs, `make p4`.
+**T2 print findings so far (2026-09-15):** mountains-valley pair fit
+was TOO TIGHT at 0.08 mm total (two ribbed T2 walls closing on the same
+tiny gap) — `clearance_pair_per_side_mm` walked back to 0.10 mm, needs
+a re-print to confirm. Mixed T1/T2 fits great, esp. T2 valley + T1
+mountain (D18's target retention behavior). Still awaiting: rib
+retention when tipped with a from-scratch T2 pair, 18 mm finger-hole
+ergonomics, 6 mm letter "E" legibility (raised rose look already
+resolved via the dedicated rose test coupon, see the ironing entry
+above). Each maps to a config knob; iterate: bump [output].build_tag,
+adjust knobs, `make p4`.
 
 **Then the endgame (P6):** full-size mountains DRESS REHEARSAL in a
 plentiful color (decides flat-vs-VERTICAL printing — see Filament
@@ -22,9 +27,13 @@ brim ~4 mm), valley green, desert yellow, mountains brown LAST (scarce
 filament, print once).
 
 **Open items parked deliberately:**
-- D11 per-scale min-width pass NEVER RAN — the P5 mountains piece has a
-  ~0.8 mm neck somewhere (2 nozzle widths; printable but fragile). If
-  the rehearsal print shows a problem there, this pass is the fix.
+- D11 per-scale min-width pass NEVER RAN — and the "somewhere" is now
+  LOCATED: the mountains spur at Petaluma/Sonoma just N of San Pablo
+  Bay, 0.94 mm wide (P4 window (50.1, 76.6) = lon/lat -122.19, 38.86;
+  `p4_bay_coupon.thin_spots()` reports it every build). T2's
+  too-tight-together finding traces here. ahl 2026-09-15: deliberately
+  NOT modifying the spur — he wants to keep the shape; T3 addresses it
+  with tolerance + rib placement instead. Still parked.
 - Full-depth bodies (gray under pieces / land color to the floor):
   revisit per ahl after judging translucency + teal cavity floors in
   prints; spec sketched in the T1 session note.
@@ -453,6 +462,81 @@ FINAL 225 x 250 FRAME ONLY
   to full-depth bodies (land color to the floor, GRAY under the
   removable pieces; also fixes the edge cross-section and kills the
   translucency issue; costs a little purge in the floor layers).
+
+- **T2 (2026-09-15): mountains+valley TOO TIGHT together in the T1
+  frame** — ahl printed T2 mountains + T2 valley (ribs + the tightened
+  0.08 mm total pair clearance) and they don't both fit into the T1
+  frame at once. Mixing generations works: ONE T1 piece + ONE T2 piece
+  fits fine either way, and T2 valley + T1 mountain in particular is
+  "especially nice and snug" — stays seated through handling, only
+  releases via the poke holes (D18's exact target behavior).
+  ROOT CAUSE per ahl: TOPOGRAPHICAL, not rib interference — a narrow
+  mountains SPUR just north of the SF Bay pinches the mountains/valley
+  boundary to a fragile width. Located precisely (a `thin_spots()`
+  debug pass, agreed on independently by BOTH pieces' outlines):
+  **P4 window (50.1, 76.6) = lon/lat (-122.19, 38.86), Petaluma /
+  Sonoma just N of San Pablo Bay, 0.94 mm wide** — the same feature D11
+  flagged and never fixed ("a ~0.8 mm neck somewhere; printable but
+  fragile"). CORRECTION to an earlier claim in this log: the pair ribs
+  were NOT on the spur. `pair@(84.9, 14.9)` converts to lon/lat
+  (-120.35, 36.36) — near Fresno, ~65 mm away; that claim came from
+  misreading a pixel-cropped preview, and coordinate conversion
+  disproved it. So no rib was ever loading the neck; the tightness there
+  is just the uniform pair clearance landing on an already-thin spot.
+  ahl's call: do NOT modify the spur geometry (D11 pass stays deferred)
+  — fix it with tolerance + rib placement only. See the T3 spec below.
+- **Rib-site visualization added (ahl 2026-09-15):** both
+  `p4_bay_coupon.render_preview` and `p5_final.render_preview` now mark
+  every crush-rib site in red on the assembled + exploded panels
+  (triangle = piece-pair rib, dot = frame rib) — added specifically to
+  investigate this finding; keep it, it's generally useful for judging
+  rib placement.
+- **T1/T2 tolerance table + ahl's read (2026-09-15).** Frame clearance
+  was 0.15 for BOTH T1 and T2 (never changed); only the pair number
+  moved. Physical pairings, by what each piece actually printed at:
+  T1<->T1 pair 0.30 (loose); T2<->T2 pair 0.08 (too tight together);
+  T2 valley + T1 mountain 0.15 ("especially nice and snug" — but that
+  mountain had NO ribs); T1 valley + T2 mountain 0.23 (too loose).
+  ahl's conclusions: the T1-frame/T2-mountain snugness is the RIBS
+  doing their job; the 0.15 mixed pairing is snug in a way that worries
+  him — it loads the fragile SF Bay spur (D11) and might crack it; the
+  spur is NOT to be modified (no geometry changes this pass); and
+  remember all pieces push on each other to fill the frame, so an
+  over-tight local joint carries the whole system's contact pressure.
+  Blind alleys along the way, all reverted: a blanket
+  `clearance_pair_per_side_mm` walk-back (0.10, then 0.16) and extending
+  zero-clearance to desert — both premature, both undone before the T3
+  decisions below. Desert's zero-clearance (for the mountains+desert
+  snug-fit goal) stays parked as its own future decision.
+- **T3 spec (ahl 2026-09-15), the actual change set:**
+  `clearance_per_side_mm` 0.15 -> **0.10** (lean on ribs for retention
+  at a tighter base fit), `clearance_pair_per_side_mm` 0.08 -> **0.10**
+  with `enclosed_piece_zero_clearance` = **false** — i.e. drop the
+  valley exception and go back to a symmetric rule, BOTH pieces
+  contributing, for 0.20 mm total. Rationale for symmetric: under the
+  enclosed rule 100% of the pair gap (and so 100% of the relief at the
+  spur) came from mountains alone; symmetric spreads it. Both numbers
+  moved at once, so a too-tight T3 won't isolate which — accepted.
+  `build_tag` = "T3".
+- **Crush-rib placement is now MANUAL (ahl 2026-09-15).** The automatic
+  placer got four rewrites in one session and produced a surprise every
+  time — a whole side skipped, two ribs on one spur, every slot going to
+  one interface type, zero pair ribs — because good placement is a
+  judgement about the assembled object, not something a straightness/
+  spread proxy captures, and there are only ~4 ribs per piece. New
+  contract: config **`[print.ribs]`**, one hand-picked (x, y) list per
+  build+piece (`p4_mountains`, `p5_desert`, ...). Coordinates are
+  approximate — read them straight off the red rib markers in
+  out/p4_preview.png / out/p5_preview.png and each SNAPS to the nearest
+  point on that piece's nominal outline. The build prints every snap
+  distance, flags >2 mm as a likely typo, and warns (but obeys) if a
+  site lands within 5 mm of a thin neck. Delete a list to fall back to
+  the automatic placer for that piece. Seeded with exactly what the
+  placer last chose, verified a no-op on both builds (all snaps
+  <0.05 mm). `choose_rib_sites` survives as that fallback, simplified
+  to ahl's actual rule — ribs matter most on big FLAT stretches, since
+  a curvy stretch already self-interlocks — plus a floor of one pair
+  rib, with `ribs_per_piece`/`min_rib_width_mm` applying only to it.
 
 ## Observation log (noted, NOT to be acted on unless ahl says so)
 

@@ -162,13 +162,18 @@ ENCLOSED_ZERO_CLEARANCE = _PRINT_CFG.get("enclosed_piece_zero_clearance",
 # real P5 layout (touches no frame -- only another removable piece), so
 # under enclosed_piece_zero_clearance it contributes ZERO shrink on its
 # own piece-facing walls; its neighbor's CLEARANCE_PAIR_MM does the
-# WHOLE piece-piece gap (total 0.08, not 0.16). The coupon's valley DOES
-# touch the window rim (frame) on some stretches, but that's already
-# handled automatically: piece_polygon's d_frame field only ever counts
-# an ACTUAL sibling piece as "other", so a valley/rim boundary is
-# frame-facing (CLEARANCE_MM) regardless of this flag -- only the
-# valley/mountains stretch is affected.
-ENCLOSED_PIECE = "valley"
+# WHOLE piece-piece gap. The coupon's valley DOES touch the window rim
+# (frame) on some stretches, but that's already handled automatically:
+# piece_polygon's d_frame field only ever counts an ACTUAL sibling piece
+# as "other", so a valley/rim boundary is frame-facing (CLEARANCE_MM)
+# regardless of this set -- only piece-pair stretches are affected.
+# ahl 2026-09-15: a same-style change extending this to DESERT (so
+# mountains is the sole clearance-contributor at both its piece-pair
+# seams, for a mountains+desert snug-fit -- see NOTES.md) was tried and
+# REVERTED as premature -- ahl wants to reason from the T1/T2 tolerance
+# table first before touching desert's treatment. Revisit deliberately,
+# not as a rider on the mountains-valley tuning work.
+ZERO_CLEARANCE_PIECES = {"valley"}
 BASE_MM = _PRINT_CFG["base_mm"]           # water surface above bottom
 FLOOR_MM = _PRINT_CFG["floor_mm"]         # tray floor (D16)
 CHAMFER_MM = _PRINT_CFG["bottom_chamfer_mm"]  # 45-deg piece bottom edge
@@ -176,6 +181,10 @@ POKE_D_MM = _PRINT_CFG["poke_hole_d_mm"]
 RIB_INTERFERENCE_MM = _PRINT_CFG.get("rib_interference_mm", 0.0)
 RIB_RADIUS_MM = _PRINT_CFG.get("rib_radius_mm", 0.4)
 RIBS_PER_PIECE = _PRINT_CFG.get("ribs_per_piece", 4)
+# config [print.ribs]: manual per-build-per-piece rib sites, keyed
+# "p4_<piece>" / "p5_<piece>"; a missing/empty list = use the automatic
+# placer for that piece (ahl 2026-09-15)
+RIB_SITES_CFG = _PRINT_CFG.get("ribs", {})
 LAND_MIN_MM = _PRINT_CFG["land_min_mm"]
 COMPASS = _CFG_ALL.get("compass", {"enabled": False})
 ROSE_STYLE = COMPASS.get("style", "raised")   # "flush" | "raised"
@@ -188,13 +197,12 @@ CLEAR_PAIR_PX = CLEARANCE_PAIR_MM / PX_MM
 
 def piece_pair_clear_px(name):
     """Piece-facing clearance CONTRIBUTED BY `name`'s own walls (pixels):
-    the enclosed piece (ENCLOSED_PIECE, when ENCLOSED_ZERO_CLEARANCE) is
+    a piece in ZERO_CLEARANCE_PIECES (when ENCLOSED_ZERO_CLEARANCE) is
     the exact nominal shape on every piece-facing stretch -- zero self-
     contribution, its neighbor's CLEAR_PAIR_PX does the entire gap.
-    Every other piece contributes the full CLEAR_PAIR_PX (so two non-
-    enclosed siblings, e.g. mountains-desert in P5, each shrink by
-    CLEARANCE_PAIR_MM for a 2x total)."""
-    if ENCLOSED_ZERO_CLEARANCE and name == ENCLOSED_PIECE:
+    Every other piece (mountains, the only one NOT in the set)
+    contributes the full CLEAR_PAIR_PX at every piece-pair seam it has."""
+    if ENCLOSED_ZERO_CLEARANCE and name in ZERO_CLEARANCE_PIECES:
         return 0.0
     return CLEAR_PAIR_PX
 
@@ -388,8 +396,8 @@ def piece_polygon(mask, other_mask, c_frame_px, c_pair_px, clip=None):
     friction fit, but the same 0.15/side between two pieces doubles to a
     loose 0.30 mm total gap -- piece-piece borders get their own
     (smaller) [print].clearance_pair_per_side_mm instead (and the
-    ENCLOSED_PIECE may use 0 on its own piece-facing walls entirely --
-    see ENCLOSED_ZERO_CLEARANCE).
+    a piece in ZERO_CLEARANCE_PIECES may use 0 on its own piece-facing
+    walls entirely -- see ENCLOSED_ZERO_CLEARANCE).
 
     Two-STAGE construction (an earlier one-shot version that combined a
     single continuous field via min(d_frame - c_frame_px, d_other -
@@ -505,17 +513,84 @@ def _ring_curvature(ring, length, d, window_mm=1.0):
     return abs(np.arccos(cosang))
 
 
-def choose_rib_sites(nominal, other_nominal, n_total, sample_step_mm=1.0):
+MIN_RIB_WIDTH_MM = _PRINT_CFG.get("min_rib_width_mm", 1.5)
+                          # ahl 2026-09-15: candidates where the piece's
+                          # LOCAL width drops below this are never
+                          # eligible for a crush rib (frame OR pair) --
+                          # protects thin necks (e.g. the mountains spur
+                          # just N of the SF Bay, ~0.8 mm, D11) from
+                          # extra local interference, without touching
+                          # the boundary geometry itself. Between the
+                          # ~0.8 mm neck and the ~1.5-2.0 mm the piece
+                          # otherwise measures.
+NECK_ARC_EXCLUDE_MM = 3.0  # when probing local width at a candidate,
+                          # ignore other candidates within this arc
+                          # distance (else every point trivially reads
+                          # ~0 mm to its own immediate neighbors)
+
+
+def _local_widths(ds, coords, length, exclude_mm=NECK_ARC_EXCLUDE_MM):
+    """Cheap local-thickness proxy per candidate: min Euclidean distance
+    to another candidate at least `exclude_mm` away in ARC length. A
+    thin neck's far side is close in SPACE but far in arc length, so it
+    reads as a small value; a normal straight run does not."""
+    dxy = coords[:, None, :] - coords[None, :, :]
+    eucl = np.hypot(dxy[..., 0], dxy[..., 1])
+    darc = np.abs(ds[:, None] - ds[None, :])
+    darc = np.minimum(darc, length - darc)
+    eucl = np.where(darc < exclude_mm, np.inf, eucl)
+    return eucl.min(axis=1)
+
+
+def thin_spots(nominal, threshold_mm=MIN_RIB_WIDTH_MM, sample_step_mm=1.0):
+    """Debug helper (ahl 2026-09-15, verifying MIN_RIB_WIDTH_MM against
+    the visually-identified spur): (x, y, width) for each LOCAL-MINIMUM
+    run of candidates under threshold_mm -- adjacent thin candidates
+    (a real neck shows up as a RUN, not an isolated sample) collapsed to
+    their single narrowest point."""
+    ring = nominal.exterior
+    length = ring.length
+    ds = np.arange(0.0, length, sample_step_mm)
+    pts = [ring.interpolate(d) for d in ds]
+    coords = np.array([[p.x, p.y] for p in pts])
+    widths = _local_widths(ds, coords, length)
+    thin = widths < threshold_mm
+    spots = []
+    i, n = 0, len(thin)
+    while i < n:
+        if thin[i]:
+            j = i
+            while j + 1 < n and thin[j + 1]:
+                j += 1
+            k = i + int(np.argmin(widths[i:j + 1]))
+            spots.append((coords[k, 0], coords[k, 1], float(widths[k])))
+            i = j + 1
+        else:
+            i += 1
+    return spots
+
+
+def choose_rib_sites(nominal, other_nominal, n_total, sample_step_mm=1.0,
+                     avoid_points=(), avoid_dist_mm=15.0):
     """Picks `n_total` rib sites (arc-length positions on `nominal`'s
-    exterior ring) balanced across interface type and spread around the
-    perimeter, preferring straight/gently-curved stretches over sharp
-    corners (ahl 2026-09-14: fewer, well-placed ribs -- 'better contact
-    than sharp corners'; at least 2 must face the FRAME and, if the
-    piece has any piece-facing border at all, at least 1 must face that
-    -- grip on both interface types). `other_nominal`: union of sibling
-    nominal footprints, or None/empty if this piece has no siblings.
-    Returns a list of (arc_length_d, kind) with kind in {"frame",
-    "pair"}, sorted by arc length."""
+    exterior ring), simply: straightest stretches first, spread around
+    the perimeter by arc-length max-min (ahl 2026-09-15: ribs matter
+    most on big FLAT stretches -- a curvy stretch already gets some
+    mechanical interlock from its own shape and needs a rib less -- so
+    NO forced frame/pair quota and no directional-coverage requirement,
+    just follow the straightness wherever it actually is). Candidates
+    under MIN_RIB_WIDTH_MM local width (a thin neck should never carry a
+    rib's extra interference) or within `avoid_dist_mm` of an
+    `avoid_points` entry (e.g. a SIBLING piece's already-chosen pair-rib
+    site, so two pieces' ribs don't cluster on their shared boundary)
+    are excluded first, falling back to the unfiltered pool if an
+    exclusion would leave nothing at all.
+
+    `other_nominal`: union of sibling nominal footprints, or None/empty
+    if this piece has no siblings -- used only to LABEL each chosen site
+    "frame" or "pair" for reporting/preview, it does not affect which
+    sites get picked. Returns a list of (arc_length_d, kind), sorted by
+    arc length."""
     ring = nominal.exterior
     length = ring.length
     ds = np.arange(0.0, length, sample_step_mm)
@@ -524,44 +599,102 @@ def choose_rib_sites(nominal, other_nominal, n_total, sample_step_mm=1.0):
     ob = other_nominal.boundary if has_pair else None
     is_pair = np.array([has_pair and ob.distance(p) < 0.02 for p in pts])
     curv = np.array([_ring_curvature(ring, length, d) for d in ds])
+    coords = np.array([[p.x, p.y] for p in pts])
+    widths = _local_widths(ds, coords, length)
+    ok = widths >= MIN_RIB_WIDTH_MM
+    if (~ok).any():
+        wmin = int(np.argmin(widths))
+        print(f"    [ribs] excluding {(~ok).sum()} of {len(ds)} candidate "
+              f"site(s) under {MIN_RIB_WIDTH_MM:g} mm local width (min "
+              f"{widths[wmin]:.2f} mm @ ({coords[wmin, 0]:.1f}, "
+              f"{coords[wmin, 1]:.1f}))")
 
-    def greedy_spread(idx, n):
-        """From candidate indices `idx` (into ds/curv), pick up to n,
-        preferring the straighter half, spread by arc-length max-min."""
-        if n <= 0 or len(idx) == 0:
-            return []
-        idx = sorted(idx, key=lambda i: curv[i])
-        idx = idx[:max(n, (len(idx) + 1) // 2)]     # straighter half
-        chosen = [idx[0]]
-        pool = idx[1:]
-        while len(chosen) < n and pool:
-            def arc_gap(i):
-                return min(min(abs(ds[i] - ds[c]), length - abs(ds[i] - ds[c]))
-                           for c in chosen)
-            best = max(pool, key=arc_gap)
-            chosen.append(best)
-            pool.remove(best)
-        return chosen
+    if avoid_points:
+        near = np.zeros(len(ds), bool)
+        for ax, ay in avoid_points:
+            near |= np.hypot(coords[:, 0] - ax, coords[:, 1] - ay) \
+                < avoid_dist_mm
+        if (ok & ~near).any():
+            ok &= ~near
+        else:
+            print("    [ribs] avoid_points would exclude everything left -- "
+                  "ignoring this time")
 
-    n_pair = 1 if has_pair and is_pair.any() else 0
-    n_frame = n_total - n_pair
-    pair_idx = greedy_spread(list(np.nonzero(is_pair)[0]), n_pair)
-    frame_idx = greedy_spread(list(np.nonzero(~is_pair)[0]), n_frame)
-    sites = ([(ds[i], "pair") for i in pair_idx]
-             + [(ds[i], "frame") for i in frame_idx])
+    idx = sorted(np.nonzero(ok)[0].tolist(), key=lambda i: curv[i])
+    idx = idx[:max(n_total, (len(idx) + 1) // 2)]     # straighter half
+    chosen = [idx[0]] if idx else []
+    pool = idx[1:]
+    while len(chosen) < n_total and pool:
+        def arc_gap(i):
+            return min(min(abs(ds[i] - ds[c]), length - abs(ds[i] - ds[c]))
+                       for c in chosen)
+        best = max(pool, key=arc_gap)
+        chosen.append(best)
+        pool.remove(best)
+
+    # floor of one pair rib (ahl 2026-09-15): pure straightness can
+    # legitimately pick zero -- a curvy shared boundary self-interlocks
+    # and may lose every slot to straighter frame stretches -- but some
+    # grip against the sibling piece is still wanted, so swap the
+    # straightest available pair candidate in for the single WEAKEST
+    # (least straight) chosen site if none made the cut on their own
+    if has_pair and chosen and not any(is_pair[i] for i in chosen):
+        pair_ok = np.nonzero(ok & is_pair)[0]
+        if len(pair_ok):
+            best_pair = int(min(pair_ok, key=lambda i: curv[i]))
+            worst = max(chosen, key=lambda i: curv[i])
+            chosen[chosen.index(worst)] = best_pair
+
+    sites = [(ds[i], "pair" if is_pair[i] else "frame") for i in chosen]
+    sites.sort(key=lambda t: t[0])
+    return sites
+
+
+def manual_rib_sites(nominal, other_nominal, points, label=""):
+    """MANUAL rib placement (ahl 2026-09-15 -- replaces the automatic
+    heuristic, which kept producing surprises; there are only ~4 ribs per
+    piece and ahl has better judgement about the assembled object than
+    any straightness/spread proxy).  `points`: approximate (x, y) in
+    print mm, read off the preview -- each SNAPS to the nearest point on
+    `nominal`'s exterior, so eyeballed coordinates are fine.  Reports the
+    snap distance (a big one = a typo or a stale coordinate) and warns if
+    a site lands on a thin neck, but never overrides ahl's choice.
+    Returns choose_rib_sites' (arc_length_d, kind) list."""
+    ring = nominal.exterior
+    has_pair = other_nominal is not None and not other_nominal.is_empty
+    ob = other_nominal.boundary if has_pair else None
+    necks = thin_spots(nominal)
+    sites = []
+    for x, y in points:
+        want = Point(float(x), float(y))
+        d = ring.project(want)
+        p = ring.interpolate(d)
+        kind = "pair" if (has_pair and ob.distance(p) < 0.02) else "frame"
+        snap = want.distance(p)
+        warn = ""
+        if snap > 2.0:
+            warn += f"  [!] snapped {snap:.1f} mm -- check this coordinate"
+        for nx, ny, w in necks:
+            if np.hypot(p.x - nx, p.y - ny) < 5.0:
+                warn += (f"  [!] {np.hypot(p.x - nx, p.y - ny):.1f} mm from a "
+                         f"{w:.2f} mm neck")
+                break
+        print(f"    [ribs] {label}manual ({x:g}, {y:g}) -> {kind}@"
+              f"({p.x:.1f}, {p.y:.1f}), snap {snap:.2f} mm{warn}")
+        sites.append((d, kind))
     sites.sort(key=lambda t: t[0])
     return sites
 
 
 def add_crush_ribs(piece, nominal, other_nominal, n_ribs, radius_mm,
-                   interference_mm):
+                   interference_mm, avoid_points=(), manual_points=None):
     """Retention crush-ribs (ahl 2026-09-14: pieces must stay seated when
     the tray is tipped; release is via the finger poke-holes, not a
     snug piece fit) -- vertical half-cylinder ribs standing proud of
-    `piece`'s (the clearance-cut piece) own wall, at n_ribs sites chosen
-    by choose_rib_sites (balanced frame/piece-facing coverage, straight
-    stretches preferred, spread around the perimeter of `nominal`, the
-    pre-clearance region outline).
+    `piece`'s (the clearance-cut piece) own wall, at sites on `nominal`
+    (the pre-clearance region outline): `manual_points` when given (ahl's
+    hand-picked (x, y) list from config [print.ribs] -- the normal path),
+    else n_ribs sites from the automatic choose_rib_sites heuristic.
 
     Crest placement is independent of which clearance applied locally:
     the offset wall sits `clearance_local` inside nominal; a rib
@@ -585,7 +718,11 @@ def add_crush_ribs(piece, nominal, other_nominal, n_ribs, radius_mm,
     ring = nominal.exterior
     length = ring.length
     eps = min(0.3, length * 0.01)
-    sites = choose_rib_sites(nominal, other_nominal, n_ribs)
+    if manual_points:
+        sites = manual_rib_sites(nominal, other_nominal, manual_points)
+    else:
+        sites = choose_rib_sites(nominal, other_nominal, n_ribs,
+                                 avoid_points=avoid_points)
     bumps = []
     for d, _kind in sites:
         p = ring.interpolate(d)
@@ -1191,7 +1328,7 @@ def add_poly(ax, geom, color, ec="none", lw=0.0, alpha=1.0, z=1):
 
 
 def render_preview(geo, s, tj, holes, stamps, ribbed, rib_pt, rose=None,
-                   rose_c=None):
+                   rose_c=None, rib_pts=None):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -1203,6 +1340,26 @@ def render_preview(geo, s, tj, holes, stamps, ribbed, rib_pt, rose=None,
                              figsize=(6.4 * n_panels, 7.2), dpi=200)
     rose_colors = {"coast": tuple(base.COLORS[base.COAST])[:3],
                    "gray": GRAY_RGB, "black": (0.12, 0.11, 0.11)}
+
+    # same per-piece explode offset the loop below uses, precomputed
+    # once so the rib markers on the exploded panel track their piece
+    explode_off = {}
+    for name in ("mountains", "valley"):
+        c = geo[f"{name}_piece"].centroid
+        v = np.array([c.x - WINDOW_MM / 2, c.y - WINDOW_MM / 2])
+        nv = np.linalg.norm(v)
+        explode_off[name] = (v / nv * 26.0) if nv > 1e-6 else (0.0, 26.0)
+
+    def draw_ribs(ax, exploded=False):
+        for r in (rib_pts or []):
+            x, y = r["x"], r["y"]
+            if exploded:
+                dx, dy = explode_off[r["name"]]
+                x, y = x + dx, y + dy
+            marker = "^" if r["kind"] == "pair" else "o"
+            ax.plot(x, y, marker=marker, color="red",
+                   markeredgecolor="white", markeredgewidth=0.4,
+                   markersize=5, zorder=7)
 
     for col, ax in enumerate(axes[:3]):
         ax.set_facecolor("#1c1c22")
@@ -1223,7 +1380,7 @@ def render_preview(geo, s, tj, holes, stamps, ribbed, rib_pt, rose=None,
                 c = g.centroid
                 v = np.array([c.x - WINDOW_MM / 2, c.y - WINDOW_MM / 2])
                 nv = np.linalg.norm(v)
-                dx, dy = (v / nv * 26.0) if nv > 1e-6 else (0, 26.0)
+                dx, dy = explode_off[name]
                 g = affinity.translate(g, dx, dy)
                 cc = g.centroid
                 ax.annotate(name, (cc.x, cc.y), color="black", fontsize=10,
@@ -1231,6 +1388,8 @@ def render_preview(geo, s, tj, holes, stamps, ribbed, rib_pt, rose=None,
             add_poly(ax, g, base.COLORS[rid], z=3)
         if col in (0, 1) and rose is not None:
             compass_art.draw_rose(ax, rose, rose_c, rose_colors)
+        if col in (0, 1):
+            draw_ribs(ax, exploded=(col == 1))
         if col == 0:
             for name in ("mountains", "valley"):
                 for pt in holes[name]:
@@ -1244,7 +1403,8 @@ def render_preview(geo, s, tj, holes, stamps, ribbed, rib_pt, rose=None,
                 f"assembled — 1:{1 / s / 1e6:.3f}M, window "
                 f"{WINDOW_MM / s / 1e6:.0f} km @ ({CENTER_KM[0]:.0f}, "
                 f"{CENTER_KM[1]:.0f}) km Albers; band = real geography "
-                "(gray = band land); dotted = poke-holes", fontsize=10)
+                "(gray = band land); dotted = poke-holes; red = crush "
+                "ribs (triangle = pair, dot = frame)", fontsize=10)
         elif col == 1:
             ax.set_xlim(-RIM_MM - 30, WINDOW_MM + RIM_MM + 30)
             ax.set_ylim(-RIM_MM - 30, WINDOW_MM + RIM_MM + 30)
@@ -1720,14 +1880,22 @@ def main():
 
     print("\nremovable pieces:")
     ribbed_geo, rib_sites = {}, {}
+    pair_pts_so_far = []   # ahl 2026-09-15: mountains picks first, so
+                          # valley's call can avoid clustering its own
+                          # pair rib near mountains' already-chosen one
     for name in ("mountains", "valley"):
         piece = geo[f"{name}_piece"]
         other_name = "valley" if name == "mountains" else "mountains"
         ribbed, sites = add_crush_ribs(
             piece, geo[f"{name}_nom"], geo[f"{other_name}_nom"],
-            RIBS_PER_PIECE, RIB_RADIUS_MM, RIB_INTERFERENCE_MM)
+            RIBS_PER_PIECE, RIB_RADIUS_MM, RIB_INTERFERENCE_MM,
+            avoid_points=pair_pts_so_far,
+            manual_points=RIB_SITES_CFG.get(f"p4_{name}"))
         ribbed_geo[name] = ribbed
         rib_sites[name] = sites
+        ring = geo[f"{name}_nom"].exterior
+        pair_pts_so_far += [(ring.interpolate(d).x, ring.interpolate(d).y)
+                            for d, kind in sites if kind == "pair"]
         mesh = solid_mesh(ribbed, terrain_piece, 0.0,
                           stamp=stamps.get(name), chamfer=CHAMFER_MM)
         path = OUT_DIR / f"{name}.stl"
@@ -1765,8 +1933,19 @@ def main():
     tj = triple_junction_mm(regw)
     mnom = geo["mountains_nom"].exterior
     rib_pt = mnom.interpolate(rib_sites["mountains"][0][0])
+    rib_pts = []
+    for name in ("mountains", "valley"):
+        ring = geo[f"{name}_nom"].exterior
+        for d, kind in rib_sites[name]:
+            p = ring.interpolate(d)
+            rib_pts.append({"name": name, "kind": kind, "x": p.x, "y": p.y})
+    print("\nthin-neck check (debug, MIN_RIB_WIDTH_MM = "
+          f"{MIN_RIB_WIDTH_MM:g} mm):")
+    for name in ("mountains", "valley"):
+        for x, y, w in thin_spots(geo[f"{name}_nom"]):
+            print(f"    {name:9s} ({x:.1f}, {y:.1f}) width {w:.2f} mm")
     render_preview(geo, s, tj, holes, stamps, ribbed_geo, rib_pt, rose,
-                  rose_c)
+                  rose_c, rib_pts)
     print(f"\nall bodies/pieces watertight: {ok}")
     print("canonical Makefile output for this stage: out/p4_mini/frame.3mf "
           "(replaces out/p4_bay_420mm/frame.stl; old p4_bay_* dirs are "

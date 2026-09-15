@@ -93,7 +93,7 @@ total_ns_mm = 250.0
 z_exaggeration = 9.3
 
 # Iteration tag for the bottom stamps. Bump per test iteration.
-build_tag = "T2"
+build_tag = "T3"
 # Bottom version stamps DISABLED per ahl 2026-09-14 ("the lettering on
 # the bottom is still wrong; just remove it for now") — parts get flat
 # plain bottoms until the stamp rendering is revisited.
@@ -103,21 +103,40 @@ stamps_enabled = false
 # Physical print parameters — shared by the P4 coupon AND the P5 final
 # build, so coupon-validated values transfer 1:1. Adjust after each test
 # print; `make` regenerates everything affected.
-clearance_per_side_mm = 0.15  # piece shrink vs the FRAME (frame = nominal;
+clearance_per_side_mm = 0.10  # piece shrink vs the FRAME (frame = nominal;
                               # total piece-frame gap = this value).
-                              # T1 verdict: mountains "pretty locked in"
-                              # at 0.15 -- the calibrated friction fit.
-clearance_pair_per_side_mm = 0.08   # piece shrink along PIECE-PIECE shared
-                              # borders (was 0.15/side = 0.30 total ->
-                              # loose valley, T1 finding)
-enclosed_piece_zero_clearance = true  # ahl 2026-09-14: a piece FULLY
-                              # ENCLOSED by another (touching no frame —
-                              # i.e. the valley) takes ZERO clearance and
-                              # is the exact nominal region shape; its
-                              # enclosing neighbor's 0.08 does all the
-                              # work -> valley-mountains total gap 0.08.
-                              # Tight press-fit; walk back in 0.02 steps
-                              # if T2 binds.
+                              # T1/T2 verdict: 0.15 "pretty locked in" --
+                              # T3 (ahl 2026-09-15): lowered to 0.10,
+                              # relying on ribs (unchanged: r0.4 mm,
+                              # +0.05 mm interference) to do more of the
+                              # retention work at a tighter base fit.
+                              # Needs a re-print to confirm it isn't too
+                              # tight now that ribs are added on top.
+clearance_pair_per_side_mm = 0.10   # piece shrink along PIECE-PIECE shared
+                              # borders, contributed by BOTH sides
+                              # (symmetric -- see enclosed_piece_zero_
+                              # clearance below, now OFF). History:
+                              # 0.15/side symmetric (T1) = 0.30 total ->
+                              # loose valley. 0.08 (T2) with valley
+                              # taking ZERO (enclosed rule) = 0.08 total
+                              # -> too tight TOGETHER. 0.15 with the
+                              # enclosed rule = 0.15 total, matching the
+                              # "especially nice and snug" T2-valley/
+                              # T1-mountain pairing, but ahl wants a
+                              # cleaner symmetric rule instead of relying
+                              # on the enclosed exception. T3 (this
+                              # value): 0.10/side BOTH contributing =
+                              # 0.20 total -- needs a re-print to confirm.
+enclosed_piece_zero_clearance = false  # ahl 2026-09-15: T3 removes the
+                              # valley exception -- back to BOTH pieces
+                              # contributing clearance_pair_per_side_mm
+                              # symmetrically (like T1), just at a
+                              # smaller per-side value than T1 used.
+                              # History: true for T2 (a piece FULLY
+                              # ENCLOSED by another -- touching no frame,
+                              # i.e. the valley -- took ZERO clearance,
+                              # its neighbor's clearance_pair_per_side_mm
+                              # did all the work).
 base_mm = 3.0                 # water surface height above print bottom
 floor_mm = 1.2                # tray floor under everything (D16)
 bottom_chamfer_mm = 0.0       # 45-deg chamfer at piece bottom edges
@@ -133,11 +152,44 @@ rib_interference_mm = 0.05    # crush-rib proudness on piece walls (the
                               # retention mechanism: pieces hold when
                               # tipped, release via poke holes; 0 = off)
 rib_radius_mm = 0.4           # crush-rib half-cylinder radius
-ribs_per_piece = 4            # flat count, evenly spaced around the
-                              # perimeter on straight-ish stretches
-                              # (ahl: few needed; many ribs = hard
-                              # insertion; was spacing-based)
+ribs_per_piece = 4            # flat count -- only used for pieces with NO
+                              # manual [print.ribs] list (see below);
+                              # ahl: few needed, many ribs = hard insertion
+min_rib_width_mm = 1.5        # thin-neck floor for the AUTOMATIC placer;
+                              # for manual sites it only drives a printed
+                              # warning (ahl's placement wins). Protects
+                              # necks like the mountains spur just N of
+                              # the SF Bay (~0.94 mm, D11) from a rib's
+                              # extra interference. Between that neck and
+                              # the ~1.5-2.0 mm the pieces otherwise run.
 land_min_mm = 0.2             # min land height above datum (color opacity)
+
+[print.ribs]
+# MANUAL crush-rib placement (ahl 2026-09-15). The automatic placer kept
+# producing surprises (a whole side skipped, two ribs on one spur, every
+# slot going to one interface type) because "good rib placement" is a
+# judgement about the assembled object, not something a straightness/
+# spread proxy captures -- and there are only ~4 ribs per piece. So:
+# hand-picked sites, listed here per build+piece.
+#
+#   - coordinates are approximate (x, y) in that build's PRINT mm, read
+#     straight off the preview: out/p4_preview.png / out/p5_preview.png,
+#     where every rib is already marked in red (triangle = piece-pair,
+#     dot = frame). Each point SNAPS to the nearest spot on that piece's
+#     nominal outline, so eyeballing is fine -- the build prints the snap
+#     distance, and flags anything over 2 mm as a likely typo.
+#   - the build also warns (but obeys) if a site lands within 5 mm of a
+#     thin neck.
+#   - DELETE a piece's list (or set it to []) to fall back to the
+#     automatic placer for that piece.
+#
+# Seeded 2026-09-15 with exactly what the automatic placer last chose,
+# so this switch changed no geometry -- edit from here.
+p4_mountains = [[90.5, 0.0], [56.0, 41.1], [22.8, 92.0], [52.4, 56.9]]
+p4_valley = [[85.4, 14.2], [52.0, 100.0], [89.0, 100.0], [100.0, 73.9]]
+p5_mountains = [[54.2, 122.6], [48.2, 240.3], [132.0, 111.2], [169.1, 10.4]]
+p5_valley = [[90.0, 98.1], [53.7, 169.2], [75.0, 165.1], [117.3, 89.6]]
+p5_desert = [[179.5, 27.9], [135.4, 76.4], [124.2, 142.4], [209.5, 62.4]]
 
 [compass]
 # D17 compass rose — ahl's Illustrator artwork (assets/compass.svg;
