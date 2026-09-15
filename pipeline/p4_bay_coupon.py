@@ -1271,11 +1271,12 @@ def manual_poke_holes(nom, points, label=""):
     centers, credit = [], {n: [] for n in names}
     for x, y in points:
         pt = Point(float(x), float(y))
-        assert allowed.contains(pt), (
+        clear = cav_union.boundary.distance(pt) - POKE_D_MM / 2
+        assert clear >= POKE_MARGIN_MM - 1e-6, (
             f"{label}poke hole ({x:g}, {y:g}): an {POKE_D_MM:g} mm circle "
-            f"there does not clear the cavity wall by {POKE_MARGIN_MM:g} mm "
-            f"(it is {cav_union.boundary.distance(pt) - POKE_D_MM / 2:+.1f} "
-            "mm short) -- move it inward")
+            f"there clears the cavity wall by only {clear:+.2f} mm, needs "
+            f"{POKE_MARGIN_MM:g} -- move it "
+            f"{POKE_MARGIN_MM - clear:.1f} mm inward")
         for q in centers:
             d = pt.distance(q)
             assert d >= POKE_D_MM + 2.0, (

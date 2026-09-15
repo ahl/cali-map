@@ -232,12 +232,15 @@ p5_desert = [[133.0, 112.4], [163.8, 108.2], [162.0, 54.9], [196.7, 14.2]]
 # sits in; the build recomputes which pieces each hole actually SERVES
 # from geometry, so a hole straddling a seam still credits both.
 p5_mountains = [[77.6, 220.0], [34.8, 207.2], [112.3, 125.6], [166.7, 24.5]]
-# ahl's second valley mark was at (78.6, 119.4); the valley alone is too
-# narrow there for an 18 mm circle. Moved 6.6 mm to (83.6, 115.0), the
-# nearest spot one fits once it may SPAN pieces (ahl 2026-09-15: "it's
-# ok if a poke hole spans regions") -- it lands on the mountains/valley
-# seam and serves both.
-p5_valley = [[69.5, 149.6], [83.6, 115.0]]
+# Second valley hole, third attempt. ahl marked (78.6, 119.4); too
+# narrow, so it was moved to the seam at (83.6, 115.0) -- which he then
+# X'd out and re-marked at (97.5, 84.3). That does not fit either (6.3
+# mm short; the dashed circle crosses out of the valley), so it sits at
+# (106.8, 89.3), the nearest spot an 18 mm circle clears the wall, 10.6
+# mm from his mark and in a wider part of the valley. The valley is
+# barely wider than 2 x (9 + 1.5) mm along most of its length, which is
+# why this keeps happening.
+p5_valley = [[69.5, 149.6], [106.8, 89.3]]
 p5_desert = [[153.6, 97.8], [195.7, 61.9], [194.9, 26.1]]
 
 [key]
