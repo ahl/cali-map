@@ -502,6 +502,22 @@ FINAL 225 x 250 FRAME ONLY
   is just the uniform pair clearance landing on an already-thin spot.
   ahl's call: do NOT modify the spur geometry (D11 pass stays deferred)
   — fix it with tolerance + rib placement only. See the T3 spec below.
+- **RING BUG, found by ahl's P5 markup and fixed (2026-09-15) --
+  worth knowing because it was silent.** All the rib machinery walked
+  `nominal.exterior` ONLY. A piece that ENCLOSES a sibling carries that
+  seam on an INTERIOR ring: P5 mountains holds the valley in a hole. So
+  four of ahl's marks, placed accurately (0.6-1.0 mm) on the
+  mountains/valley seam, snapped **17-24 mm away** to the outer
+  coastline -- and the automatic placer could never put a pair rib on
+  that seam at all, only on the mountains/desert one, which is why its
+  P5 picks looked reasonable while quietly missing half the problem.
+  `thin_spots` had the same blind spot (it reported mountains as clean
+  while `min_land_width` said 1.00 mm). Fixed: `_rings_of()` +
+  `site_point()`, rib sites are now `(ring_idx, arc_length, kind)`, and
+  `_local_widths` excludes by arc distance only WITHIN a ring -- two
+  different rings have no arc relationship, and material between them
+  is exactly the kind of neck worth finding. After the fix every mark
+  snaps <= 1.71 mm and all four seam ribs bite the designed 0.05 mm.
 - **Manual placement covers POKE HOLES too, on the same canvas (ahl
   2026-09-15: "can I also place the finger holes in this same pass?").**
   config `[print.poke_holes]`, keyed like the ribs; any piece with no

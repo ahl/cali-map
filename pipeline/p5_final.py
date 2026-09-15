@@ -556,8 +556,9 @@ def main():
         ring = geo[f"{name}_nom"].exterior
         site_str = ", ".join(
             f"{kind}@({p.x:.1f},{p.y:.1f})"
-            for (d, kind), p in zip(sites, [ring.interpolate(d)
-                                            for d, _ in sites]))
+            for (d, kind), p in zip([(st[1], st[2]) for st in sites],
+                                    [p4.site_point(geo[f"{name}_nom"], st)
+                                     for st in sites]))
         print(f"    {szn}min width "
               f"~{p4.min_land_width(piece):.2f} mm; gap vs frame: "
               f"global min {gmin:.3f} mm, away from any sibling seam "
@@ -713,13 +714,15 @@ def main():
         print(f"  note: {n}")
 
     mnom = geo["mountains_nom"].exterior
-    rib_pt = mnom.interpolate(rib_sites["mountains"][0][0])
+    rib_pt = (p4.site_point(geo["mountains_nom"], rib_sites["mountains"][0])
+              if rib_sites["mountains"] else geo["mountains_nom"].centroid)
     rib_pts = []
     for name, _, _ in PIECES:
         ring = geo[f"{name}_nom"].exterior
-        for d, kind in rib_sites[name]:
-            p = ring.interpolate(d)
-            rib_pts.append({"name": name, "kind": kind, "x": p.x, "y": p.y})
+        for st in rib_sites[name]:
+            p = p4.site_point(geo[f"{name}_nom"], st)
+            rib_pts.append({"name": name, "kind": st[2],
+                            "x": p.x, "y": p.y})
     # rib MARKUP canvas -- same loop as P4: ahl moves the dots, they get
     # extracted back into config [print.ribs]. P5's are still the
     # automatic placer's picks, unlike P4's which are hand-placed.

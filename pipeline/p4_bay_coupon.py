@@ -569,16 +569,29 @@ NECK_ARC_EXCLUDE_MM = 3.0  # when probing local width at a candidate,
                           # ~0 mm to its own immediate neighbors)
 
 
-def _local_widths(ds, coords, length, exclude_mm=NECK_ARC_EXCLUDE_MM):
+def _local_widths(ds, coords, lengths, ring_idx=None,
+                  exclude_mm=NECK_ARC_EXCLUDE_MM):
     """Cheap local-thickness proxy per candidate: min Euclidean distance
     to another candidate at least `exclude_mm` away in ARC length. A
     thin neck's far side is close in SPACE but far in arc length, so it
-    reads as a small value; a normal straight run does not."""
+    reads as a small value; a normal straight run does not.
+
+    The arc exclusion only applies WITHIN a ring: two different rings
+    (a piece's outer boundary and the hole where a sibling sits) have no
+    arc relationship, and material between them is exactly the kind of
+    neck worth finding."""
     dxy = coords[:, None, :] - coords[None, :, :]
     eucl = np.hypot(dxy[..., 0], dxy[..., 1])
+    if ring_idx is None:
+        ring_idx = np.zeros(len(ds), int)
+        lengths = [lengths]
     darc = np.abs(ds[:, None] - ds[None, :])
-    darc = np.minimum(darc, length - darc)
-    eucl = np.where(darc < exclude_mm, np.inf, eucl)
+    same = ring_idx[:, None] == ring_idx[None, :]
+    for ri, L in enumerate(lengths):
+        m = same & (ring_idx[None, :] == ri)
+        darc = np.where(m, np.minimum(darc, L - darc), darc)
+    eucl = np.where(same & (darc < exclude_mm), np.inf, eucl)
+    np.fill_diagonal(eucl, np.inf)
     return eucl.min(axis=1)
 
 
@@ -588,12 +601,17 @@ def thin_spots(nominal, threshold_mm=MIN_RIB_WIDTH_MM, sample_step_mm=1.0):
     run of candidates under threshold_mm -- adjacent thin candidates
     (a real neck shows up as a RUN, not an isolated sample) collapsed to
     their single narrowest point."""
-    ring = nominal.exterior
-    length = ring.length
-    ds = np.arange(0.0, length, sample_step_mm)
-    pts = [ring.interpolate(d) for d in ds]
+    rings = _rings_of(nominal)
+    ds_l, ri_l, pts = [], [], []
+    for ri, ring in enumerate(rings):
+        dd = np.arange(0.0, ring.length, sample_step_mm)
+        ds_l.append(dd)
+        ri_l.append(np.full(len(dd), ri))
+        pts.extend(ring.interpolate(float(d)) for d in dd)
+    ds = np.concatenate(ds_l)
+    ring_idx = np.concatenate(ri_l).astype(int)
     coords = np.array([[p.x, p.y] for p in pts])
-    widths = _local_widths(ds, coords, length)
+    widths = _local_widths(ds, coords, [r.length for r in rings], ring_idx)
     thin = widths < threshold_mm
     spots = []
     i, n = 0, len(thin)
@@ -631,16 +649,24 @@ def choose_rib_sites(nominal, other_nominal, n_total, sample_step_mm=1.0,
     "frame" or "pair" for reporting/preview, it does not affect which
     sites get picked. Returns a list of (arc_length_d, kind), sorted by
     arc length."""
-    ring = nominal.exterior
-    length = ring.length
-    ds = np.arange(0.0, length, sample_step_mm)
-    pts = [ring.interpolate(d) for d in ds]
+    rings = _rings_of(nominal)
+    ds_l, ri_l, pts = [], [], []
+    for ri, ring in enumerate(rings):
+        dd = np.arange(0.0, ring.length, sample_step_mm)
+        ds_l.append(dd)
+        ri_l.append(np.full(len(dd), ri))
+        pts.extend(ring.interpolate(float(d)) for d in dd)
+    ds = np.concatenate(ds_l)
+    ring_idx = np.concatenate(ri_l).astype(int)
+    length = max(r.length for r in rings)
     has_pair = other_nominal is not None and not other_nominal.is_empty
     ob = other_nominal.boundary if has_pair else None
     is_pair = np.array([has_pair and ob.distance(p) < 0.02 for p in pts])
-    curv = np.array([_ring_curvature(ring, length, d) for d in ds])
+    curv = np.array([_ring_curvature(rings[ring_idx[i]],
+                                     rings[ring_idx[i]].length, ds[i])
+                     for i in range(len(ds))])
     coords = np.array([[p.x, p.y] for p in pts])
-    widths = _local_widths(ds, coords, length)
+    widths = _local_widths(ds, coords, [r.length for r in rings], ring_idx)
     ok = widths >= MIN_RIB_WIDTH_MM
     if (~ok).any():
         wmin = int(np.argmin(widths))
@@ -685,9 +711,25 @@ def choose_rib_sites(nominal, other_nominal, n_total, sample_step_mm=1.0,
             worst = max(chosen, key=lambda i: curv[i])
             chosen[chosen.index(worst)] = best_pair
 
-    sites = [(ds[i], "pair" if is_pair[i] else "frame") for i in chosen]
-    sites.sort(key=lambda t: t[0])
+    sites = [(int(ring_idx[i]), ds[i], "pair" if is_pair[i] else "frame")
+             for i in chosen]
+    sites.sort(key=lambda t: (t[0], t[1]))
     return sites
+
+
+def _rings_of(poly):
+    """[exterior] + interior rings. Rib sites live on ANY of them: a
+    piece that encloses a sibling carries that seam on an INTERIOR ring
+    (P5 mountains holds the valley in a hole), and code that only looked
+    at .exterior could neither snap a mark there nor ever auto-place a
+    rib on it -- ahl's marks on the mountains/valley seam were snapping
+    17-24 mm away to the outer coastline before this (2026-09-15)."""
+    return [poly.exterior] + list(poly.interiors)
+
+
+def site_point(nominal, site):
+    """(ring_idx, arc_length, kind) -> the Point on `nominal`."""
+    return _rings_of(nominal)[site[0]].interpolate(site[1])
 
 
 def manual_rib_sites(nominal, other_nominal, points, label=""):
@@ -701,13 +743,15 @@ def manual_rib_sites(nominal, other_nominal, points, label=""):
     snap distance and warns if a site lands on a thin neck, but never
     overrides ahl's choice.
     Returns choose_rib_sites' (arc_length_d, kind) list."""
-    ring = nominal.exterior
+    rings = _rings_of(nominal)
     has_pair = other_nominal is not None and not other_nominal.is_empty
     ob = other_nominal.boundary if has_pair else None
     necks = thin_spots(nominal)
     sites = []
     for x, y in points:
         want = Point(float(x), float(y))
+        ri = min(range(len(rings)), key=lambda k: rings[k].distance(want))
+        ring = rings[ri]
         d = ring.project(want)
         p = ring.interpolate(d)
         kind = "pair" if (has_pair and ob.distance(p) < 0.02) else "frame"
@@ -723,8 +767,8 @@ def manual_rib_sites(nominal, other_nominal, points, label=""):
                 break
         print(f"    [ribs] {label}manual ({x:g}, {y:g}) -> {kind}@"
               f"({p.x:.1f}, {p.y:.1f}), snap {snap:.2f} mm{warn}")
-        sites.append((d, kind))
-    sites.sort(key=lambda t: t[0])
+        sites.append((ri, d, kind))
+    sites.sort(key=lambda t: (t[0], t[1]))
     return sites
 
 
@@ -766,16 +810,17 @@ def add_crush_ribs(piece, nominal, other_nominal, n_ribs, radius_mm,
         return piece, []
     if manual_points is not None and len(manual_points) == 0:
         return piece, []          # explicit [] = NO ribs on this piece
-    ring = nominal.exterior
-    length = ring.length
-    eps = min(0.3, length * 0.01)
+    rings = _rings_of(nominal)
+    eps = min(0.3, min(r.length for r in rings) * 0.01)
     if manual_points:
         sites = manual_rib_sites(nominal, other_nominal, manual_points)
     else:
         sites = choose_rib_sites(nominal, other_nominal, n_ribs,
                                  avoid_points=avoid_points)
     bumps = []
-    for d, kind in sites:
+    for ri, d, kind in sites:
+        ring = rings[ri]
+        length = ring.length
         p = ring.interpolate(d)
         p0 = ring.interpolate((d - eps) % length)
         p1 = ring.interpolate((d + eps) % length)
@@ -2146,8 +2191,9 @@ def main():
         ribbed_geo[name] = ribbed
         rib_sites[name] = sites
         ring = geo[f"{name}_nom"].exterior
-        pair_pts_so_far += [(ring.interpolate(d).x, ring.interpolate(d).y)
-                            for d, kind in sites if kind == "pair"]
+        nom_g = geo[f"{name}_nom"]
+        pair_pts_so_far += [(site_point(nom_g, st).x, site_point(nom_g, st).y)
+                            for st in sites if st[2] == "pair"]
         mesh = solid_mesh(ribbed, terrain_piece, 0.0,
                           stamp=stamps.get(name), chamfer=CHAMFER_MM)
         path = OUT_DIR / f"{name}.stl"
@@ -2166,10 +2212,10 @@ def main():
         gmin, fmin, fmed, nfar = wall_gap_stats(
             piece, geo[f"{other_name}_nom"], upper_water)
         ring = geo[f"{name}_nom"].exterior
-        site_pts = [ring.interpolate(d) for d, _ in sites]
+        site_pts = [site_point(geo[f"{name}_nom"], st) for st in sites]
         site_str = ", ".join(
-            f"{kind}@({p.x:.1f},{p.y:.1f})"
-            for (d, kind), p in zip(sites, site_pts))
+            f"{st[2]}@({p.x:.1f},{p.y:.1f})"
+            for st, p in zip(sites, site_pts))
         print(f"    min width ~{mlw:.2f} mm; gap vs frame: global min "
               f"{gmin:.3f} mm, away from the {other_name} seam (n={nfar}) "
               f"min {fmin:.3f} median {fmed:.3f} mm (nominal "
@@ -2220,14 +2266,15 @@ def main():
     tj = triple_junction_mm(regw)
     mnom = geo["mountains_nom"].exterior
     # the rib close-up panel needs somewhere to look even with no ribs
-    rib_pt = (mnom.interpolate(rib_sites["mountains"][0][0])
+    rib_pt = (site_point(geo["mountains_nom"], rib_sites["mountains"][0])
               if rib_sites["mountains"] else Point(*tj))
     rib_pts = []
     for name in ("mountains", "valley"):
         ring = geo[f"{name}_nom"].exterior
-        for d, kind in rib_sites[name]:
-            p = ring.interpolate(d)
-            rib_pts.append({"name": name, "kind": kind, "x": p.x, "y": p.y})
+        for st in rib_sites[name]:
+            p = site_point(geo[f"{name}_nom"], st)
+            rib_pts.append({"name": name, "kind": st[2],
+                            "x": p.x, "y": p.y})
     # nominal vs AS-CUT: the piece is offset inward by its local
     # clearance on BOTH flanks of a thin neck, so the printed neck is
     # narrower than the nominal one -- that as-cut number is the
