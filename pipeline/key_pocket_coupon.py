@@ -43,16 +43,11 @@ POCKET_DEPTH_MM = KEY.get("pocket_depth_mm", 1.4)
 PLATE_THICKNESS_MM = POCKET_DEPTH_MM + 1.2   # + solid floor under it
 MARGIN_MM = 5.0
 
-# --- the knobs under test (ahl is deciding these from this print) ---
-INSERT_INTERFERENCE_MM = 0.05   # plug dia = pocket dia + this (press fit,
-                                # permanent, glue optional)
-INSERT_BUMP_MM = 0.4            # how far the plug's FLAT top stands
-                                # proud of the plate once seated -- you
-                                # feel the step at its rim. The plug is a
-                                # plain cylinder, NOT domed (ahl
-                                # 2026-09-15: a dome would just print as
-                                # ridge lines); this number is only how
-                                # far it sticks up.
+# The knobs this coupon exists to settle. They live in config [key]
+# (not here) so the coupon and the real P5 plugs cannot drift apart --
+# see the comment there.
+INSERT_INTERFERENCE_MM = KEY.get("plug_interference_mm", 0.05)
+INSERT_BUMP_MM = KEY.get("plug_proud_mm", 0.4)
 INSERT_D_MM = POCKET_D_MM + INSERT_INTERFERENCE_MM
 INSERT_HEIGHT_MM = POCKET_DEPTH_MM + INSERT_BUMP_MM
 
@@ -85,8 +80,8 @@ def main():
         mesh.export(path)
         print(f"-> {path}")
     print("press the plug into the coupon: too loose or too tight, tune "
-          "INSERT_INTERFERENCE_MM / INSERT_BUMP_MM here, then carry the "
-          "settled numbers into the real key's plugs.")
+          "[key].plug_interference_mm / plug_proud_mm in config.toml -- "
+          "that updates this coupon AND the real P5 plugs together.")
 
 
 if __name__ == "__main__":

@@ -80,7 +80,7 @@ out/p5/frame.3mf: $(PIPE)/p5_final.py $(PIPE)/p4_bay_coupon.py \
 		data/p2_land.npz assets/compass.svg config.toml
 	$(UV) $(PIPE)/p5_final.py
 # ride-alongs of the p5 stage (see the make 3.81 note at the top)
-out/p5/key.stl out/p5/key_insert.pdf: out/p5/frame.3mf
+out/p5/key.stl out/p5/key_plug.stl out/p5/key_insert.pdf: out/p5/frame.3mf
 	@touch $@
 
 # ---- Rose-only test coupon: just the compass-rose corner (water disk +

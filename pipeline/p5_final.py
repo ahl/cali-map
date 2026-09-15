@@ -63,7 +63,7 @@ Machinery is imported from p4_bay_coupon (kept runnable itself): region
 cache, D13 scale, polygon extraction, solid meshing (incl. stamps +
 chamfer), poke-holes, 3MF writer, preview helpers.
 
-THE REGION KEY (D19, out/p5/key.stl + out/p5/key_insert.pdf): a plate
+THE REGION KEY (D19, out/p5/key.stl + key_plug.stl + key_insert.pdf): a plate
 that press-fits into its own rectangular recess in the frame over
 Nevada, listing the five regions with a colour-swatch plug beside each.
 Placement and size come from config [key]; the HEIGHT does not -- the
@@ -71,9 +71,13 @@ build walks the key's BOUNDARY and sets the top flush with the tallest
 terrain it meets there, so moving or resizing the key re-heights it
 automatically.  The bottom sits on the tray floor at the
 same z as every piece.  Permanent press fit: no ribs, no poke-hole.
+The swatch PLUG ships as a plain output too -- one flat-topped cylinder,
+printed five times in the five region colours; ahl lays the real print
+out by hand in Bambu Studio, so nothing here tries to pack it onto a
+plate or merge it into another part.
 
 Outputs: out/p5/frame.3mf, out/p5/{mountains,valley,desert}.stl,
-out/p5/key.stl, out/p5/key_insert.pdf,
+out/p5/key.stl, out/p5/key_plug.stl, out/p5/key_insert.pdf,
 out/p5_preview.png (assembled / exploded / bottom-with-stamps / rose).
 """
 
@@ -624,9 +628,30 @@ def main():
               f" x {KEY.get('label_recess_mm', 0.2):g} deep -> {kpath}")
         key_panel.OUT_DIR = OUT_DIR       # write the label next to key.stl
         key_panel.render_label(key_recess, key_rows)
-        print("    NOTE plug dimensions are NOT fixed yet (ahl 2026-09-15: "
-              "decide after test-fitting out/key_coupon/); "
-              "the pockets are cut, the plugs are a later step.")
+        # the swatch PLUG ships as a plain P5 output (ahl 2026-09-15:
+        # "it can just live with the other p5 output; I'll build out a
+        # bambu file to optimize printing everything by hand"). One
+        # file, printed five times in the five region colours -- the
+        # geometry is identical, only the filament differs, so there is
+        # nothing to gain from five copies of the same cylinder.
+        plug_d = KEY.get("pocket_d_mm", 5.0) + \
+            KEY.get("plug_interference_mm", 0.05)
+        plug_h = KEY.get("pocket_depth_mm", 1.4) + \
+            KEY.get("plug_proud_mm", 0.4)
+        plug = key_panel.insert_mesh(plug_d, plug_h)
+        assert plug.is_watertight
+        ppath = OUT_DIR / "key_plug.stl"
+        plug.export(ppath)
+        ok &= p4.report_mesh("key plug", plug)
+        print(f"    swatch plug dia {plug_d:g} x {plug_h:g} mm, flat-topped "
+              f"({KEY.get('pocket_depth_mm', 1.4):g} seated + "
+              f"{KEY.get('plug_proud_mm', 0.4):g} proud) -> {ppath}\n"
+              "      print FIVE of it, one per region colour: Pacific "
+              "Ocean = water, Coastal = coast, then the mountains, "
+              "valley and desert piece colours.\n"
+              "      dimensions are still PROVISIONAL -- [key]."
+              "plug_interference_mm / plug_proud_mm, pending ahl's "
+              "out/key_coupon/ test fit.")
 
     print("\npiece-piece seam gaps (only nominally-adjacent pairs):")
     pnames = [n for n, _, _ in PIECES]

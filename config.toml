@@ -246,6 +246,19 @@ interference_mm = 0.05
 # was generated at; regenerate out/key_coupon/ before test-fitting.
 pocket_d_mm = 5.0
 pocket_depth_mm = 1.4
+# The PLUGS that press into those pockets. PROVISIONAL until ahl
+# test-fits out/key_coupon/{pocket_coupon,plug}.stl -- these are the
+# numbers that print is meant to settle. They live here, not in the
+# coupon script, so the coupon and the real P5 plugs can never drift
+# apart: one edit moves both.
+#   plug diameter = pocket_d_mm + plug_interference_mm  (press fit)
+#   plug height   = pocket_depth_mm + plug_proud_mm
+# The plug is a plain flat-topped CYLINDER, never domed -- a dome at
+# this size just prints as ridge lines (ahl 2026-09-15). plug_proud_mm
+# is only how far the flat top stands above the plate; you feel the
+# step at its rim.
+plug_interference_mm = 0.05
+plug_proud_mm = 0.4
 # Title + region text. Title cap matches the compass rose's N/E/S/W
 # letters ([compass].letter_cap_mm); it wraps over as many lines as the
 # text column needs ("California" / "Regions" at 66 mm wide).
