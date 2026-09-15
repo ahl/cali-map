@@ -79,6 +79,11 @@ TITLE_CAP_MM = 6.0         # ahl 2026-09-15: same size as the compass
                            # the text column needs.
 TITLE_GAP_MM = 4.0         # space between the title block and the list
 TITLE_LINE_FRAC = 1.35     # title line height / cap
+INSERT_BORDER_MM = 2.0     # blank margin inside the cut line on the
+                           # printed insert, so type is not flush to the
+                           # paper edge (ahl 2026-09-15)
+INSERT_BLEED_MM = 5.0      # extra paper OUTSIDE the cut line, to hold
+                           # while trimming
 
 
 # ---------------------------------------------------------------- layout
@@ -106,7 +111,7 @@ def _wrap(text, ff, cap_mm, max_w):
 
 def layout(plate_w, plate_h, pocket_d=None, title=TITLE,
            title_cap=TITLE_CAP_MM, title_gap=TITLE_GAP_MM,
-           label_cap=CAP_MM):
+           label_cap=CAP_MM, insert_border=INSERT_BORDER_MM):
     """Lay the key out inside a GIVEN plate rectangle (ahl 2026-09-15:
     the key's footprint comes from config [key], the contents fit it).
 
@@ -130,11 +135,16 @@ def layout(plate_w, plate_h, pocket_d=None, title=TITLE,
     recess = {"x0": MARGIN_MM, "y0": MARGIN_MM,
              "x1": plate_w - MARGIN_MM - pocket_d - TEXT_GAP_MM,
              "y1": plate_h - MARGIN_MM}
-    rec_w = recess["x1"] - recess["x0"]
-    rec_h = recess["y1"] - recess["y0"]
+    # the printed insert keeps a blank BORDER inside the cut line, so
+    # the lettering is not jammed against the paper edge (ahl
+    # 2026-09-15). That border comes out of the usable text area, so the
+    # type has to fit rec_w - 2*border, not rec_w.
+    rec_w = recess["x1"] - recess["x0"] - 2 * insert_border
+    rec_h = recess["y1"] - recess["y0"] - 2 * insert_border
     assert rec_w > 10.0, (f"key too narrow: text column only {rec_w:.1f} mm "
                           f"(plate {plate_w:.1f} - margins - {pocket_d:g} mm "
-                          "pocket column)")
+                          f"pocket column - {2 * insert_border:g} mm insert "
+                          "border)")
 
     title_lines, _ = _wrap(title, ff, title_cap, rec_w)
     line_h = title_cap * TITLE_LINE_FRAC
@@ -155,15 +165,18 @@ def layout(plate_w, plate_h, pocket_d=None, title=TITLE,
                             f"{label_cap:g} mm cap, text column is "
                             f"{rec_w:.1f} mm")
 
-    # title sits at the top of the recess, first line highest
+    # positions below are LOCAL to the recess (the frame render_label
+    # draws in), so the border offset is folded in here once
     recess["title_lines"] = title_lines
     recess["title_cap"] = title_cap
     recess["label_cap"] = label_cap
-    recess["title_y_local"] = [rec_h - (i + 0.5) * line_h
+    recess["border"] = insert_border
+    recess["text_x_local"] = insert_border
+    recess["title_y_local"] = [insert_border + rec_h - (i + 0.5) * line_h
                                for i in range(len(title_lines))]
 
     pocket_x = plate_w - MARGIN_MM - pocket_d / 2
-    rows_top = recess["y0"] + rows_h
+    rows_top = recess["y0"] + insert_border + rows_h
     rows = []
     for i, lab in enumerate(LABELS):
         cy = rows_top - (i + 0.5) * row_pitch
@@ -283,40 +296,62 @@ def insert_mesh(diameter, height, seg=48):
 
 
 # ------------------------------------------------------------- 2D label
-def render_label(recess, rows):
-    """The printed KEY INSERT: a PDF sized exactly to the label recess,
-    carrying the title and the region names at the row positions
-    layout() computed.  Print at 100% and drop it into the recess.
+def render_label(recess, rows, bleed=INSERT_BLEED_MM):
+    """The printed KEY INSERT.
+
+    The page is the recess plus `bleed` of spare paper on every side, so
+    there is something to hold while trimming, with a CUT LINE drawn at
+    the exact recess size -- cut on the line and the piece drops into the
+    recess.  Inside that, layout() has already reserved a blank border
+    (recess["border"]) so the lettering is not flush to the paper edge
+    (ahl 2026-09-15: "I don't like that the left edge is right up
+    against the lettering").
 
     2D-printed rather than moulded in plastic because FDM text at this
     size fights a 0.4 mm nozzle -- at 3.5 mm cap Georgia Bold crowded
-    even after narrowing the glyphs (ahl 2026-09-15)."""
+    even after narrowing the glyphs."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from matplotlib.patches import Rectangle
 
     w = recess["x1"] - recess["x0"]
     h = recess["y1"] - recess["y0"]
-    fig = plt.figure(figsize=(w / 25.4, h / 25.4), dpi=300)
+    pw, ph = w + 2 * bleed, h + 2 * bleed
+    fig = plt.figure(figsize=(pw / 25.4, ph / 25.4), dpi=300)
     ax = fig.add_axes([0, 0, 1, 1])
-    ax.set_xlim(0, w)
-    ax.set_ylim(0, h)
+    ax.set_xlim(0, pw)
+    ax.set_ylim(0, ph)
     ax.set_aspect("equal")
     ax.axis("off")
-    # matplotlib sizes text in POINTS by font size, not cap height;
-    # Georgia's cap is ~0.7 em, so pt = cap_mm / 0.7 / 25.4 * 72
+
+    # CUT LINE at the true recess size
+    ax.add_patch(Rectangle((bleed, bleed), w, h, fill=False,
+                           edgecolor="#9a9a9a", linewidth=0.4))
+    for x, y, dx, dy in ((bleed, bleed, -1, 0), (bleed, bleed, 0, -1),
+                         (bleed + w, bleed, 1, 0), (bleed + w, bleed, 0, -1),
+                         (bleed, bleed + h, -1, 0), (bleed, bleed + h, 0, 1),
+                         (bleed + w, bleed + h, 1, 0),
+                         (bleed + w, bleed + h, 0, 1)):
+        ax.plot([x, x + dx * bleed * 0.55], [y, y + dy * bleed * 0.55],
+                color="#9a9a9a", lw=0.4)
+
+    # matplotlib sizes text in POINTS by em, Georgia's cap is ~0.7 em
     pt = lambda cap_mm: cap_mm / 0.7 * 72.0 / 25.4
+    tx = bleed + recess.get("text_x_local", 0.0)
     for ln, y in zip(recess["title_lines"], recess["title_y_local"]):
-        ax.text(0.0, y, ln, fontfamily="Georgia", fontweight="bold",
+        ax.text(tx, bleed + y, ln, fontfamily="Georgia", fontweight="bold",
                 fontsize=pt(recess["title_cap"]), va="center", ha="left")
     for r in rows:
-        ax.text(0.0, r["text_y_local"], r["label"], fontfamily="Georgia",
-                fontweight="bold", fontsize=pt(recess["label_cap"]),
-                va="center", ha="left")
+        ax.text(tx, bleed + r["text_y_local"], r["label"],
+                fontfamily="Georgia", fontweight="bold",
+                fontsize=pt(recess["label_cap"]), va="center", ha="left")
     path = OUT_DIR / "key_insert.pdf"
     fig.savefig(path, facecolor="white")
     plt.close(fig)
-    print(f"-> {path} ({w:.1f} x {h:.1f} mm, print at 100%/actual size; "
-          f"title {'/'.join(recess['title_lines'])} at "
+    print(f"-> {path}: page {pw:.1f} x {ph:.1f} mm, CUT LINE at "
+          f"{w:.1f} x {h:.1f} mm (the recess), {recess.get('border', 0):g} mm "
+          f"blank border inside it; print at 100%/actual size\n"
+          f"      title {'/'.join(recess['title_lines'])} at "
           f"{recess['title_cap']:g} mm cap, labels at "
-          f"{recess['label_cap']:g} mm)")
+          f"{recess['label_cap']:g} mm")

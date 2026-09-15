@@ -594,7 +594,9 @@ def main():
             title=KEY.get("title", key_panel.TITLE),
             title_cap=KEY.get("title_cap_mm", key_panel.TITLE_CAP_MM),
             title_gap=KEY.get("title_gap_mm", key_panel.TITLE_GAP_MM),
-            label_cap=KEY.get("label_cap_mm", key_panel.CAP_MM))
+            label_cap=KEY.get("label_cap_mm", key_panel.CAP_MM),
+            insert_border=KEY.get("insert_border_mm",
+                                  key_panel.INSERT_BORDER_MM))
         recesses = [{"points": key_panel.circle_ring(
                         *r["pocket_c"], KEY.get("pocket_d_mm", 5.0) / 2),
                      "depth": KEY.get("pocket_depth_mm", 1.4)}
@@ -627,7 +629,9 @@ def main():
               f"{key_recess['x1'] - key_recess['x0']:.1f} x {key_recess['y1'] - key_recess['y0']:.1f}"
               f" x {KEY.get('label_recess_mm', 0.2):g} deep -> {kpath}")
         key_panel.OUT_DIR = OUT_DIR       # write the label next to key.stl
-        key_panel.render_label(key_recess, key_rows)
+        key_panel.render_label(key_recess, key_rows,
+                               bleed=KEY.get("insert_bleed_mm",
+                                             key_panel.INSERT_BLEED_MM))
         # the swatch PLUG ships as a plain P5 output (ahl 2026-09-15:
         # "it can just live with the other p5 output; I'll build out a
         # bambu file to optimize printing everything by hand"). One

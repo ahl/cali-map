@@ -222,7 +222,7 @@ center_mm = [168.0, 198.0]
 # "California" at the 6 mm title cap (44.6 mm), which sets the width;
 # a 2-line title + gap + five 5 mm-pocket rows sets the height. The
 # build asserts both, so a too-small key fails rather than crowds.
-width_mm = 66.0
+width_mm = 68.0
 height_mm = 66.0
 # NO height knob, by design: the build walks the key's BOUNDARY, takes
 # the tallest terrain it actually meets there, and sets the top flush
@@ -272,6 +272,13 @@ plug_proud_mm = 0.4
 title = "California Regions"
 title_cap_mm = 6.0
 title_gap_mm = 4.0
+# Printed-insert margins: blank border inside the cut line (so type is
+# not flush to the paper edge) and spare paper outside it to hold while
+# trimming. The border comes out of the usable text column, which is
+# why width_mm went 66 -> 68: "California" at the 6 mm title cap is
+# 44.6 mm and would not fit a bordered 48 mm column.
+insert_border_mm = 2.0
+insert_bleed_mm = 5.0
 label_cap_mm = 3.0
 # Shallow recess for the 2D-PRINTED label (see key_panel.py: FDM at this
 # text size fights the nozzle, so the labels are printed on paper/vinyl).
