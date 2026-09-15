@@ -654,11 +654,12 @@ def manual_rib_sites(nominal, other_nominal, points, label=""):
     """MANUAL rib placement (ahl 2026-09-15 -- replaces the automatic
     heuristic, which kept producing surprises; there are only ~4 ribs per
     piece and ahl has better judgement about the assembled object than
-    any straightness/spread proxy).  `points`: approximate (x, y) in
-    print mm, read off the preview -- each SNAPS to the nearest point on
-    `nominal`'s exterior, so eyeballed coordinates are fine.  Reports the
-    snap distance (a big one = a typo or a stale coordinate) and warns if
-    a site lands on a thin neck, but never overrides ahl's choice.
+    any straightness/spread proxy).  `points`: APPROXIMATE (x, y) in
+    print mm, marked on out/p4_rib_markup.png -- each SNAPS to the
+    nearest point on `nominal`'s exterior, so a rough dot near the
+    perimeter (either side of it) is all that's needed.  Reports the
+    snap distance and warns if a site lands on a thin neck, but never
+    overrides ahl's choice.
     Returns choose_rib_sites' (arc_length_d, kind) list."""
     ring = nominal.exterior
     has_pair = other_nominal is not None and not other_nominal.is_empty
@@ -672,7 +673,8 @@ def manual_rib_sites(nominal, other_nominal, points, label=""):
         kind = "pair" if (has_pair and ob.distance(p) < 0.02) else "frame"
         snap = want.distance(p)
         warn = ""
-        if snap > 2.0:
+        if snap > 10.0:      # marks are deliberately approximate; only a
+                             # really far one means a wrong coordinate
             warn += f"  [!] snapped {snap:.1f} mm -- check this coordinate"
         for nx, ny, w in necks:
             if np.hypot(p.x - nx, p.y - ny) < 5.0:
@@ -715,6 +717,8 @@ def add_crush_ribs(piece, nominal, other_nominal, n_ribs, radius_mm,
     of (arc_length_d, kind), for reporting/preview."""
     if interference_mm <= 0 or radius_mm <= 0 or n_ribs <= 0:
         return piece, []
+    if manual_points is not None and len(manual_points) == 0:
+        return piece, []          # explicit [] = NO ribs on this piece
     ring = nominal.exterior
     length = ring.length
     eps = min(0.3, length * 0.01)
@@ -1327,6 +1331,81 @@ def add_poly(ax, geom, color, ec="none", lw=0.0, alpha=1.0, z=1):
                                alpha=alpha, zorder=z))
 
 
+MARKUP_PX_PER_MM = 12.0   # out/p4_rib_markup.png resolution
+
+
+def render_rib_markup(geo):
+    """Clean single-panel canvas for ahl's rib MARKUP loop (2026-09-15):
+    the assembled pieces + frame with a labelled 10 mm grid and NO rib
+    markers, so he can drop a dot wherever he wants a rib and hand it
+    back.  Marks are approximate -- each one snaps to the nearest point
+    on that piece's perimeter (manual_rib_sites), so "near the edge" is
+    precise enough.
+
+    The mm <-> pixel mapping is EXACT and documented in the title, so a
+    mark can be inverted without guesswork: the axes fill the figure
+    edge-to-edge (no tight-bbox cropping) over x, y in
+    [-RIM_MM, WINDOW_MM + RIM_MM], at MARKUP_PX_PER_MM px/mm, y up.
+    So for a mark at pixel (px, py) in a W x H image:
+        x_mm = -RIM_MM + px / MARKUP_PX_PER_MM
+        y_mm = -RIM_MM + (H - py) / MARKUP_PX_PER_MM
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    lo, hi = -RIM_MM, WINDOW_MM + RIM_MM
+    span = hi - lo
+    size_in = span * MARKUP_PX_PER_MM / 100.0      # at dpi=100
+    fig = plt.figure(figsize=(size_in, size_in), dpi=100)
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(lo, hi)
+    ax.set_ylim(lo, hi)
+    ax.set_aspect("equal")
+    ax.set_facecolor("#ffffff")
+
+    add_poly(ax, geo["water_visible"], WATER_RGB)
+    add_poly(ax, geo["gray"], GRAY_RGB, z=2)
+    add_poly(ax, geo["coast_nom"], base.COLORS[base.COAST], z=2)
+    for name in ("mountains", "valley"):
+        rid = {v: k for k, v in REGION_NAME.items()}[name]
+        add_poly(ax, geo[f"{name}_piece"], base.COLORS[rid], z=3)
+        x, y = geo[f"{name}_nom"].exterior.xy
+        ax.plot(x, y, color="black", lw=1.0, zorder=4)
+
+    for v in np.arange(np.ceil(lo / 10) * 10, hi + 1e-9, 10):
+        ax.axvline(v, color="#4a4a4a", lw=0.5, alpha=0.45, zorder=5)
+        ax.axhline(v, color="#4a4a4a", lw=0.5, alpha=0.45, zorder=5)
+        ax.annotate(f"{v:g}", (v, lo + 0.6), fontsize=7, color="#222",
+                    ha="center", zorder=6)
+        ax.annotate(f"{v:g}", (lo + 0.6, v), fontsize=7, color="#222",
+                    va="center", zorder=6)
+    # one marker per physical neck: thin_spots reports each side of the
+    # same pinch separately, so cluster anything within 3 mm and keep
+    # the narrowest
+    necks = sorted(thin_spots(geo["mountains_nom"]), key=lambda t: t[2])
+    shown = []
+    for x, y, w in necks:
+        if any(np.hypot(x - sx, y - sy) < 3.0 for sx, sy, _ in shown):
+            continue
+        shown.append((x, y, w))
+        ax.plot(x, y, marker="x", color="#c81e1e", ms=10, mew=2.0, zorder=7)
+        ax.annotate(f"{w:.2f} mm neck", (x + 2.0, y), fontsize=8,
+                    color="#c81e1e", va="center", zorder=7,
+                    bbox=dict(boxstyle="round,pad=0.15", fc="white",
+                              ec="none", alpha=0.75))
+
+    path = OUT / "p4_rib_markup.png"
+    fig.savefig(path, dpi=100, facecolor="white")
+    plt.close(fig)
+    w_px = int(round(span * MARKUP_PX_PER_MM))
+    print(f"\nrib markup canvas -> {path}  ({w_px} x {w_px} px, "
+          f"{MARKUP_PX_PER_MM:g} px/mm, x/y from {lo:g} to {hi:g} mm; "
+          "10 mm grid)\n  mark where you want ribs (a dot near the "
+          "perimeter is enough -- it snaps), then hand the file back; "
+          "red x = thin neck, avoid")
+
+
 def render_preview(geo, s, tj, holes, stamps, ribbed, rib_pt, rose=None,
                    rose_c=None, rib_pts=None):
     import matplotlib
@@ -1930,9 +2009,13 @@ def main():
     for n in notes:
         print(f"  note: {n}")
 
+    render_rib_markup(geo)
+
     tj = triple_junction_mm(regw)
     mnom = geo["mountains_nom"].exterior
-    rib_pt = mnom.interpolate(rib_sites["mountains"][0][0])
+    # the rib close-up panel needs somewhere to look even with no ribs
+    rib_pt = (mnom.interpolate(rib_sites["mountains"][0][0])
+              if rib_sites["mountains"] else Point(*tj))
     rib_pts = []
     for name in ("mountains", "valley"):
         ring = geo[f"{name}_nom"].exterior

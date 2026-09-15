@@ -172,21 +172,29 @@ land_min_mm = 0.2             # min land height above datum (color opacity)
 # spread proxy captures -- and there are only ~4 ribs per piece. So:
 # hand-picked sites, listed here per build+piece.
 #
-#   - coordinates are approximate (x, y) in that build's PRINT mm, read
-#     straight off the preview: out/p4_preview.png / out/p5_preview.png,
-#     where every rib is already marked in red (triangle = piece-pair,
-#     dot = frame). Each point SNAPS to the nearest spot on that piece's
-#     nominal outline, so eyeballing is fine -- the build prints the snap
-#     distance, and flags anything over 2 mm as a likely typo.
+#   - coordinates are APPROXIMATE (x, y) in that build's PRINT mm. Mark
+#     them on out/p4_rib_markup.png -- a clean canvas with a labelled
+#     10 mm grid, no rib markers, and an exact px<->mm mapping printed
+#     by the build. A dot near the perimeter (either side) is enough:
+#     each point SNAPS to the nearest spot on that piece's nominal
+#     outline. The build prints every snap distance and flags >10 mm as
+#     a likely wrong coordinate.
 #   - the build also warns (but obeys) if a site lands within 5 mm of a
-#     thin neck.
-#   - DELETE a piece's list (or set it to []) to fall back to the
-#     automatic placer for that piece.
+#     thin neck (marked with a red x on the markup canvas).
+#   - DELETE a piece's key to fall back to the automatic placer for that
+#     piece; set it to [] for no ribs at all.
 #
-# Seeded 2026-09-15 with exactly what the automatic placer last chose,
-# so this switch changed no geometry -- edit from here.
-p4_mountains = [[90.5, 0.0], [56.0, 41.1], [22.8, 92.0], [52.4, 56.9]]
-p4_valley = [[85.4, 14.2], [52.0, 100.0], [89.0, 100.0], [100.0, 73.9]]
+# An EMPTY list means no ribs at all on that piece (vs. a DELETED key,
+# which falls back to the automatic placer).
+#
+# P4: cleared 2026-09-15 so out/p4_rib_markup.png renders with no rib
+# markers -- ahl is marking up that canvas by hand; his dots come back
+# here. The placer's last automatic picks, if ever wanted as a starting
+# point again, were:
+#   p4_mountains = [[90.5, 0.0], [56.0, 41.1], [22.8, 92.0], [52.4, 56.9]]
+#   p4_valley    = [[85.4, 14.2], [52.0, 100.0], [89.0, 100.0], [100.0, 73.9]]
+p4_mountains = []
+p4_valley = []
 p5_mountains = [[54.2, 122.6], [48.2, 240.3], [132.0, 111.2], [169.1, 10.4]]
 p5_valley = [[90.0, 98.1], [53.7, 169.2], [75.0, 165.1], [117.3, 89.6]]
 p5_desert = [[179.5, 27.9], [135.4, 76.4], [124.2, 142.4], [209.5, 62.4]]
