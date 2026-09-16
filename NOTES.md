@@ -89,9 +89,37 @@ the place to look.
       the boolean result.
   **`make edge_stamp_coupon`** -> out/edge_stamp/depth_ladder.stl: the
   text at 0.10/0.15/0.20/0.30 mm on a bar the same 3.0 mm height as the
-  real wall, notch marking the shallow end. Print it, pick the
-  shallowest still readable, set `[edge_stamp].depth_mm`. 0.2 is a
-  placeholder until then.
+  real wall. Text on BOTH faces, two rungs a side (ahl 2026-09-15), so
+  the bar is 66 x 8 x 3 mm / 1.9 g -- both faces are outer perimeters,
+  so the slicer treats them alike; the back text is mirrored. Each rung
+  is self-identifying: **n notches in the top edge above rung n**, inset
+  from its own face so front and back marks never mix. Notches are Z
+  cuts, so they stay crisp whatever the XY depths do, and no orientation
+  convention has to be remembered.
+      #1 0.10 front-left   #2 0.15 front-right
+      #3 0.20 back-left    #4 0.30 back-right
+  Print it in the WATER TEAL (the stamp's actual filament -- it spans
+  floor+water, and half of judging "barely visible" is colour and
+  finish) with the FRAME's profile, since Arachne is what may smooth a
+  shallow recess away. Teal is loaded for the frame anyway, so it costs
+  no swap. ahl names the rung he likes; `[edge_stamp].depth_mm` gets
+  that number and the frame reads the same knob. 0.2 is a placeholder
+  until then.
+  What it answers, in order of how much each would hurt to find on the
+  7-hour frame print:
+    1. IS 2.0 mm CAP LEGIBLE AT ALL -- and that is not a depth question.
+       At 0.2 mm layers a 2 mm letter is TEN layers, and every diagonal
+       is a staircase. If ten layers cannot render it, the knob is
+       `cap_mm` (the wall has room for ~2.4), and no depth fixes it.
+       All four rungs share the cap, so this comes out for free.
+    2. which depths survive the slicer (0.45 mm stroke, 0.2 mm deep,
+       ~0.42 mm perimeter).
+    3. which reads as "barely visible" to ahl -- not computable.
+  A coupon is mildly PESSIMISTIC: its layers are quick, so it cools less
+  between them than the 225 x 250 frame. If a depth reads here, it reads
+  there. Skipping the print is defensible -- the fallback is 0.3, the
+  rung most likely to survive any profile -- but that trades "barely
+  visible" for "safely visible" and takes (1) on faith.
 - The key is FINAL (ahl 2026-09-15 confirmed both: "the legend is in a
   good spot", "the size looks fine"): 68 x 66 mm over Nevada, top
   auto-scanned to sit flush with
