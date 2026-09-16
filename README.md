@@ -41,6 +41,29 @@ Also `out/p5_preview.png` (assembled / exploded / bottom / rose) and
 - `p0`/`p1`/`p2` are upstream data stages; `p15`/`p15b` are older
   single-piece experiments.
 
+## Print settings
+
+Short form; `NOTES.md` has the checklist and the reasoning.
+
+**Both** — 0.2 mm layers, first layer 0.2 mm (every z dimension in the
+model is a multiple of 0.2, so **no adaptive layers**). Elephant-foot
+compensation 0.15 mm. Seam aligned. Infill 20–25% grid/gyroid.
+
+| | frame (`frame.3mf`) | pieces (`*.stl`) |
+|---|---|---|
+| plate | its own — 4 filaments, 5 parts | separate, so they don't ride the colour changes |
+| wall generator | **Arachne** — the rose has 0.45–0.8 mm features | default |
+| ironing | **on, water part only.** Type "top layers"/"top surfaces", NOT "topmost" — that mode irons nothing here. 20% flow @ 20 mm/s | off |
+| top shell layers | default | **5–6** — sloped terrain shows infill through fewer |
+| brim | **3 mm** → 231.1 × 256.0 mm, exactly the bed edge. 4 mm overflows by 2 mm | none |
+| also | prime tower on, flush into objects' infill; raise the black→teal and black→blue flush volumes; move the object as a whole, never its parts | orientation as imported, terrain up; no supports |
+
+Frame filament slots: 1 CA-land blue, 2 water teal, 3 gray, 4 black —
+recheck after every re-import.
+
+Brown (mountains) and yellow (desert) are scarce: print those once, from
+validated parameters. Test in green or white — fit doesn't care.
+
 ## Markup loop
 
 Region boundaries, crush ribs and poke holes are all placed by hand:
