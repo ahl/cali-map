@@ -40,6 +40,14 @@ stopped being true when ahl's x/circle markup moved the second valley
 hole off the seam to (106.8, 89.3). Moving it took a cut out of the
 mountains piece, so mountains went 5 -> 4. The build's [poke] lines
 report what each hole actually serves; trust those, not this.)
+**Poke holes are cut into the FRAME FLOOR, not into the pieces**
+(`floor_poly.interiors`; the build says "floor: one body, N
+poke-holes") -- you push a piece up from underneath, and a hole through
+the terrain would be visually wrong. So "serves mountains" means the
+hole sits UNDER that piece; the count is service attribution, not
+geometry. Confirmed from the exported STLs: valley and desert are
+genus 0, and mountains' single ring is the valley seam, not a hole.
+Consequence: moving a poke hole NEVER changes a piece.
 VALLEY CARRIES NO RIBS ON PURPOSE — it touches no frame in P5 (nearest
 approach 1.7 mm) and every mountains/valley rib was put on the
 mountains side, which grips the joint either way since a rib bites the
