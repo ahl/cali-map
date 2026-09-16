@@ -66,9 +66,20 @@ the place to look.
   in a hole) snapped 17-24 mm away, and the automatic placer could
   never put a pair rib there at all. Sites are now
   `(ring_idx, arc_length, kind)`.
-- **Edge stamp (attribution + version), added 2026-09-15.** `AL&JL 2026
-  v1.0` DEBOSSED 0.2 mm into the frame's south outer wall, Tahoma Bold
-  at 2.0 mm cap, 23.0 x 2.1 mm. ahl wanted it "really subtle; like
+- **Edge stamp (attribution + version), added 2026-09-15, SETTLED by
+  print 2026-09-16.** `AL & JL 2026 v1.0` DEBOSSED **0.2 mm** into the
+  frame's south outer wall, Tahoma Bold at 2.0 mm cap, 24.6 x 2.1 mm.
+  Both numbers are now MEASURED off the depth ladder, not guessed:
+  ahl printed all four rungs and picked #3 ("the 3 dots looks good"),
+  which also answers the question the ladder existed for -- 2.0 mm cap
+  IS legible at 0.2 mm layers (ten layers a letter), so `cap_mm` does
+  not need to grow and 0.15/0.10 are not needed to stay subtle.
+  He also added SPACES around the ampersand: set tight as "AL&JL" the
+  ampersand's lower bowl crowded the J and the pair read muddy in
+  plastic. Note the 2 um glyph dilate below keeps touching letters
+  MANIFOLD -- it does nothing for legibility, and at a 0.45 mm stroke
+  there is no room for the eye to separate them. Kerning is a spacing
+  problem, not a geometry one. ahl wanted it "really subtle; like
   barely visible" -- it should read as a shadow line in raking light.
   Config `[edge_stamp]`. Points worth keeping:
     * RECESSED, not raised: at this size a proud feature is under one

@@ -111,7 +111,12 @@ stamps_enabled = false
 # same depth is reliable: the wall stays continuous and the slicer just
 # carves it.
 enabled = true
-text = "AL&JL 2026 v1.0"
+# SPACES around the "&" (ahl 2026-09-16, off the printed ladder): set
+# tight as "AL&JL" the ampersand's lower bowl crowded the J and the pair
+# read muddy in plastic. The 2 um glyph dilate this build applies keeps
+# touching letters MANIFOLD; it does nothing for legibility, and at a
+# 0.45 mm stroke there is no room for the eye to separate them.
+text = "AL & JL 2026 v1.0"
 # A simple sans, and it must be BOLD: at 2.0 mm cap the thinnest stroke
 # has to clear a 0.4 mm nozzle or the nozzle cannot enter the recess.
 # Measured on what is actually installed here:
@@ -127,9 +132,12 @@ text = "AL&JL 2026 v1.0"
 font = "Tahoma Bold"
 cap_mm = 2.0
 # Depth is an XY move (the wall is vertical and the frame prints flat),
-# so it can be far finer than the 0.4 mm stroke width. 0.3 = clearly
-# visible, 0.2 = subtle shadow line, 0.15 = very faint and may partly
-# fill in; below that it will likely vanish into extrusion variation.
+# so it can be far finer than the 0.4 mm stroke width.
+# MEASURED, not guessed (ahl 2026-09-16): the both-faces depth ladder
+# (`make edge_stamp_coupon`) printed 0.10/0.15/0.20/0.30 and he picked
+# rung 3 -- "the 3 dots looks good". That also settles the question the
+# ladder existed to answer: 2.0 mm cap IS legible at 0.2 mm layers (ten
+# layers a letter), so cap_mm does not need to grow.
 depth_mm = 0.2
 # Which outer edge, and how far along it from the left/bottom end. The
 # 0..base_mm band is floor + water around the WHOLE perimeter -- even
