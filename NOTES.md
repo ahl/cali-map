@@ -489,6 +489,12 @@ until its inputs are signed off. Every phase is a jj commit.
 
 ## Print settings checklist (check before EVERY print)
 
+This is what we believe is RIGHT. What was actually on the machine for
+a given print is recorded separately under "Settings AS USED" below --
+they have already diverged once (P5 mountains ran Classic walls and 10%
+infill), and the divergence is the interesting data, so do not quietly
+reconcile the two.
+
 ALL PARTS
 - [ ] Layer height 0.2 mm, first layer 0.2 mm (all model z-dims are
       0.2 multiples — NO adaptive layers)
@@ -791,6 +797,92 @@ FINAL 225 x 250 FRAME ONLY
   to ahl's actual rule — ribs matter most on big FLAT stretches, since
   a curvy stretch already self-interlocks — plus a floor of one pair
   rib, with `ribs_per_piece`/`min_rib_width_mm` applying only to it.
+
+## Settings AS USED (the record for a future print guide)
+
+ahl 2026-09-15: *"make sure you record the print settings; if it all
+goes well I'm going to want to document this for other people to
+print."* So this section is what was ACTUALLY on the machine, per part,
+kept separate from the checklist above -- the checklist is what we
+believe is right, this is what produced the object. Where the two
+disagree, say so; do not quietly reconcile them.
+
+### P5 mountains (2026-09-15, brown, possibly FINAL)
+
+Bambu Studio, stock profile, **one deliberate change: sparse infill
+10% GYROID**. Everything else default. Notably NOT set, all of which
+the checklist above asks for:
+
+| setting | checklist wants | this print |
+|---|---|---|
+| wall generator | Arachne | **Classic** (the Bambu default) |
+| top shell layers | 5-6 | default (~5) |
+| sparse infill | 20-25% | **10%** |
+| brim / mouse ears | (unspecified for pieces) | **none** |
+
+Three things that makes this print a TEST of, each of which closes an
+open item if it comes out clean:
+
+1. **Classic walls across the 0.88 mm Bakersfield neck** (and 1.04
+   Petaluma, 1.49 Carquinez). At the minimum itself Classic is fine --
+   two 0.42 mm perimeters back to back. The exposure is the TAPER on
+   either side, 0.88 -> 1.3 -> 1.8 mm, where Classic snaps to integer
+   wall counts and leaves gaps that Arachne would fill with variable
+   width. Those gaps land right next to the thinnest point, which is
+   where stress concentrates when the piece is lifted by a poke hole.
+   Arachne was scoped to the frame in the checklist (for the rose's
+   0.45-0.8 mm features); that scoping was too narrow -- the pieces'
+   necks are the other case for it.
+2. **10% gyroid under ~5 top shell layers** on the VISIBLE face. Fine
+   structurally (10 mm tall, mostly shell); the risk is pillowing or
+   infill show-through on the flatter stretches. Desert has more flat
+   area than mountains, so decide this before the desert piece.
+3. **Bare first layer at the tips.** No brim and no ears. Measured
+   footprint: 10,763 mm^2 of bed contact in ONE island, but erode it
+   2 mm and it splits into three -- real necks and points. Worst tips,
+   by material within a 4 mm radius (a straight edge is 50%, a 90-deg
+   corner 25%):
+       (180.9,  12.3) mm   13.6%   6.8 mm^2   <- worst
+       (176.4,  39.0) mm   21.1%
+       ( 46.0, 143.1) mm   22.2%
+       ( 23.2, 240.8) mm   24.4%
+       (159.8,   9.3) mm   25.7%
+   Mountains is the WORST CASE of the three pieces for this -- tallest
+   (10.3 mm), longest (231.6 mm), pointiest. Valley is 3.1 mm tall so
+   it has almost no warping leverage; desert is blunter (2A/P 21.7 vs
+   18.7). **If mountains comes off flat with nothing, valley and desert
+   need nothing and the mouse-ear item closes permanently.**
+
+A brim is the WRONG helper for these pieces regardless: the piece's
+outer perimeter IS the fit face, at 0.10 mm/side with ribs biting 0.05,
+and a brim welds to all 1,150 mm of it. Removal burr lands straight in
+that 0.10 mm. Mouse ears touch it at five spots you can see and clean
+deliberately. If ears are ever needed, the slicer route is uncertain
+(brim ears are an Orca feature; Bambu's brim menu is
+auto/outer/inner/both/none) -- the fallback is to build 0.2 mm discs
+into the model at the coordinates above, which is slicer-independent.
+
+**To inspect when it comes off the plate:** flex the Bakersfield neck;
+sit it on something flat and press each corner (lift reads as rock, not
+as a visible gap); look at the bottom face at the two SE tips for the
+glossy-then-matte patch that means a tip lifted and re-bonded -- that
+also means a thin first layer there, which is a FIT question at the
+seam, separate from the neck question. Dry-fit before calling it final.
+
+### Still to record
+
+One row per print, same shape. Frame, valley, desert, key, plugs.
+
+### The eventual print guide
+
+If this all works, the distributable is NOT a prose list of settings --
+it is the **saved Bambu Studio project**, exported after a successful
+print, which carries the profile verbatim so someone else opens it and
+everything is already set. This section is the provenance behind that
+file and the place to explain the non-obvious choices (why Arachne, why
+no brim on the pieces, why ironing is water-only). Ask ahl to save the
+project file at the point the print is judged good -- a reconstructed
+settings list is a guess; the project file is the artifact.
 
 ## Land/sea authority — the coast-printed-as-water bug (FIXED 2026-09-15)
 

@@ -61,6 +61,17 @@ compensation 0.15 mm. Seam aligned. Infill 20–25% grid/gyroid.
 Frame filament slots: 1 CA-land blue, 2 water teal, 3 gray, 4 black —
 recheck after every re-import.
 
+**Arachne is not frame-only.** The pieces have 0.88–1.5 mm necks
+(Bakersfield, Petaluma, Carquinez); Classic snaps to integer wall counts
+and leaves gaps in the taper either side of the minimum, right where the
+piece is weakest.
+
+Plugs ride along with a print that already has their filament — mountain
+with the mountains piece, valley with valley, desert with desert, ocean
+and coastal with the frame — so they never need a print of their own.
+Print a few spares: the fit band is 0.15 mm wide and the press fit is
+permanent.
+
 Brown (mountains) and yellow (desert) are scarce: print those once, from
 validated parameters. Test in green or white — fit doesn't care.
 
