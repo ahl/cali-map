@@ -53,6 +53,32 @@ the place to look.
   in a hole) snapped 17-24 mm away, and the automatic placer could
   never put a pair rib there at all. Sites are now
   `(ring_idx, arc_length, kind)`.
+- **Edge stamp (attribution + version), added 2026-09-15.** `AL&JL 2026
+  v1.0` DEBOSSED 0.2 mm into the frame's south outer wall, Tahoma Bold
+  at 2.0 mm cap, 23.0 x 2.1 mm. ahl wanted it "really subtle; like
+  barely visible" -- it should read as a shadow line in raking light.
+  Config `[edge_stamp]`. Points worth keeping:
+    * RECESSED, not raised: at this size a proud feature is under one
+      nozzle width (prints mushy or not at all) and would be the first
+      thing to chip on the outermost rim.
+    * the band spans the floor/water seam at 1.2 mm on purpose -- the
+      water body's exposed wall alone is only 1.85 mm, forcing a cap
+      whose strokes fall under the nozzle. BOTH bodies get the same
+      cut; same filament, so it reads as one surface.
+    * the font must be BOLD and the lookup SILENTLY falls back to Times
+      New Roman Bold for any name it cannot resolve (Helvetica, Futura,
+      DejaVu all quietly became a serif). The build now prints the font
+      FILE it actually used and flags a fallback. Installed and usable:
+      Tahoma Bold and Verdana Bold (0.45 mm stroke), Georgia Bold
+      (serif); Arial Bold and Trebuchet MS Bold are 0.35 mm, too thin.
+    * glyphs are dilated 2 um before extruding so touching letters
+      MERGE -- left touching they produce a non-manifold pinch edge in
+      the boolean result.
+  **`make edge_stamp_coupon`** -> out/edge_stamp/depth_ladder.stl: the
+  text at 0.10/0.15/0.20/0.30 mm on a bar the same 3.0 mm height as the
+  real wall, notch marking the shallow end. Print it, pick the
+  shallowest still readable, set `[edge_stamp].depth_mm`. 0.2 is a
+  placeholder until then.
 - The key is FINAL (ahl 2026-09-15 confirmed both: "the legend is in a
   good spot", "the size looks fine"): 68 x 66 mm over Nevada, top
   auto-scanned to sit flush with

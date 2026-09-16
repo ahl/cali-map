@@ -11,6 +11,7 @@
 #   "scikit-image",
 #   "triangle",
 #   "py-lib3mf",
+#   "manifold3d",
 # ]
 # ///
 """P5: the FULL final product — frame + three removable pieces.
@@ -88,6 +89,7 @@ import numpy as np
 import trimesh
 from scipy import ndimage
 from shapely.geometry import MultiPolygon, Point, box
+from shapely import affinity
 from shapely.ops import polylabel, unary_union
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -109,6 +111,88 @@ OUT_DIR = OUT / "p5"
 CFG = p4._CFG_ALL
 COMPASS = CFG.get("compass", {"enabled": False})
 KEY = CFG.get("key", {"enabled": False})
+EDGE_STAMP = CFG.get("edge_stamp", {"enabled": False})
+
+
+def edge_stamp_cuts(cfg, ew_mm, ns_mm, base_mm):
+    """Prisms to subtract from the frame's outer wall, spelling the
+    attribution + version as a shallow DEBOSS (ahl 2026-09-15, wanting
+    it "really subtle; like barely visible").
+
+    Recessed rather than proud: on a vertical wall at this cap height a
+    raised feature is under one nozzle width, so it prints mushy or not
+    at all, and it would be the first thing to chip on the outermost
+    rim.  A notch is reliable -- the wall stays continuous and the
+    slicer carves it -- and reads as a shadow line.
+
+    Geometry: the glyphs are laid out in a 2D (along-edge, height)
+    frame, then mapped onto the chosen wall so that the recess runs
+    INWARD.  The band deliberately spans the floor/water seam at
+    FLOOR_MM: the water body's exposed wall alone is only
+    base_mm - FLOOR_MM tall, which would force a cap so small the
+    strokes fall under the nozzle.  Both bodies get the same cut and
+    they share a filament, so it reads as one surface."""
+    txt = cfg.get("text", "")
+    cap = float(cfg.get("cap_mm", 2.0))
+    depth = float(cfg.get("depth_mm", 0.2))
+    edge = cfg.get("edge", "south")
+    off = float(cfg.get("offset_mm", 18.0))
+    if not txt or depth <= 0:
+        return [], None
+
+    # resolve the font EXPLICITLY: compass_art._font_file falls back to
+    # Times New Roman Bold for any name it cannot match, so an
+    # unavailable font would silently become a serif
+    want = cfg.get("font", "Tahoma Bold")
+    ff = compass_art._font_file(want)
+    got = Path(ff).stem
+    g = compass_art._letter_poly(txt, ff, cap, compass_art.CHORD_TOL_MM)
+    g = g.buffer(0.002)      # merge touching glyphs; see edge_stamp_coupon
+    stroke = compass_art.measure_min_stroke_vec(g)
+    x0, y0, x1, y1 = g.bounds
+    g = affinity.translate(g, -x0, -y0)          # origin at its corner
+    w, h = x1 - x0, y1 - y0
+    assert h <= base_mm - 0.6, (
+        f"edge stamp {h:.2f} mm tall does not fit the {base_mm:g} mm wall")
+    v0 = (base_mm - h) / 2.0                     # centre it in the wall
+    # extrude along +z, then map that axis to the inward normal. OVER is
+    # slack that must sit OUTSIDE the wall so the cut starts cleanly
+    # clear of the surface; the part INSIDE the material is exactly
+    # `depth`, so the prism runs -OVER .. +depth, not 0 .. depth+OVER.
+    OVER = 0.4
+    prisms = []
+    for part in getattr(g, "geoms", [g]):
+        m = trimesh.creation.extrude_polygon(part, depth + OVER,
+                                             engine="triangle")
+        prisms.append(m)
+    solid = trimesh.util.concatenate(prisms)
+    # local (u, v, t): u along the edge, v up the wall, t into the solid
+    T = np.array([[1, 0, 0, 0],
+                  [0, 0, 1, 0],
+                  [0, 1, 0, 0],
+                  [0, 0, 0, 1]], float)          # swap v <-> t
+    solid.apply_transform(T)
+    solid.apply_translation([0.0, -OVER, v0])    # OVER sits outside
+    if edge == "south":
+        solid.apply_translation([off, 0.0, 0.0])
+    elif edge == "north":
+        solid.apply_transform(trimesh.transformations.rotation_matrix(
+            np.pi, [0, 0, 1]))
+        solid.apply_translation([off + w, ns_mm, 0.0])
+    elif edge == "west":
+        solid.apply_transform(trimesh.transformations.rotation_matrix(
+            np.pi / 2, [0, 0, 1]))
+        solid.apply_translation([0.0, off, 0.0])
+    elif edge == "east":
+        solid.apply_transform(trimesh.transformations.rotation_matrix(
+            -np.pi / 2, [0, 0, 1]))
+        solid.apply_translation([ew_mm, off + w, 0.0])
+    else:
+        raise ValueError(f"edge_stamp.edge {edge!r} not one of "
+                         "south/north/east/west")
+    return [solid], {"text": txt, "cap": cap, "depth": depth, "edge": edge,
+                     "w": w, "h": h, "stroke": stroke, "v0": v0, "off": off,
+                     "font_want": want, "font_got": got}
 
 
 def key_rect():
@@ -463,6 +547,41 @@ def main():
     # kept as two 3MF parts (not concatenated) so Bambu Studio can iron
     # just the visible open-water top and skip the cavity floor under
     # the removable pieces -- see p4_bay_coupon.py for the rationale
+    # attribution/version deboss in the outer wall. It spans the
+    # floor/water seam, so BOTH bodies get the same cut; they share a
+    # filament, so it reads as one continuous surface.
+    if EDGE_STAMP.get("enabled", False):
+        cuts, info = edge_stamp_cuts(EDGE_STAMP, EW_MM, NS_MM, p4.BASE_MM)
+        if cuts:
+            # union first: touching glyphs would otherwise leave
+            # non-manifold edges in the result (see edge_stamp_coupon)
+            tool = trimesh.boolean.union(cuts) if len(cuts) > 1 else cuts[0]
+            v_before = m_floor.volume + m_upper.volume
+            m_floor = m_floor.difference(tool)
+            m_upper = m_upper.difference(tool)
+            removed = v_before - (m_floor.volume + m_upper.volume)
+            ok &= m_floor.is_watertight and m_upper.is_watertight
+            print(f"\nedge stamp: {info['text']!r} debossed "
+                  f"{info['depth']:g} mm into the {info['edge']} wall at "
+                  f"{info['off']:g} mm\n"
+                  f"  {info['w']:.1f} x {info['h']:.1f} mm, cap "
+                  f"{info['cap']:g}, thinnest stroke {info['stroke']:.2f} mm "
+                  f"(needs >= 0.40 for a 0.4 mm nozzle)\n"
+                  f"  font {info['font_want']!r} -> {info['font_got']!r}"
+                  + ("" if info['font_got'].lower().startswith(
+                        info['font_want'].split()[0].lower())
+                     else "   [!] NOT the font requested -- the lookup "
+                          "fell back silently")
+                  + "\n"
+                  f"  sits z {info['v0']:.2f}..{info['v0'] + info['h']:.2f} "
+                  f"of the {p4.BASE_MM:g} mm wall, crossing the floor/water "
+                  f"seam at {p4.FLOOR_MM:g}\n"
+                  f"  removed {removed:.3f} mm^3; floor watertight "
+                  f"{m_floor.is_watertight}, water {m_upper.is_watertight}")
+            assert info["stroke"] >= 0.40 - 1e-6, (
+                f"edge stamp stroke {info['stroke']:.2f} mm is under a "
+                "0.4 mm nozzle -- raise cap_mm or use a bolder font")
+
     ok &= p4.report_mesh("floor", m_floor)
     ok &= p4.report_mesh("water", m_upper)
     fs = stamps.get("frame")

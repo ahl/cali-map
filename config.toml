@@ -99,6 +99,45 @@ build_tag = "T3"
 # plain bottoms until the stamp rendering is revisited.
 stamps_enabled = false
 
+[edge_stamp]
+# Attribution + version, DEBOSSED into the frame's outer side wall
+# (ahl 2026-09-15). Deliberately subtle -- "really subtle; like barely
+# visible": it should read as a shadow line in raking light, not as a
+# label.
+#
+# RECESSED, not raised. On a vertical wall at this size a proud feature
+# would be under one nozzle width (so it prints mushy or not at all) and
+# would be the first thing to chip on the outermost rim. A notch of the
+# same depth is reliable: the wall stays continuous and the slicer just
+# carves it.
+enabled = true
+text = "AL&JL 2026 v1.0"
+# A simple sans, and it must be BOLD: at 2.0 mm cap the thinnest stroke
+# has to clear a 0.4 mm nozzle or the nozzle cannot enter the recess.
+# Measured on what is actually installed here:
+#     Tahoma Bold        0.45 mm  23.0 mm wide   <- chosen, most compact
+#     Verdana Bold       0.45 mm  25.8 mm
+#     Georgia Bold       0.45 mm  25.1 mm  (serif)
+#     Trebuchet MS Bold  0.35 mm  -- too thin
+#     Arial Bold         0.35 mm  -- too thin
+# WARNING: the font lookup SILENTLY falls back to Times New Roman Bold
+# for any name it cannot resolve, so "Helvetica"/"Futura"/"DejaVu Sans"
+# all quietly become a serif. The build now prints the font FILE it
+# actually used -- check it after changing this.
+font = "Tahoma Bold"
+cap_mm = 2.0
+# Depth is an XY move (the wall is vertical and the frame prints flat),
+# so it can be far finer than the 0.4 mm stroke width. 0.3 = clearly
+# visible, 0.2 = subtle shadow line, 0.15 = very faint and may partly
+# fill in; below that it will likely vanish into extrusion variation.
+depth_mm = 0.2
+# Which outer edge, and how far along it from the left/bottom end. The
+# 0..base_mm band is floor + water around the WHOLE perimeter -- even
+# where land meets the edge, since terrain sits above the datum -- so
+# any edge works.
+edge = "south"
+offset_mm = 18.0
+
 [print]
 # Physical print parameters — shared by the P4 coupon AND the P5 final
 # build, so coupon-validated values transfer 1:1.

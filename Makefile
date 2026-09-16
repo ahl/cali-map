@@ -16,7 +16,7 @@ OVERRIDES := $(wildcard overrides/*.geojson)
 COMMON   := config.toml $(OVERRIDES) $(PIPE)/p1_regions.py
 DEM      := data/dem_ca_albers_250m.npy
 
-.PHONY: all p0 p1 p2 p2layout p15 p15b p4 p5 rose_coupon
+.PHONY: all p0 p1 p2 p2layout p15 p15b p4 p5 rose_coupon edge_stamp_coupon
 all: p1 p2 p2layout p15 p15b p4 p5
 
 # ---- P0: statewide 250 m heightfield (slow; rebuilds only if p0 changes)
@@ -82,6 +82,13 @@ out/p5/frame.3mf: $(PIPE)/p5_final.py $(PIPE)/p4_bay_coupon.py \
 # ride-alongs of the p5 stage (see the make 3.81 note at the top)
 out/p5/key.stl out/p5/key_plug.stl out/p5/key_insert.pdf: out/p5/frame.3mf
 	@touch $@
+
+# ---- Edge-stamp depth ladder: the attribution text at several depths,
+# ---- on a bar the same height as the frame's outer wall.
+edge_stamp_coupon: out/edge_stamp/depth_ladder.stl
+out/edge_stamp/depth_ladder.stl: $(PIPE)/edge_stamp_coupon.py \
+		$(PIPE)/compass_art.py $(PIPE)/p4_bay_coupon.py config.toml
+	$(UV) $(PIPE)/edge_stamp_coupon.py
 
 # ---- Rose-only test coupon: just the compass-rose corner (water disk +
 # ---- raised ink), to test-print a rose design tweak without the whole
