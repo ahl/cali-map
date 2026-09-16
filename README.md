@@ -92,6 +92,49 @@ are drawn colour-free, so any saturated colour on the page is a mark.
   0.20 mm, crush ribs biting 0.05 mm into the mating face.
 - `make -n` clean and every body watertight is the bar for "done".
 
+## Versioning
+
+**v1.0 is the object stamped `AL&JL 2026 v1.0`** on the frame's south
+wall. Nothing else here is a product version: `[output].build_tag` (T3)
+tracks the *fit* generation — clearances and ribs — and P4/P5/P6 are
+pipeline stages. Tag the commit that produced a print you keep, so the
+number on the edge resolves to an exact config and pipeline.
+
+## Future work
+
+Nothing below is designed or scheduled; NOTES has the detail and the
+reasoning for each. Split by whether it changes how pieces are *held*.
+
+**v2 — same mechanism**
+
+- **Waterways** (D9) — rivers on the terrain. Data already downloaded
+  (`data/p2_waterways.geojson`); baseline is none.
+- **Full-depth bodies** — land colour down to the floor, gray under the
+  removable pieces. Fixes the edge cross-section and the teal cavity
+  floors. Decide after judging translucency in a real print.
+- **Thin necks** (D11) — 0.88 mm at Bakersfield, 1.04 Petaluma, 1.49
+  Carquinez. Located and measured, never reshaped; T3 addressed fit with
+  tolerance and rib placement instead, and it worked.
+- **Vertical printing / adaptive layers** — 0.2 mm layers quantise
+  terrain at ~98 m. Vertical gets far better relief at the cost of
+  supports and inter-layer adhesion on the necks above.
+- **Piece labels** — bottom version stamps exist but are disabled (bad
+  rendering, 2026-09-14). The edge stamp solved small-text rendering, so
+  this is a small revisit. Without it, pieces from different generations
+  are indistinguishable by anything but feel.
+- **Region boundaries** — e.g. coast↔mountains near SF Bay. Not wrong,
+  just arguable; `pipeline/region_markup.py` makes it a surgical edit.
+- **US–Mexico line** — uses the NE polyline, ~800 m from Census truth.
+  Accepted; switching is a small `p2_land.py` change.
+
+**v3 — magnets**
+
+Replaces friction with magnetic retention, which **decouples retention
+from clearance**. Ribs, the 0.10/0.20 split, the symmetric pair rule and
+the poke holes all exist only because a piece must be tight enough to
+hold and loose enough to insert at once. Invalidates most of the fit
+work, which is why it is its own version rather than an increment.
+
 ## See also
 
 `NOTES.md` — design log: decisions and why, print-session findings,
