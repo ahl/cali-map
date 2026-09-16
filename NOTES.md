@@ -33,8 +33,13 @@ visible water top only), mountains/valley/desert.stl, key.stl,
 key_plug.stl, key_insert.pdf, p5_preview.png, p5_rib_markup.png.
 
 **Hand placement is done for P5** (ahl's markup, extracted 2026-09-15):
-ribs mountains 11 / valley 0 / desert 4; poke holes mountains 5 /
-valley 2 / desert 3, one of them a mountains+valley seam hole.
+ribs mountains 11 / valley 0 / desert 4; poke holes mountains 4 /
+valley 2 / desert 3, each serving exactly ONE piece. (This USED to read
+"mountains 5 ... one of them a mountains+valley seam hole" -- that
+stopped being true when ahl's x/circle markup moved the second valley
+hole off the seam to (106.8, 89.3). Moving it took a cut out of the
+mountains piece, so mountains went 5 -> 4. The build's [poke] lines
+report what each hole actually serves; trust those, not this.)
 VALLEY CARRIES NO RIBS ON PURPOSE — it touches no frame in P5 (nearest
 approach 1.7 mm) and every mountains/valley rib was put on the
 mountains side, which grips the joint either way since a rib bites the
