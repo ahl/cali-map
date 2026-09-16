@@ -53,7 +53,9 @@ the place to look.
   in a hole) snapped 17-24 mm away, and the automatic placer could
   never put a pair rib there at all. Sites are now
   `(ring_idx, arc_length, kind)`.
-- The key: 68 x 66 mm over Nevada, top auto-scanned to sit flush with
+- The key is FINAL (ahl 2026-09-15 confirmed both: "the legend is in a
+  good spot", "the size looks fine"): 68 x 66 mm over Nevada, top
+  auto-scanned to sit flush with
   the terrain on its own boundary, permanent press fit, 5 mm swatch
   pockets each with a 2.5 mm poke hole, plug 4.90 mm (MEASURED off a
   fit ladder), 2D-printed insert with cut line and border.

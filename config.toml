@@ -262,10 +262,15 @@ enabled = true
 # north-central Nevada, 0% California, 0% water, 14.3 mm clear of the CA
 # border, 23+ mm from the print edges.
 center_mm = [168.0, 198.0]
-# Sized 2026-09-15 for the title layout: the text column must fit
-# "California" at the 6 mm title cap (44.6 mm), which sets the width;
-# a 2-line title + gap + five 5 mm-pocket rows sets the height. The
-# build asserts both, so a too-small key fails rather than crowds.
+# CONFIRMED by ahl 2026-09-15 ("the size looks fine"), along with the
+# centre above -- the key is FINAL.
+# Sized for the title layout: the text column must fit "California" at
+# the 6 mm title cap (44.6 mm), which sets the width; a 2-line title +
+# gap + five 5 mm-pocket rows sets the height. The build asserts both,
+# so a too-small key fails rather than crowds. If the width ever needs
+# to come down, the only lever is the title cap (6.0 -> 66.6 mm min,
+# 5.0 -> 59.2, 4.5 -> 55.5); height barely moves, being set by the
+# pocket rows.
 width_mm = 68.0
 height_mm = 66.0
 # NO height knob, by design: the build walks the key's BOUNDARY, takes
