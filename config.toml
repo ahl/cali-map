@@ -253,7 +253,10 @@ p5_desert = [[153.6, 97.8], [195.7, 61.9], [194.9, 26.1]]
 # not configured at all, it is measured from the terrain (see below).
 enabled = true
 # Centre in P5 print mm (x east, y north; frame is 225.1 x 250.0).
-# Picked 2026-09-15 by scanning the frame for the largest clear run of
+# CONFIRMED by ahl 2026-09-15: "the legend is in a good spot". It also
+# sits diagonally opposite the compass rose at (32, 30), which is the
+# conventional rose-one-corner / legend-the-other balance.
+# Picked by scanning the frame for the largest clear run of
 # gray non-CA land: the open block is 106.5 x 95.5 mm at x[114.5, 221]
 # y[150.5, 246], and this sits in it at lon/lat (-116.2, 40.3) --
 # north-central Nevada, 0% California, 0% water, 14.3 mm clear of the CA
