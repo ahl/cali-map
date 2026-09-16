@@ -375,7 +375,15 @@ plug_poke_d_mm = 2.5
 # deformed when forced -- the pocket prints undersize, so the usable
 # range sits below nominal.
 plug_d_mm = 4.90
-plug_proud_mm = 0.4
+# FLUSH (ahl 2026-09-16). Was 0.4 -- his original ask was a "satisfying
+# bump" you could feel. Changed after handling the printed parts. Flush
+# is self-stopping, which is why it works without a bump: the plug is
+# exactly pocket_depth_mm tall, so it bottoms out on the pocket floor
+# (on the 4.9 -> 2.5 mm annulus around the poke hole) and CANNOT go
+# under-flush. Nothing to set by feel and nothing proud to snag.
+# Retrieval is unaffected -- that is what the 2.5 mm poke hole under
+# each pocket is for.
+plug_proud_mm = 0.0
 # Title + region text. Title cap matches the compass rose's N/E/S/W
 # letters ([compass].letter_cap_mm); it wraps over as many lines as the
 # text column needs ("California" / "Regions" at 66 mm wide).

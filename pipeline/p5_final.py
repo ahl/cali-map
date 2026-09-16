@@ -793,15 +793,21 @@ def main():
         ppath = OUT_DIR / "key_plug.stl"
         plug.export(ppath)
         ok &= p4.report_mesh("key plug", plug)
+        pr = KEY.get("plug_proud_mm", 0.0)
         print(f"    swatch plug dia {plug_d:g} x {plug_h:g} mm, flat-topped "
-              f"({KEY.get('pocket_depth_mm', 1.4):g} seated + "
-              f"{KEY.get('plug_proud_mm', 0.4):g} proud) -> {ppath}\n"
+              f"({KEY.get('pocket_depth_mm', 1.4):g} seated + {pr:g} proud)"
+              f" -> {ppath}\n"
               "      print FIVE of it, one per region colour: Pacific "
               "Ocean = water, Coastal = coast, then the mountains, "
               "valley and desert piece colours.\n"
               "      diameter MEASURED from the out/key_coupon/ fit "
-              "ladder (working band 4.85-4.95; this is its centre). "
-              "plug_proud_mm is still by eye.")
+              "ladder (working band 4.85-4.95; this is its centre).\n"
+              + ("      FLUSH, and self-stopping: the plug is exactly "
+                 "pocket_depth_mm tall, so it bottoms out on the pocket "
+                 "floor and cannot go under-flush.\n"
+                 if pr == 0 else
+                 f"      sits {pr:g} mm PROUD -- seating depth is set by "
+                 "feel, so press until the bump is even across all five.\n"))
 
     print("\npiece-piece seam gaps (only nominally-adjacent pairs):")
     pnames = [n for n, _, _ in PIECES]

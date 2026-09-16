@@ -165,8 +165,6 @@ the place to look.
 - Piece shapes shifted slightly since ahl printed T3 (the land fix).
   The fit NUMBERS still transfer — they are offsets applied to whatever
   shape results — but the printed coupon is no longer byte-identical.
-- `plug_proud_mm` (0.4) is still an eyeball value; the plug DIAMETER is
-  measured.
 - The key insert has not been printed on paper yet — border and cut
   line are untested in the hand.
 
@@ -921,9 +919,25 @@ glossy-then-matte patch that means a tip lifted and re-bonded -- that
 also means a thin first layer there, which is a FIT question at the
 seam, separate from the neck question. Dry-fit before calling it final.
 
+### P5 mountains + valley (2026-09-16): FIT CONFIRMED
+
+ahl, having printed both: *"I printed the mountains and the valley and
+they're fitting well enough."* This is the T2 failure case re-run at P5
+scale -- T2 died on mountains + valley being too tight TOGETHER -- so
+the T3 scheme (0.10 piece<->frame, 0.20 piece<->piece symmetric, ribs
+specified as overlap with the mating face) now transfers from the P4
+coupon to full size for that pair. Still untested: anything involving
+the DESERT, the three-piece wedge, and the pieces against the real
+frame, which does not exist yet.
+
+Printed with the settings recorded above -- Classic walls and 10%
+gyroid -- so those did not break the 0.88 mm Bakersfield neck badly
+enough to matter for fit. Not the same as saying they are right; the
+neck's strength in the hand is a separate judgement.
+
 ### Still to record
 
-One row per print, same shape. Frame, valley, desert, key, plugs.
+One row per print, same shape. Frame, desert, key, plugs.
 
 ### The eventual print guide
 
