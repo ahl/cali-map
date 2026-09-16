@@ -998,6 +998,47 @@ for layout reasons the plug value cannot silently orphan.
 
 ## Observation log (noted, NOT to be acted on unless ahl says so)
 
+**MAGNETS -- a v3 idea (ahl 2026-09-15: "maybe v3 we incorporate
+magnets; it felt like too much for this time through").** Deliberately
+NOT in v1. Recorded now because the constraints are cheapest to capture
+while the geometry is fresh.
+
+Why it was right to skip: magnets would have meant solving retention AND
+the fit scheme in the same pass, with no way to tell which one was wrong
+when a piece failed to seat. T1->T3 took three coupon prints to settle
+fit alone.
+
+What magnets would actually buy, and it is not "a bit more grip": they
+DECOUPLE RETENTION FROM CLEARANCE. Every hard problem in this project --
+crush ribs, the 0.10/0.20 split, the symmetric pair rule, the
+overlap-with-the-mating-face rib spec, ribs as a wearing consumable --
+exists only because retention is mechanical, so the piece has to be
+simultaneously tight enough to hold and loose enough to insert. With
+magnets doing retention you could open the clearance to ~0.3 mm, drop
+ribs entirely, and have pieces fall in and snap. That is the design
+argument for v3, not the novelty.
+
+Constraints already known, from the CURRENT geometry:
+  - the VALLEY piece is only 3.1 mm tall overall. That is the binding
+    dimension for a piece-side pocket: a 2 mm-thick magnet leaves ~1 mm
+    of floor, and the floor is what the magnet pulls against.
+  - the frame's cavity floor is 1.2 mm thick (base 3.0, floor 1.2), so a
+    frame-side magnet has nowhere to hide without thickening the floor
+    locally -- which shows on the BOTTOM of the map unless the tray
+    floor grows.
+  - likely cheapest arrangement: magnet in the PIECE, steel disc (or a
+    single steel sheet under the whole tray) in the frame. Avoids
+    polarity entirely, which matters because a mis-polarised glued-in
+    magnet is unrecoverable.
+  - insertion means a slicer PAUSE at a known layer, so the build would
+    need to emit the pause height along with the pocket -- a new kind of
+    output this pipeline does not produce today.
+  - poke holes (D18) could then go away, or stay as a convenience; the
+    18 mm holes exist to break a friction fit.
+
+None of this is designed. It is the set of things a v3 pass should not
+have to rediscover.
+
 - **PLA translucency at thin land (ahl 2026-09-14):** near-datum coastal
   land sits ~1 layer (LAND_MIN_MM = 0.2) above the water body; PLA is
   slightly translucent, so the water color may ghost through. OK for the
