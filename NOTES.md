@@ -181,10 +181,10 @@ the place to look.
   lands under one of those ejects a PLUG instead of the key. It has to
   sit clear of all five. The machinery is the same `floor_poly.interiors`
   the pieces use.
-  TIMING, for whoever picks this up: the key recess lives in the FRAME.
-  While the frame is unprinted this is a small change; once it is
-  printed it costs a frame reprint, which is the most expensive print in
-  the project.
+  TIMING: the key recess lives in the FRAME, which PRINTED 2026-09-16
+  without the hole. So this is now firmly v2 -- adding it costs a frame
+  reprint, the most expensive print in the project. Decided by events,
+  which is the normal way a window like this closes.
 - D11 per-scale min-width pass NEVER RAN — and the necks are now
   LOCATED and measured, from the exported STLs, on the P5 pieces:
       mountains 0.88 mm  Bakersfield, valley's south tip (-119.49, 35.21)
@@ -951,9 +951,35 @@ gyroid -- so those did not break the 0.88 mm Bakersfield neck badly
 enough to matter for fit. Not the same as saying they are right; the
 neck's strength in the hand is a separate judgement.
 
+### P5 FRAME (2026-09-16): PRINTED, and it works
+
+ahl: *"the mountains and valley and frame all printed and they're
+great."* This retires the single largest risk in the project -- the
+225 x 250 mm four-colour frame had never been printed at any scale, and
+everything validated before it came from the P4 coupon.
+
+What that one sentence settles, all of which was open an hour ago:
+  - the 3 mm brim at EXACTLY 256.0 mm did not clip the bed
+  - a 225 x 250 footprint adheres and does not warp off
+  - four-filament seams print acceptably at this size
+  - the key recess prints
+  - the per-part water-only ironing works on the real frame, not just
+    the rose coupon (it had never been tried on a part with two
+    top-facing regions at different Z)
+  - the cavities print close enough to nominal that pieces fitted to
+    them SEAT -- the clearance scheme puts all tolerance in the piece
+    and assumes a nominal cavity, and that assumption had never been
+    tested at ten times the coupon's span
+  - the edge stamp at 0.2 mm survived Arachne on a real wall
+
+Worth capturing while the object is in hand, because a print guide needs
+it and memory fades: brim behaviour at the bed edge, how the stamp reads
+in raking light, ironing time, whether the key recess needed any
+cleanup, and total print time.
+
 ### Still to record
 
-One row per print, same shape. Frame, desert, key, plugs.
+One row per print, same shape. Desert, key, plugs.
 
 ### The eventual print guide
 
