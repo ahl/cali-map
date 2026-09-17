@@ -122,6 +122,11 @@ reasoning for each. Split by whether it changes how pieces are *held*.
   rendering, 2026-09-14). The edge stamp solved small-text rendering, so
   this is a small revisit. Without it, pieces from different generations
   are indistinguishable by anything but feel.
+- **Poke hole under the key** — the three pieces each get 18 mm holes
+  through the frame floor; the key got none, so it can only come out by
+  prying. Wanted for servicing the paper insert. Must miss the five
+  2.5 mm pocket holes in the key plate, or poking ejects a plug instead
+  of the key.
 - **Region boundaries** — e.g. coast↔mountains near SF Bay. Not wrong,
   just arguable; `pipeline/region_markup.py` makes it a surgical edit.
 - **US–Mexico line** — uses the NE polyline, ~800 m from Census truth.

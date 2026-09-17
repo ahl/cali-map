@@ -169,6 +169,22 @@ the place to look.
   line are untested in the hand.
 
 **Open items parked deliberately:**
+- **NO POKE HOLE UNDER THE KEY (ahl 2026-09-16, deferred to v2).** Each
+  of the three pieces gets 18 mm holes through the frame FLOOR; the key
+  got none -- the build says so every run ("press fit: ... no ribs, no
+  poke-hole"), and nobody read it as a gap until the parts were in hand.
+  Consequence: the key comes out only by prying, against the terrain and
+  the recess edge. The case for having one is servicing the PAPER
+  INSERT, which is the one consumable in the whole object.
+  Design constraint when it is built: the key plate already has five
+  2.5 mm poke holes through its own pocket floors, so a frame hole that
+  lands under one of those ejects a PLUG instead of the key. It has to
+  sit clear of all five. The machinery is the same `floor_poly.interiors`
+  the pieces use.
+  TIMING, for whoever picks this up: the key recess lives in the FRAME.
+  While the frame is unprinted this is a small change; once it is
+  printed it costs a frame reprint, which is the most expensive print in
+  the project.
 - D11 per-scale min-width pass NEVER RAN — and the necks are now
   LOCATED and measured, from the exported STLs, on the P5 pieces:
       mountains 0.88 mm  Bakersfield, valley's south tip (-119.49, 35.21)
