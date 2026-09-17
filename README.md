@@ -94,7 +94,7 @@ are drawn colour-free, so any saturated colour on the page is a mark.
 
 ## Versioning
 
-**v1.0 is the object stamped `AL&JL 2026 v1.0`** on the frame's south
+**v1.0 is the object stamped `AL & JL 2026 v1.0`** on the frame's south
 wall. Nothing else here is a product version: `[output].build_tag` (T3)
 tracks the *fit* generation — clearances and ribs — and P4/P5/P6 are
 pipeline stages. Tag the commit that produced a print you keep, so the
