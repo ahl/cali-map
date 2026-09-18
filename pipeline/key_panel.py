@@ -12,8 +12,8 @@ callers share:
   key_pocket_coupon.py  build_plate(), circle_ring(), insert_mesh()
                         -> a one-pocket test coupon + its plug
 
-The plate carries five rows in ahl's order (Pacific Ocean, Coastal,
-Mountain, Valley, Desert), each with
+The plate carries five rows in ahl's order (mountains, coast, valley,
+desert, water), each with
 
   - a BLIND circular pocket (recessed into the TOP face only, solid
     floor underneath -- ahl's choice over a through-hole) sized for a
@@ -56,7 +56,14 @@ import version_stamp as vstamp
 
 OUT_DIR = p4c.ROOT / "out" / "key_panel"   # overridden by each caller
 
-LABELS = ["Pacific Ocean", "Coastal", "Mountain", "Valley", "Desert"]
+# ahl 2026-09-16. Lower case, and in HIS order. These deliberately match
+# the vocabulary the rest of the build uses for bodies and pieces
+# (mountains / coast / valley / desert / water), so the label on the key
+# is the same word as the filament slot, the STL and the config key --
+# the reader and the assembler are looking at one name, not a synonym.
+# The order here drives the ROW order and therefore which pocket gets
+# which colour plug; nothing else in the build depends on it.
+LABELS = ["mountains", "coast", "valley", "desert", "water"]
 
 # Layout knobs. Pocket/recess DEPTHS and the plug dimensions are NOT
 # here: p5_final reads the real key's from config [key], and

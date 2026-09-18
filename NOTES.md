@@ -21,11 +21,14 @@ changes that made T3 work: the symmetric pair rule (no valley
 exception), and specifying ribs as OVERLAP WITH THE MATING FACE, which
 fixed pair ribs that were silently 0.04 mm short of touching anything.
 
-**P5 is fully specified and has NEVER BEEN PRINTED.** That is the next
-milestone and the main remaining risk: everything validated so far came
-from the P4 coupon, which is mountains + valley + frame at final scale.
-P5 additionally has the desert, three-piece wedging, the 225 x 250 mm
-frame, and the key.
+**P5 IS BUILT, PRINTED AND ASSEMBLED (ahl 2026-09-17: "I printed it all
+and it's fantastic").** Frame, mountains, valley, desert, key, five
+plugs and the paper insert -- the whole object, complete. v1.0 is done.
+
+Everything below describes a SHIPPED design, not a plan. The fit scheme,
+the clearances, the rib placement, the key, the plug diameter and the
+edge-stamp depth are all print-validated end to end; treat a change to
+any of them as a new version with its own coupon print, not an edit.
 
 **P5 outputs** (`make p5`): frame.3mf (5 parts: coast / floor / water /
 gray / black rose — floor and water split so ironing can target the
@@ -138,18 +141,22 @@ the place to look.
   pockets each with a 2.5 mm poke hole, plug 4.90 mm (MEASURED off a
   fit ladder), 2D-printed insert with cut line and border.
 
-**NEXT, in order:**
-1. **Print the P5 frame.** The big unknown. Watch: brim (see below),
-   bed adhesion on a 225 x 250 footprint, 4-colour seam quality, and
-   whether the key recess prints cleanly.
-2. **Print the P5 pieces** and check three-piece assembly — the wedging
-   ahl described (pieces pushing on each other), the mountains<->desert
-   seam, and valley retention with no ribs of its own.
-3. **Assemble the key**: plugs into pockets (poke holes underneath if
-   one goes in wrong), then the paper insert, then press the key in.
-4. Then P6 endgame: mountains DRESS REHEARSAL in a plentiful colour
-   (decides flat vs VERTICAL printing) -> final prints, mountains brown
-   LAST (scarce filament, one shot).
+**NEXT:** nothing, for v1.0. It is finished. The v2/v3 list lives in
+README "Future work"; the first item anyone should weigh is the poke
+hole under the key, because it is the only one the finished object
+actively wants and it costs a frame reprint now.
+
+Two things worth doing while the object and the slicer state still
+exist, both unrecoverable later:
+  1. TAG the commit that produced the printed artifact, so the "v1.0"
+     debossed on the south wall resolves to an exact config, override
+     set and pipeline.
+  2. SAVE THE BAMBU PROJECT FILE. The eventual print guide should BE
+     that file, not a prose settings list -- it carries the profile
+     verbatim, including the per-part water-only ironing scope, which
+     is genuinely fiddly to reproduce from instructions. Settings live
+     in the slicer, not the repo, and the state is gone the moment
+     something is tweaked for the next print.
 
 **KNOWN RISKS going into the P5 print:**
 - **Brim is 3 mm, which lands on EXACTLY 256.0 mm** — the bed edge,
@@ -977,9 +984,19 @@ it and memory fades: brim behaviour at the bed edge, how the stamp reads
 in raking light, ironing time, whether the key recess needed any
 cleanup, and total print time.
 
-### Still to record
+### Desert, key, plugs (2026-09-17): PRINTED, assembled, done
 
-One row per print, same shape. Desert, key, plugs.
+ahl: *"I printed it all and it's fantastic."* Closes the last three
+open geometric questions in one go -- the mountains<->desert seam (never
+printed at ANY scale before this), the THREE-PIECE WEDGE (the pieces
+pushing on each other, which only exists at P5), and the key: plugs
+pressed flush into their pockets, paper insert, key pressed into the
+frame at 0.025 mm/side.
+
+So the full chain is validated: T3 clearances from a coupon -> a
+225 x 250 four-colour frame -> three pieces that wedge -> a press-fit
+key with five press-fit plugs. Nothing in the fit scheme was changed
+between the coupon and the final object.
 
 ### The eventual print guide
 
