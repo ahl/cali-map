@@ -1225,6 +1225,53 @@ build asserts the two stay within 0.5 mm, so if the pocket ever moves
 for layout reasons the plug value cannot silently orphan.
 `plug_proud_mm` (0.4) is still an eyeball value, not measured.
 
+## v1.0 REPRODUCIBILITY: verified from a clean worktree (2026-09-17)
+
+`git worktree add --detach <path> v1.0` into an empty tree -- no
+`data/`, and `out/` holding only the committed PNGs, since STL/3MF are
+gitignored -- then `make`. Everything re-downloaded from the original
+sources (198 MB: DEM tiles, CGS geomorphic provinces, both Natural Earth
+boundary sets), every stage ran, and `make -n` came out clean.
+
+**Every mesh is byte-identical to the shipped files**: mountains,
+valley, desert, key, key_plug, the P4 coupon's frame pieces, and the
+edge-stamp ladder. Two files differ, neither geometric:
+  - `frame.3mf` -- two `p:UUID` attributes, regenerated per run. Every
+    other zip entry, including the geometry payload, is identical.
+  - `key_insert.pdf` -- 6 bytes, matplotlib's `CreationDate`.
+So "the v1.0 on the south wall resolves to an exact object" is TESTED,
+not aspirational. The upstream sources being live was the real risk and
+it is the part most likely to rot; re-run this test before trusting the
+tag years from now.
+
+Two things the test incidentally proved: the pipeline is hermetic (it
+needs nothing that exists only in ahl's working tree), and
+`edge_stamp_coupon` is NOT part of `make all` -- it has to be asked for
+by name. P4 writes to `out/p4_mini/`, not `out/p4/`.
+
+**Dead files removed on the strength of it (ahl 2026-09-17).** The
+clean build is what made dead distinguishable from live: anything the
+build regenerates is live, anything it left untouched was a leftover.
+  - `compass.svg` at the repo root -- an EXACT duplicate (same SHA256)
+    of `assets/compass.svg`, which is what every consumer actually
+    reads. Removed as a footgun more than as clutter: editing the wrong
+    copy would have been silently ignored.
+  - eight orphaned renders, ~11 MB, from stages since renamed or
+    removed: p1_delta_zoom, p1_final_vallejo_inset, p1_marks_extract_qa,
+    p1_marks_result_zooms, p1_override_extract_qa, p1c_low_thresholds,
+    and rose_mesh_qa.png under both out/p5 and out/p4_mini. No script in
+    pipeline/ produces any of them.
+  - `compass rose.jpeg` (the rose reference photo).
+KEPT, and do not mistake these for dead: **`p1 final marked.png`,
+`p1 final vallejo marked.png`, `p1_coast_candidates marked.png`** fail
+the same "no code references it" test but are the HAND-DRAWN SOURCES for
+overrides/*.geojson. The geojson is the extracted result; these are the
+only record of what was actually drawn. Losing them turns the overrides
+into numbers nobody can check. Also kept: `cali regions.jpg`,
+`mini frame.png` (print photos).
+Note deleting committed files does not shrink `.git` (271 MB) -- this
+was about removing traps, not reclaiming space.
+
 ## Observation log (noted, NOT to be acted on unless ahl says so)
 
 **MAGNETS -- a v3 idea (ahl 2026-09-15: "maybe v3 we incorporate
