@@ -66,14 +66,14 @@ chamfer), poke-holes, 3MF writer, preview helpers.
 
 THE REGION KEY (D19, out/p5/key.stl + key_plug.stl + key_insert.pdf): a plate
 that press-fits into its own rectangular recess in the frame over
-Nevada, listing the five regions with a colour-swatch plug beside each.
+Nevada, listing the five regions with a color-swatch plug beside each.
 Placement and size come from config [key]; the HEIGHT does not -- the
 build walks the key's BOUNDARY and sets the top flush with the tallest
 terrain it meets there, so moving or resizing the key re-heights it
 automatically.  The bottom sits on the tray floor at the
 same z as every piece.  Permanent press fit: no ribs, no poke-hole.
 The swatch PLUG ships as a plain output too -- one flat-topped cylinder,
-printed five times in the five region colours; ahl lays the real print
+printed five times in the five region colors; ahl lays the real print
 out by hand in Bambu Studio, so nothing here tries to pack it onto a
 plate or merge it into another part.
 
@@ -154,7 +154,7 @@ def edge_stamp_cuts(cfg, ew_mm, ns_mm, base_mm):
     w, h = x1 - x0, y1 - y0
     assert h <= base_mm - 0.6, (
         f"edge stamp {h:.2f} mm tall does not fit the {base_mm:g} mm wall")
-    v0 = (base_mm - h) / 2.0                     # centre it in the wall
+    v0 = (base_mm - h) / 2.0                     # center it in the wall
     # extrude along +z, then map that axis to the inward normal. OVER is
     # slack that must sit OUTSIDE the wall so the cut starts cleanly
     # clear of the surface; the part INSIDE the material is exactly
@@ -772,7 +772,7 @@ def main():
         # the swatch PLUG ships as a plain P5 output (ahl 2026-09-15:
         # "it can just live with the other p5 output; I'll build out a
         # bambu file to optimize printing everything by hand"). One
-        # file, printed five times in the five region colours -- the
+        # file, printed five times in the five region colors -- the
         # geometry is identical, only the filament differs, so there is
         # nothing to gain from five copies of the same cylinder.
         # the pocket is a DESIGN dimension (the row layout is built on
@@ -797,11 +797,11 @@ def main():
         print(f"    swatch plug dia {plug_d:g} x {plug_h:g} mm, flat-topped "
               f"({KEY.get('pocket_depth_mm', 1.4):g} seated + {pr:g} proud)"
               f" -> {ppath}\n"
-              "      print FIVE of it, one per region colour, TOP ROW "
+              "      print FIVE of it, one per region color, TOP ROW "
               "FIRST: "
               + ", ".join(key_panel.LABELS) + ".\n"
               "      diameter MEASURED from the out/key_coupon/ fit "
-              "ladder (working band 4.85-4.95; this is its centre).\n"
+              "ladder (working band 4.85-4.95; this is its center).\n"
               + ("      FLUSH, and self-stopping: the plug is exactly "
                  "pocket_depth_mm tall, so it bottoms out on the pocket "
                  "floor and cannot go under-flush.\n"

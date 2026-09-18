@@ -1,4 +1,4 @@
-"""Region-colour key: shared geometry LIBRARY (ahl 2026-09-14/15).
+"""Region-color key: shared geometry LIBRARY (ahl 2026-09-14/15).
 
 This module builds nothing on its own.  The key is part of the final
 assembly, so it is built by p5_final.py as D19 -- a plate press-fitted
@@ -17,7 +17,7 @@ desert, water), each with
 
   - a BLIND circular pocket (recessed into the TOP face only, solid
     floor underneath -- ahl's choice over a through-hole) sized for a
-    small colour-matched PLUG that prints alongside whichever job
+    small color-matched PLUG that prints alongside whichever job
     already uses that filament (water/coast from frame.3mf,
     mountain/valley/desert from their piece STLs). Plugs are permanent:
     a deliberate diameter INTERFERENCE for a snug press fit (glue
@@ -62,7 +62,7 @@ OUT_DIR = p4c.ROOT / "out" / "key_panel"   # overridden by each caller
 # is the same word as the filament slot, the STL and the config key --
 # the reader and the assembler are looking at one name, not a synonym.
 # The order here drives the ROW order and therefore which pocket gets
-# which colour plug; nothing else in the build depends on it.
+# which color plug; nothing else in the build depends on it.
 LABELS = ["mountains", "coast", "valley", "desert", "water"]
 
 # Layout knobs. Pocket/recess DEPTHS and the plug dimensions are NOT

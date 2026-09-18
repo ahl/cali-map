@@ -185,7 +185,7 @@ RIBS_PER_PIECE = _PRINT_CFG.get("ribs_per_piece", 4)
 # "p4_<piece>" / "p5_<piece>"; a missing/empty list = use the automatic
 # placer for that piece (ahl 2026-09-15)
 RIB_SITES_CFG = _PRINT_CFG.get("ribs", {})
-# config [print.poke_holes]: manual finger-hole centres, keyed
+# config [print.poke_holes]: manual finger-hole centers, keyed
 # "p4_<piece>" / "p5_<piece>"; a missing/empty list = use the automatic
 # planner (ahl 2026-09-15, placing them by hand alongside the ribs)
 POKE_SITES_CFG = _PRINT_CFG.get("poke_holes", {})
@@ -735,7 +735,7 @@ def site_point(nominal, site):
 def manual_rib_sites(nominal, other_nominal, points, label=""):
     """MANUAL rib placement (ahl 2026-09-15 -- replaces the automatic
     heuristic, which kept producing surprises; there are only ~4 ribs per
-    piece and ahl has better judgement about the assembled object than
+    piece and ahl has better judgment about the assembled object than
     any straightness/spread proxy).  `points`: APPROXIMATE (x, y) in
     print mm, marked on out/p4_rib_markup.png -- each SNAPS to the
     nearest point on `nominal`'s exterior, so a rough dot near the
@@ -798,7 +798,7 @@ def add_crush_ribs(piece, nominal, other_nominal, n_ribs, radius_mm,
     `interference_mm` -- a true `interference_mm` crush at both
     interface types, self-correcting when any clearance changes.
 
-    Mechanically each rib is a disk of radius `radius_mm` centred
+    Mechanically each rib is a disk of radius `radius_mm` centerd
     (crest_offset - radius_mm) outward from the nominal sample point and
     unioned onto `piece`, so only the cap beyond piece's own wall becomes
     new material: a radius_mm-curvature bump whose crest reaches exactly
@@ -826,7 +826,7 @@ def add_crush_ribs(piece, nominal, other_nominal, n_ribs, radius_mm,
         p1 = ring.interpolate((d + eps) % length)
         nx, ny = _outward_normal(nominal, p, (p1.x - p0.x, p1.y - p0.y))
         # how far past nominal the MATING face actually sits: 0 against a
-        # frame wall (cavity cut at nominal), else the neighbour's own
+        # frame wall (cavity cut at nominal), else the neighbor's own
         # clearance, measured off the as-cut sibling geometry
         face = 0.0
         if kind == "pair" and neighbor_pieces:
@@ -1255,12 +1255,12 @@ def seam_hole(nom_a, nom_b, cav_union, allowed, min_len_mm=None,
 
 def manual_poke_holes(nom, points, label=""):
     """MANUAL poke-hole placement (ahl 2026-09-15), the same idea as
-    manual_rib_sites: hand-picked (x, y) centres from the markup canvas,
+    manual_rib_sites: hand-picked (x, y) centers from the markup canvas,
     validated rather than searched for.  Unlike a rib a hole does NOT
     snap -- an 18 mm circle either fits where it was put or it does not,
     so a bad one is an error, not something to nudge.
 
-    Each centre must sit far enough inside the removable-piece union
+    Each center must sit far enough inside the removable-piece union
     that the whole circle clears the frame cavity wall by
     POKE_MARGIN_MM, and holes must not crowd each other.  Returns
     plan_poke_holes' (centers, credit) shape."""
@@ -1478,10 +1478,10 @@ def add_poly(ax, geom, color, ec="none", lw=0.0, alpha=1.0, z=1):
 MARKUP_PX_PER_MM = 12.0   # out/p4_rib_markup.png resolution
 
 
-# Existing rib sites are drawn COLOUR-FREE -- white fill, black edge,
-# one shape per piece -- so that any saturated colour on the page is
-# unambiguously one of ahl's marks (he picks his own colours; ahl
-# 2026-09-15). Shapes, not colours, also sidestep the collision that
+# Existing rib sites are drawn Color-FREE -- white fill, black edge,
+# one shape per piece -- so that any saturated color on the page is
+# unambiguously one of ahl's marks (he picks his own colors; ahl
+# 2026-09-15). Shapes, not colors, also sidestep the collision that
 # made an orange mark unusable on P5: the desert region fill is
 # (242,153,71), only L1 32 away from it.
 MARK_SHAPE = {"mountains": "o", "valley": "s", "desert": "^"}
@@ -1500,9 +1500,9 @@ def rib_markup_canvas(path, geo, pieces, lo_xy, hi_xy, sites_mm=None,
     canvas always shows the CURRENT placement and regenerating never
     loses information -- the build overwrites this file every run, but
     the positions live in config. Those markers are deliberately
-    colour-free (white fill, black edge, one shape per piece) so that
-    any saturated colour on the page is unambiguously one of ahl's
-    marks; he picks his own colours.
+    color-free (white fill, black edge, one shape per piece) so that
+    any saturated color on the page is unambiguously one of ahl's
+    marks; he picks his own colors.
 
     The mm <-> pixel mapping is EXACT and reported by the build: the
     axes fill the figure edge-to-edge (no tight-bbox crop) over
@@ -1591,15 +1591,15 @@ def rib_markup_canvas(path, geo, pieces, lo_xy, hi_xy, sites_mm=None,
     plt.close(fig)
     shapes = ", ".join(f"{MARK_SHAPE.get(n, 'o')} {n}" for n, _ in pieces)
     poke_note = (f"\n  {len(poke_mm)} poke hole(s) as dotted "
-                 f"{POKE_D_MM:g} mm circles with a + centre -- move these "
-                 "too if you like, in a FOURTH colour" if poke_mm else "")
+                 f"{POKE_D_MM:g} mm circles with a + center -- move these "
+                 "too if you like, in a FOURTH color" if poke_mm else "")
     print(f"\nrib markup canvas -> {path}  ({W} x {H} px, "
           f"{px_per_mm:g} px/mm, x {lox:g}..{hix:g}, y {loy:g}..{hiy:g} mm; "
           f"{grid:g} mm grid)\n  {n_drawn} CURRENT rib(s) from config "
           f"[print.ribs], drawn white-on-black, one shape per piece "
           f"({shapes})\n  mark yours in ANY saturated "
-          "colours, one per piece, and say which is which; everything "
-          "drawn here is white/black/pale so your colour is unambiguous. "
+          "colors, one per piece, and say which is which; everything "
+          "drawn here is white/black/pale so your color is unambiguous. "
           "red x = thin neck, avoid" + poke_note)
     return W, H
 
@@ -2231,7 +2231,7 @@ def main():
     # bites by exactly interference_mm.  At a piece-PIECE seam BOTH
     # pieces are cut back by their own clearance, so a lone rib crest
     # only reaches interference_mm past the shared line while the
-    # neighbour's wall is its own clearance behind it -- the rib may not
+    # neighbor's wall is its own clearance behind it -- the rib may not
     # touch at all.  Compare unribbed vs ribbed gap to see it.
     raw_gap = geo["mountains_piece"].distance(geo["valley_piece"])
     rib_gap = ribbed_geo["mountains"].distance(ribbed_geo["valley"])
@@ -2248,8 +2248,8 @@ def main():
             nb_edge = geo[f"{b}_piece"].boundary   # incl. holes
             ov = ribbed_geo[a].intersection(geo[f"{b}_piece"])
             for g in _parts(ov, min_area=1e-9):
-                # deepest penetration into the neighbour = the overlap
-                # vertex furthest from the neighbour's own wall
+                # deepest penetration into the neighbor = the overlap
+                # vertex furthest from the neighbor's own wall
                 depth = max(nb_edge.distance(Point(c))
                             for c in g.exterior.coords)
                 cxy = g.representative_point()

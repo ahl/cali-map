@@ -56,7 +56,7 @@ import p4_bay_coupon as p4
 DEFAULT_LL = (-123.15, 37.05, -121.35, 38.65)   # SF Bay + Coast Ranges
 PX_PER_KM = 26.0          # render resolution
 MINOR_M = 100             # thin contour interval (m)
-MAJOR_M = 400             # heavy, labelled contour interval (m)
+MAJOR_M = 400             # heavy, labeled contour interval (m)
 HILLSHADE = 0.45          # how strongly relief shades the fills (0 = off)
 
 REGION_FILL = {base.COAST: (0.99, 0.95, 0.62),
@@ -87,7 +87,7 @@ def main():
     sl = (slice(r0, r1), slice(c0, c1))
     R, L, D = reg[sl], land[sl], dem[sl].astype(float)
 
-    # exact extent of the cropped raster, in EPSG:3310 metres
+    # exact extent of the cropped raster, in EPSG:3310 meters
     X0 = base.META["x_min"] + c0 * res
     X1 = base.META["x_min"] + c1 * res
     Y1 = base.META["y_max"] - r0 * res
@@ -116,7 +116,7 @@ def main():
     rgb[(R == 0) & L] = (0.86, 0.86, 0.84)        # land, region assigned
                                                   # later by nearest-fill
     # HILLSHADE the fills: the question this canvas answers is "is the
-    # boundary on the right landform", and flat colour + sparse contours
+    # boundary on the right landform", and flat color + sparse contours
     # is not enough to see a ridge. Standard NW-lit shaded relief.
     if HILLSHADE > 0:
         zf = 4.0
@@ -128,9 +128,9 @@ def main():
               + np.cos(alt) * np.sin(slope) * np.cos(az - aspect))
         sh = np.clip(sh, 0, 1)
         # shade DOWNWARD only: factor runs (1-HILLSHADE)..1, so a lit
-        # slope keeps the flat region colour and a shadowed one darkens.
+        # slope keeps the flat region color and a shadowed one darkens.
         # (Blending upward as well blew the pale fills out to white and
-        # lost the colour identity the canvas depends on.) Water is left
+        # lost the color identity the canvas depends on.) Water is left
         # unshaded so the shoreline stays a clean edge.
         fac = np.where(L, (1 - HILLSHADE) + HILLSHADE * sh, 1.0)
         rgb = np.clip(rgb * fac[..., None], 0, 1)
@@ -160,7 +160,7 @@ def main():
     ax.contour(Xc, Yc, L.astype(float), levels=[0.5], colors="#1f5fa8",
                linewidths=1.4)
 
-    # --- 10 km grid, labelled in EPSG:3310 km
+    # --- 10 km grid, labeled in EPSG:3310 km
     for gx in np.arange(np.ceil(X0 / 10000) * 10000, X1, 10000):
         ax.axvline(gx, color="#000000", lw=0.4, alpha=0.25)
         ax.annotate(f"{gx/1000:.0f}", (gx, Y0), fontsize=6, color="#222",
@@ -185,7 +185,7 @@ def main():
           f"y[{Y0:.0f},{Y1:.0f}] m  ({w_km:.0f} x {h_km:.0f} km)")
     print(f"  {W} x {H} px at {PX_PER_KM:g} px/km -- extent + the exact "
           f"pixel->Albers formula are in {p4.OUT / 'region_markup.json'}")
-    print(f"  contours: thin every {MINOR_M} m, heavy/labelled every "
+    print(f"  contours: thin every {MINOR_M} m, heavy/labeled every "
           f"{MAJOR_M} m, none over water")
     print("  region lines (current):")
     for rid, col in REGION_LINE.items():

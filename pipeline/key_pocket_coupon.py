@@ -61,7 +61,7 @@ INDEX_D_MM = 1.6                             # orientation dimple
 
 # RESULT (ahl 2026-09-15): 4.70/4.75/4.80 fell out, 4.85/4.90 solid,
 # 4.95 went in with effort, 5.00 would not go. Working band 4.85-4.95;
-# [key].plug_d_mm is set to 4.90, its centre. Re-run this ladder if the
+# [key].plug_d_mm is set to 4.90, its center. Re-run this ladder if the
 # printer, filament or profile changes -- the band is only 0.15 mm wide.
 #
 # The ladder of PLUG diameters to try. The pocket is fixed at the key's

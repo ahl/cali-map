@@ -28,7 +28,7 @@ never be silently ignored.
 |---|---|
 | `frame.3mf` | the tray. 4 filaments, 5 parts (coast / floor / water / gray / black rose) |
 | `mountains.stl` `valley.stl` `desert.stl` | the removable pieces |
-| `key.stl` `key_plug.stl` `key_insert.pdf` | region key over Nevada: plate, ×5 colour swatch plugs, printed label |
+| `key.stl` `key_plug.stl` `key_insert.pdf` | region key over Nevada: plate, ×5 color swatch plugs, printed label |
 
 Also `out/p5_preview.png` (assembled / exploded / bottom / rose) and
 `out/p5_rib_markup.png` (markup canvas, below).
@@ -53,7 +53,7 @@ compensation 0.15 mm. Seam aligned. Infill 20–25% grid/gyroid.
 
 | | frame (`frame.3mf`) | pieces (`*.stl`) |
 |---|---|---|
-| plate | its own — 4 filaments, 5 parts | separate, so they don't ride the colour changes |
+| plate | its own — 4 filaments, 5 parts | separate, so they don't ride the color changes |
 | wall generator | **Arachne** — the rose has 0.45–0.8 mm features | default |
 | ironing | **off** — tried on the final frame and rejected; great on a small coupon, didn't carry to a 225 × 250 water surface | off |
 | top shell layers | default | **5–6** — sloped terrain shows infill through fewer |
@@ -87,7 +87,7 @@ Region boundaries, crush ribs and poke holes are all placed by hand:
 the build renders a canvas, you draw on it, the marks are extracted
 back into `config.toml` (ribs, poke holes) or `overrides/*.geojson`
 (regions). Each canvas carries an exact pixel→mm mapping. Current sites
-are drawn colour-free, so any saturated colour on the page is a mark.
+are drawn color-free, so any saturated color on the page is a mark.
 
 ## Conventions
 
@@ -115,7 +115,7 @@ reasoning for each. Split by whether it changes how pieces are *held*.
 
 - **Waterways** (D9) — rivers on the terrain. Data already downloaded
   (`data/p2_waterways.geojson`); baseline is none.
-- **Full-depth bodies** — land colour down to the floor, gray under the
+- **Full-depth bodies** — land color down to the floor, gray under the
   removable pieces. Fixes the edge cross-section and the teal cavity
   floors. Decide after judging translucency in a real print.
 - **Thin necks** (D11) — 0.88 mm at Bakersfield, 1.04 Petaluma, 1.49

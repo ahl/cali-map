@@ -215,12 +215,12 @@ land_min_mm = 0.2             # min land height above datum (color opacity)
 # MANUAL crush-rib placement (ahl 2026-09-15). The automatic placer kept
 # producing surprises (a whole side skipped, two ribs on one spur, every
 # slot going to one interface type) because "good rib placement" is a
-# judgement about the assembled object, not something a straightness/
+# judgment about the assembled object, not something a straightness/
 # spread proxy captures -- and there are only ~4 ribs per piece. So:
 # hand-picked sites, listed here per build+piece.
 #
 #   - coordinates are APPROXIMATE (x, y) in that build's PRINT mm. Mark
-#     them on out/p4_rib_markup.png -- a clean canvas with a labelled
+#     them on out/p4_rib_markup.png -- a clean canvas with a labeled
 #     10 mm grid, no rib markers, and an exact px<->mm mapping printed
 #     by the build. A dot near the perimeter (either side) is enough:
 #     each point SNAPS to the nearest spot on that piece's nominal
@@ -246,7 +246,7 @@ p4_mountains = [[33.2, 100.3], [28.1, 75.5], [58.0, 53.1], [80.6, 0.2]]
 p4_valley = [[55.7, 100.4], [87.5, 100.3], [100.0, 74.6], [99.9, 40.0],
              [75.2, 28.3], [96.1, 0.3]]
 # P5: ahl's HAND-MARKED sites, extracted 2026-09-15 from his annotated
-# out/p5_rib_markup.png (all ribs marked in ONE colour, #0000FF; the
+# out/p5_rib_markup.png (all ribs marked in ONE color, #0000FF; the
 # piece each belongs to is read from WHICH REGION the dot sits in --
 # ahl: "for ribs piece<->piece I put the [dot] inside the region it
 # should belong to", i.e. he chose which piece carries each pair rib).
@@ -261,7 +261,7 @@ p5_valley = []
 p5_desert = [[133.0, 112.4], [163.8, 108.2], [162.0, 54.9], [196.7, 14.2]]
 
 [print.poke_holes]
-# MANUAL finger-hole centres (18 mm, [print].poke_hole_d_mm), keyed
+# MANUAL finger-hole centers (18 mm, [print].poke_hole_d_mm), keyed
 # "p4_<piece>" / "p5_<piece>" -- the same markup loop as the ribs, and
 # drawn on the same canvas at TRUE size so a hole and a rib can be
 # judged against each other in one pass (ahl 2026-09-15).
@@ -272,10 +272,10 @@ p5_desert = [[133.0, 112.4], [163.8, 108.2], [162.0, 54.9], [196.7, 14.2]]
 # [print].poke_hole_d_mm / POKE_MARGIN_MM, that holes do not crowd each other, and that
 # every piece ends up with at least one hole to push it out by.
 # Any piece with no list falls back to the automatic planner, so leaving
-# this section empty keeps today's behaviour.
+# this section empty keeps today's behavior.
 #
-# P5: ahl's HAND-MARKED centres, extracted 2026-09-15 from his annotated
-# out/p5_rib_markup.png (#73FDFF). Keyed by whichever region the centre
+# P5: ahl's HAND-MARKED centers, extracted 2026-09-15 from his annotated
+# out/p5_rib_markup.png (#73FDFF). Keyed by whichever region the center
 # sits in; the build recomputes which pieces each hole actually SERVES
 # from geometry, so a hole straddling a seam still credits both.
 p5_mountains = [[77.6, 220.0], [34.8, 207.2], [112.3, 125.6], [166.7, 24.5]]
@@ -291,15 +291,15 @@ p5_valley = [[69.5, 149.6], [106.8, 89.3]]
 p5_desert = [[153.6, 97.8], [195.7, 61.9], [194.9, 26.1]]
 
 [key]
-# Region-colour KEY, inset into the P5 frame over Nevada (ahl 2026-09-15).
+# Region-color KEY, inset into the P5 frame over Nevada (ahl 2026-09-15).
 # A rectangular recess in the frame, like a piece cavity, holding a plate
-# that lists the five regions with a colour-swatch plug beside each.
+# that lists the five regions with a color-swatch plug beside each.
 #
 # PLACEMENT + SIZE are the knobs; everything else derives. Move or resize
 # the key and `make p5` re-scans automatically: the key's TOP HEIGHT is
 # not configured at all, it is measured from the terrain (see below).
 enabled = true
-# Centre in P5 print mm (x east, y north; frame is 225.1 x 250.0).
+# Center in P5 print mm (x east, y north; frame is 225.1 x 250.0).
 # CONFIRMED by ahl 2026-09-15: "the legend is in a good spot". It also
 # sits diagonally opposite the compass rose at (32, 30), which is the
 # conventional rose-one-corner / legend-the-other balance.
@@ -310,7 +310,7 @@ enabled = true
 # border, 23+ mm from the print edges.
 center_mm = [168.0, 198.0]
 # CONFIRMED by ahl 2026-09-15 ("the size looks fine"), along with the
-# centre above -- the key is FINAL.
+# center above -- the key is FINAL.
 # Sized for the title layout: the text column must fit "California" at
 # the 6 mm title cap (44.6 mm), which sets the width; a 2-line title +
 # gap + five 5 mm-pocket rows sets the height. The build asserts both,
@@ -366,7 +366,7 @@ plug_poke_d_mm = 2.5
 #   4.85 / 4.90         went in, solid
 #   4.95                went in, took some effort
 #   5.00                would not go in
-# So the working band is 4.85-4.95 and 4.90 is its CENTRE -- 0.05 mm of
+# So the working band is 4.85-4.95 and 4.90 is its Center -- 0.05 mm of
 # margin on both sides. That margin is the point: the real key has FIVE
 # pockets, and pocket-to-pocket and print-to-print variation eats into
 # it, so the edges of the band (4.85, one step from falling out; 4.95,
