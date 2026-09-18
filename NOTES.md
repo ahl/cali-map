@@ -1058,7 +1058,7 @@ five places. v1.0 is "fantastic" anyway, which makes the checklist
 demonstrably more conservative than the object requires.
 
     layer_height                0.2      initial layer 0.2
-    wall_generator              [FILE SAYS classic -- WRONG, see below]
+    wall_generator              ARACHNE
     wall_loops                  2
     sparse_infill               10% GYROID       (checklist says 20-25%)
     top / bottom shells         5 / 3            (checklist says 5-6 top)
@@ -1067,27 +1067,26 @@ demonstrably more conservative than the object requires.
     brim                        frame: outer_only at 2 mm
                                 everything else: none
                                                  (checklist says 3 mm)
-    filaments (PLA)  1 #0056B8 blue   2 #A4DBE8 teal
-                     3 #8E9089 gray   4 #000000 black
+    filaments (PLA), all 8 -- the frame's four plus the four the
+    pieces and key are printed in:
+       1 #0056B8 blue    CA land / coast     5 #00AE42 green   valley
+       2 #A4DBE8 teal    water               6 #6F5034 brown   mountains
+       3 #8E9089 gray    non-CA land         7 #FFFFFF white   key
+       4 #000000 black   compass rose        8 #F4EE2A yellow  desert
     prime tower on;  5 plates;  10 key_plug copies (5 + 5 spares)
 
-**THE FILE IS NOT A COMPLETE RECORD -- wall_generator is wrong in it.**
-ahl 2026-09-17: *"I did use those [Arachne] for my real print, but
-forgot to add them to this file."* The committed project says
-`classic` project-wide with no per-object override; the physical object
-was printed with ARACHNE. So the checklist was right about Arachne all
-along, and an earlier version of this section wrongly concluded from the
-file that Classic had done the job.
-Consequence, and the reason this is flagged loudly rather than fixed
-quietly: the whole argument for shipping the project file AS the print
-guide is that it carries the profile verbatim. Anyone who opens this
-copy and prints gets Classic -- not what made v1.0. **Re-save the
-project from the state actually printed and recommit it.** Until then,
-read `wall_generator` from this note, not from the file.
-Verify after re-saving:
+ARACHNE, and the checklist was right about it. The first saved copy of
+this project said `classic` -- ahl 2026-09-17: *"I did use those for my
+real print, but forgot to add them to this file"* -- and for one commit
+this section wrongly concluded from that file that Classic had done the
+job, including on the rose and the 0.88 mm neck. Re-saved and verified.
+Keep the episode: the argument for shipping the project file AS the
+print guide is that it carries the profile verbatim, and a save that
+silently omits a setting turns the guide into a wrong answer rather than
+a missing one. **Check it after every re-save:**
     python3 -c "import json,zipfile;print(json.load(zipfile.ZipFile('cali regions.3mf').open('Metadata/project_settings.config'))['wall_generator'])"
 
-One of the remaining differences deserves emphasis:
+One of the differences deserves emphasis:
   - **No ironing, after trying it.** A whole design decision --
     splitting the frame's floor and water into separate 3MF parts so
     ironing could target the visible surface only -- was made to serve a
