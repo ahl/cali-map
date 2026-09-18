@@ -61,7 +61,7 @@ transition Z (and layer number at 0.2 mm) in the pipeline output/README.
 
 ## Human check (I can't run Bambu Studio)
 
-Open **`/Users/ahl/src/cali-map/out/experiments/cubes_bambu.3mf`** in Bambu Studio:
+Open **`out/experiments/cubes_bambu.3mf`** in Bambu Studio:
 expect ONE object "piece", two parts ("region" [0,20]³, "water" [12,32]³ interlocked,
 positions preserved), water pre-assigned filament 2, no "not from Bambu Lab" prompt.
 If it degrades to geometry-only/separate objects, fall back to
