@@ -3,5 +3,11 @@ data/
 # meshes are large and regenerable; renders/reports stay in history
 *.stl
 *.3mf
+# ...but the Bambu PROJECT file is the exception that rule did not
+# anticipate: it is hand-authored slicer state, not build output, and
+# nothing in pipeline/ can regenerate it. It carries the print profile
+# verbatim -- including the per-part water-only ironing scope, which is
+# painful to reproduce from prose -- so it IS the print guide. Keep it.
+!cali regions.3mf
 __pycache__/
 *.pyc

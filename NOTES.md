@@ -160,10 +160,11 @@ exist, both unrecoverable later:
 
 **HOW THE P5 RISKS ACTUALLY RESOLVED** (all of these were live
 warnings until 2026-09-16/17; kept because a v2 will face them again):
-- **Brim at 3 mm lands on EXACTLY 256.0 mm**, the bed edge, zero
-  margin — it did NOT clip. 4 mm would overflow by 2 mm. Fallbacks, if
-  a future plate is less forgiving: 2 mm (254.0) or brimless, since the
-  tray floor gives full-footprint contact anyway.
+- **The brim risk was SIDESTEPPED, not survived.** ahl printed the
+  frame at **2 mm, outer_only** (229.1 x 254.0, 2 mm of margin), not the
+  3 mm the checklist specified, which would have landed on exactly
+  256.0. So "3 mm clears the bed" remains UNTESTED. Read off the saved
+  Bambu project, not assumed. Pieces, key and plugs printed BRIMLESS.
 - **The 0.88 mm Bakersfield neck** (~2 extrusion widths) and the
   1.04 mm Petaluma one printed and survived handling — on CLASSIC
   walls and 10% gyroid, not the Arachne the checklist asks for. So they
@@ -178,6 +179,14 @@ warnings until 2026-09-16/17; kept because a v2 will face them again):
   — the clearances are offsets applied to whatever shape results.
 - **The paper insert** printed, cut and seated fine; the 2 mm border and
   cut line work in the hand.
+- **IRONING WAS NOT USED AT ALL.** The saved project has
+  `ironing_type = "no ironing"` project-wide and no per-part override
+  anywhere. The water-only ironing pass this file recommends for the
+  frame was validated on the rose coupon and then NOT applied to the
+  real thing -- and the result is "fantastic" regardless. An earlier
+  version of this entry claimed ironing was confirmed on the frame;
+  that was inferred from the object looking good, not from evidence,
+  and it was wrong.
 
 **Open items parked deliberately:**
 - **NO POKE HOLE UNDER THE KEY (ahl 2026-09-16, deferred to v2).** Each
@@ -214,10 +223,12 @@ warnings until 2026-09-16/17; kept because a v2 will face them again):
   finished object, so single-layer land over teal evidently reads fine.
   Left in the v2 list as an improvement, not a defect; spec sketched in
   the T1 session note.
-- Ironing: SETTLED and shipped — per-part "Top surfaces" on the WATER
-  body only, 20% flow at 20 mm/s. Validated on the rose coupon
-  2026-09-14 and then on the real frame 2026-09-16, which was the case
-  the coupon could not test (two top-facing regions at different Z).
+- Ironing: validated on the ROSE COUPON only (2026-09-14, per-part "Top
+  surfaces" on the WATER body, 20% flow at 20 mm/s, "looks fantastic").
+  NOT used on the shipped frame -- see the settings-as-used section.
+  So the two-top-surfaces question the coupon could not answer is STILL
+  open, and the shipped object shows the pass is optional rather than
+  required.
 - Bottom version stamps: DISABLED (two failed styles), and v1.0 shipped
   with UNLABELLED pieces — ahl 2026-09-16: "I can write on the pieces;
   it will be fine." The edge stamp has since solved small-text rendering
@@ -1023,12 +1034,54 @@ So the full chain is validated: T3 clearances from a coupon -> a
 key with five press-fit plugs. Nothing in the fit scheme was changed
 between the coupon and the final object.
 
+### THE SHIPPED SETTINGS, read out of the saved Bambu project
+
+`cali regions.3mf` (in the repo root, un-ignored on purpose -- see
+.gitignore) is the authoritative record. Everything below is READ FROM
+IT, not reconstructed, and it contradicts this file's own checklist in
+five places. v1.0 is "fantastic" anyway, which makes the checklist
+demonstrably more conservative than the object requires.
+
+    layer_height                0.2      initial layer 0.2
+    wall_generator              CLASSIC          (checklist says Arachne)
+    wall_loops                  2
+    sparse_infill               10% GYROID       (checklist says 20-25%)
+    top / bottom shells         5 / 3            (checklist says 5-6 top)
+    elefant_foot_compensation   0.15     seam aligned
+    ironing                     NONE             (checklist says water-only)
+    brim                        frame: outer_only at 2 mm
+                                everything else: none
+                                                 (checklist says 3 mm)
+    filaments (PLA)  1 #0056B8 blue   2 #A4DBE8 teal
+                     3 #8E9089 gray   4 #000000 black
+    prime tower on;  5 plates;  10 key_plug copies (5 + 5 spares)
+
+Two of those deserve emphasis because this file argued hard for the
+other side:
+  - **CLASSIC walls, including on the frame.** Arachne was called
+    mandatory here for the rose's 0.45-0.8 mm features and later for the
+    pieces' 0.88-1.5 mm necks. Classic did both, and the rose and the
+    necks are fine. The argument for Arachne (integer wall counts leave
+    gaps in a taper) is still sound in principle; it was simply not
+    decisive at this geometry.
+  - **No ironing.** A whole design decision -- splitting the frame's
+    floor and water into separate 3MF parts so ironing could target the
+    visible surface only -- was made to serve a pass that the shipped
+    print did not use. The split costs nothing and leaves the option
+    open, so it was not wasted, but it was not needed either.
+
+Where the checklist and this section disagree, THIS section is what
+produced the object. Treat the checklist as the conservative starting
+point for a v2, not as a description of v1.0.
+
 ### The eventual print guide
 
-If this all works, the distributable is NOT a prose list of settings --
-it is the **saved Bambu Studio project**, exported after a successful
-print, which carries the profile verbatim so someone else opens it and
-everything is already set. This section is the provenance behind that
+DONE: the distributable is NOT a prose list of settings -- it is the
+**saved Bambu Studio project**, `cali regions.3mf`, committed alongside
+v1.0. It carries the profile verbatim so someone else opens it and
+everything is already set. It also caught two errors in this very file
+(ironing and the brim) within minutes of being read, which is the
+argument for the file over prose in one line. This section is the provenance behind that
 file and the place to explain the non-obvious choices (why Arachne, why
 no brim on the pieces, why ironing is water-only). Ask ahl to save the
 project file at the point the print is judged good -- a reconstructed
