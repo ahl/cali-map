@@ -4,6 +4,8 @@ A 3D-printable, to-scale topographic map of California as a region
 puzzle: four land regions — Coast, Mountains, Central Valley, Desert —
 set into a frame of the surrounding geography.
 
+![printed](./cali-map.jpeg)
+
 **Coast is part of the frame.** The three removable pieces are
 **mountains, valley, desert**. Scale 1:4.54M, 225 × 250 mm, terrain at
 9.3× vertical exaggeration.
