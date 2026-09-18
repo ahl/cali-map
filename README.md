@@ -61,11 +61,14 @@ compensation 0.15 mm. Seam aligned. Infill 20–25% grid/gyroid.
 Frame filament slots: 1 CA-land blue, 2 water teal, 3 gray, 4 black —
 recheck after every re-import.
 
-**v1.0 shipped on Classic walls**, including the rose and the pieces'
-0.88–1.5 mm necks, and both came out fine. Arachne is still the better
-argument in principle — Classic snaps to integer wall counts and leaves
-gaps in the taper either side of a neck — but it was not decisive here.
-The settings that actually produced v1.0 are in `cali regions.3mf`.
+**Use Arachne**, the variable-width wall generator. Classic offsets
+perimeters by a fixed width, so where a region isn't a whole number of
+walls it leaves a gap or drops a wall, switching abruptly. Arachne
+varies width along the medial axis and fills exactly. Three features
+here are sub-2-wall: the pieces' 0.88–1.5 mm necks (the taper either
+side of a neck is where Classic leaves voids, right where the piece is
+weakest), the rose's 0.45–0.8 mm features, and the edge stamp's 0.45 mm
+strokes. v1.0 was printed with it.
 
 Plugs ride along with a print that already has their filament — mountain
 with the mountains piece, valley with valley, desert with desert, ocean

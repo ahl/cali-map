@@ -1058,7 +1058,7 @@ five places. v1.0 is "fantastic" anyway, which makes the checklist
 demonstrably more conservative than the object requires.
 
     layer_height                0.2      initial layer 0.2
-    wall_generator              CLASSIC          (checklist says Arachne)
+    wall_generator              [FILE SAYS classic -- WRONG, see below]
     wall_loops                  2
     sparse_infill               10% GYROID       (checklist says 20-25%)
     top / bottom shells         5 / 3            (checklist says 5-6 top)
@@ -1071,14 +1071,23 @@ demonstrably more conservative than the object requires.
                      3 #8E9089 gray   4 #000000 black
     prime tower on;  5 plates;  10 key_plug copies (5 + 5 spares)
 
-Two of those deserve emphasis because this file argued hard for the
-other side:
-  - **CLASSIC walls, including on the frame.** Arachne was called
-    mandatory here for the rose's 0.45-0.8 mm features and later for the
-    pieces' 0.88-1.5 mm necks. Classic did both, and the rose and the
-    necks are fine. The argument for Arachne (integer wall counts leave
-    gaps in a taper) is still sound in principle; it was simply not
-    decisive at this geometry.
+**THE FILE IS NOT A COMPLETE RECORD -- wall_generator is wrong in it.**
+ahl 2026-09-17: *"I did use those [Arachne] for my real print, but
+forgot to add them to this file."* The committed project says
+`classic` project-wide with no per-object override; the physical object
+was printed with ARACHNE. So the checklist was right about Arachne all
+along, and an earlier version of this section wrongly concluded from the
+file that Classic had done the job.
+Consequence, and the reason this is flagged loudly rather than fixed
+quietly: the whole argument for shipping the project file AS the print
+guide is that it carries the profile verbatim. Anyone who opens this
+copy and prints gets Classic -- not what made v1.0. **Re-save the
+project from the state actually printed and recommit it.** Until then,
+read `wall_generator` from this note, not from the file.
+Verify after re-saving:
+    python3 -c "import json,zipfile;print(json.load(zipfile.ZipFile('cali regions.3mf').open('Metadata/project_settings.config'))['wall_generator'])"
+
+One of the remaining differences deserves emphasis:
   - **No ironing, after trying it.** A whole design decision --
     splitting the frame's floor and water into separate 3MF parts so
     ironing could target the visible surface only -- was made to serve a
