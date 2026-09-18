@@ -53,18 +53,19 @@ compensation 0.15 mm. Seam aligned. Infill 20–25% grid/gyroid.
 |---|---|---|
 | plate | its own — 4 filaments, 5 parts | separate, so they don't ride the colour changes |
 | wall generator | **Arachne** — the rose has 0.45–0.8 mm features | default |
-| ironing | **on, water part only.** Type "top layers"/"top surfaces", NOT "topmost" — that mode irons nothing here. 20% flow @ 20 mm/s | off |
+| ironing | **off** — tried on the final frame and rejected; great on a small coupon, didn't carry to a 225 × 250 water surface | off |
 | top shell layers | default | **5–6** — sloped terrain shows infill through fewer |
-| brim | **3 mm** → 231.1 × 256.0 mm, exactly the bed edge. 4 mm overflows by 2 mm | none |
+| brim | **2 mm, outer only** → 229.1 × 254.0 mm. 3 mm printed *past* the bed edge in practice; 4 mm overflows by 2 mm | none |
 | also | prime tower on, flush into objects' infill; raise the black→teal and black→blue flush volumes; move the object as a whole, never its parts | orientation as imported, terrain up; no supports |
 
 Frame filament slots: 1 CA-land blue, 2 water teal, 3 gray, 4 black —
 recheck after every re-import.
 
-**Arachne is not frame-only.** The pieces have 0.88–1.5 mm necks
-(Bakersfield, Petaluma, Carquinez); Classic snaps to integer wall counts
-and leaves gaps in the taper either side of the minimum, right where the
-piece is weakest.
+**v1.0 shipped on Classic walls**, including the rose and the pieces'
+0.88–1.5 mm necks, and both came out fine. Arachne is still the better
+argument in principle — Classic snaps to integer wall counts and leaves
+gaps in the taper either side of a neck — but it was not decisive here.
+The settings that actually produced v1.0 are in `cali regions.3mf`.
 
 Plugs ride along with a print that already has their filament — mountain
 with the mountains piece, valley with valley, desert with desert, ocean

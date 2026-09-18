@@ -160,11 +160,14 @@ exist, both unrecoverable later:
 
 **HOW THE P5 RISKS ACTUALLY RESOLVED** (all of these were live
 warnings until 2026-09-16/17; kept because a v2 will face them again):
-- **The brim risk was SIDESTEPPED, not survived.** ahl printed the
-  frame at **2 mm, outer_only** (229.1 x 254.0, 2 mm of margin), not the
-  3 mm the checklist specified, which would have landed on exactly
-  256.0. So "3 mm clears the bed" remains UNTESTED. Read off the saved
-  Bambu project, not assumed. Pieces, key and plugs printed BRIMLESS.
+- **The brim risk was REAL and the checklist was WRONG.** ahl tried
+  3 mm and it "actually printed PAST the edge", so he dropped to
+  **2 mm, outer_only** (229.1 x 254.0). The computed 231.1 x 256.0 for
+  3 mm is not a zero-margin fit, it is an overflow -- the usable bed is
+  under its nominal 256. Lesson worth keeping: a computed fit to the
+  NOMINAL bed is not a fit. Adhesion was never a problem at 2 mm, and
+  the tray floor's full-footprint contact means brimless is viable too.
+  Pieces, key and plugs printed BRIMLESS.
 - **The 0.88 mm Bakersfield neck** (~2 extrusion widths) and the
   1.04 mm Petaluma one printed and survived handling — on CLASSIC
   walls and 10% gyroid, not the Arachne the checklist asks for. So they
@@ -179,14 +182,17 @@ warnings until 2026-09-16/17; kept because a v2 will face them again):
   — the clearances are offsets applied to whatever shape results.
 - **The paper insert** printed, cut and seated fine; the 2 mm border and
   cut line work in the hand.
-- **IRONING WAS NOT USED AT ALL.** The saved project has
-  `ironing_type = "no ironing"` project-wide and no per-part override
-  anywhere. The water-only ironing pass this file recommends for the
-  frame was validated on the rose coupon and then NOT applied to the
-  real thing -- and the result is "fantastic" regardless. An earlier
-  version of this entry claimed ironing was confirmed on the frame;
-  that was inferred from the object looking good, not from evidence,
-  and it was wrong.
+- **IRONING WAS TRIED ON THE FINAL FRAME AND REJECTED.** ahl
+  2026-09-17: "I tried ironing for the final print... but it didn't go
+  great. I think on balance it's not worth it." The saved project ends
+  up `ironing_type = "no ironing"` project-wide. So the pass that looked
+  excellent on the small flat ROSE COUPON did not carry to a 225 x 250
+  water surface -- a coupon result that did not generalise, which is
+  the interesting part. v1.0 ships with no ironing anywhere and looks
+  fantastic. (An earlier version of this entry claimed ironing was
+  confirmed on the frame; that was inferred from the object looking
+  good rather than from evidence, and it was wrong twice over -- it was
+  not used, and when it was tried it did not work.)
 
 **Open items parked deliberately:**
 - **NO POKE HOLE UNDER THE KEY (ahl 2026-09-16, deferred to v2).** Each
@@ -614,7 +620,15 @@ FRAME (frame.3mf — 4-color)
 - [ ] Infill 20-25% (grid/gyroid)
 - [ ] Do NOT move the frame's parts individually (aligned in absolute
       coords; move the object as a whole only)
-- [ ] Ironing: ON, per-part on the WATER body ONLY, ironing TYPE = "top
+- [ ] Ironing: **OFF for the frame -- tried on the final print and
+      rejected** (ahl 2026-09-17: "I tried ironing for the final
+      print... but it didn't go great. I think on balance it's not worth
+      it"). It looked excellent on the small flat rose coupon and did
+      not carry to a 225 x 250 water surface. v1.0 shipped with no
+      ironing anywhere and the result is "fantastic", so this is
+      optional at best. The rest of this item is kept as the recipe IF
+      a v2 retries it.
+      WAS: ON, per-part on the WATER body ONLY, ironing TYPE = "top
       layers"/"top surfaces" (irons every locally-exposed upward face).
       NOT "topmost surface(s) only" -- ahl found that mode irons
       nothing on the water part, because it restricts to the single
@@ -640,16 +654,17 @@ PIECES (mountains/valley/desert STLs — single color)
 - [ ] Orientation as imported (terrain up)
 
 FINAL 225 x 250 FRAME ONLY
-- [ ] Brim **3 mm** (ahl 2026-09-15). NOT the 4 mm this checklist used
-      to say: brim grows OUTWARD on every side, so on a 256 x 256 bed the
-      225.1 x 250.0 frame becomes 233.1 x **258.0** at 4 mm and overflows
-      by 2 mm. At 3 mm it is 231.1 x **256.0** -- exactly the bed edge.
-      N-S is the binding dimension; rotating only swaps axes. Watch the
-      first layer: if the printable area is even slightly under the
-      nominal 256, or the plate is not perfectly centred, the brim will
-      clip. Fallback is 2 mm (254.0, 1 mm of margin) or brimless -- the
-      tray floor gives full-footprint bed contact, so adhesion may not
-      need a brim at all.
+- [ ] Brim **2 mm, outer only** -- SETTLED BY PRINT (ahl 2026-09-17).
+      The arithmetic: brim grows OUTWARD on every side, so on a 256 x 256
+      bed the 225.1 x 250.0 frame becomes 229.1 x 254.0 at 2 mm,
+      231.1 x **256.0** at 3 mm (exactly the bed edge) and 233.1 x 258.0
+      at 4 mm. N-S is binding; rotating only swaps axes.
+      **3 mm FAILED IN PRACTICE** -- ahl: "the 3 mm brim actually printed
+      PAST the edge." So 256.0 is not merely zero-margin, it is over the
+      real printable area. Do not treat a computed fit to the nominal bed
+      as a fit. He dropped to 2 mm and reports adhesion was never a
+      problem anyway -- the tray floor gives full-footprint contact, so
+      brimless is also viable.
 
 ## Filament logistics (ahl 2026-09-14)
 
@@ -1064,11 +1079,14 @@ other side:
     necks are fine. The argument for Arachne (integer wall counts leave
     gaps in a taper) is still sound in principle; it was simply not
     decisive at this geometry.
-  - **No ironing.** A whole design decision -- splitting the frame's
-    floor and water into separate 3MF parts so ironing could target the
-    visible surface only -- was made to serve a pass that the shipped
-    print did not use. The split costs nothing and leaves the option
-    open, so it was not wasted, but it was not needed either.
+  - **No ironing, after trying it.** A whole design decision --
+    splitting the frame's floor and water into separate 3MF parts so
+    ironing could target the visible surface only -- was made to serve a
+    pass that turned out not to be worth running. The split costs
+    nothing and keeps the option open, so it was not wasted, but the
+    sequence is worth remembering: a great result on a SMALL FLAT COUPON
+    drove a design change, and the effect did not survive scaling to the
+    real surface.
 
 Where the checklist and this section disagree, THIS section is what
 produced the object. Treat the checklist as the conservative starting
