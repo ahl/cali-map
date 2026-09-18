@@ -1,0 +1,56 @@
+# License
+
+This project contains two kinds of work, licensed separately.
+
+## Code — MIT
+
+Covers `pipeline/`, `Makefile`, `config.toml`, and `overrides/*.geojson`.
+
+    Copyright (c) 2026 Adam H. Leventhal
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+
+## Design and artwork — CC BY-SA 4.0
+
+Covers the compass rose (`assets/compass.svg`, `compass.ai`), the region
+key layout, the physical design of the map, the meshes the pipeline
+produces (`*.stl`, `*.3mf`), and objects printed from them.
+
+    Copyright (c) 2026 Adam H. Leventhal
+    Licensed under the Creative Commons Attribution-ShareAlike 4.0
+    International License: https://creativecommons.org/licenses/by-sa/4.0/
+
+In short: you may print it, sell prints of it, and remix it — provided
+you credit **AL & JL** and license design derivatives under the same
+terms.
+
+## Source data — not covered, and not redistributed
+
+None of the geographic data ships with this repository (`data/` is
+gitignored and fetched at build time), so nothing here relicenses it.
+Every source is US Government or Natural Earth public domain and
+requires no attribution; `NOTES.md` has the complete inventory with URLs
+and cache paths. Courtesy credit, if you print this for others:
+
+- Elevation: Mapzen/Nextzen terrain tiles on AWS Open Data, derived from
+  USGS 3DEP and SRTM
+- Coastline and state boundary: US Census cartographic boundary files
+- International and state lines: Natural Earth
+- Geomorphic provinces: California Geological Survey
+- Hydrography: USGS Small-Scale Dataset

@@ -144,6 +144,15 @@ the poke holes all exist only because a piece must be tight enough to
 hold and loose enough to insert at once. Invalidates most of the fit
 work, which is why it is its own version rather than an increment.
 
+## License
+
+Code (`pipeline/`, Makefile, config, overrides) is **MIT**. The design
+and artwork — compass rose, key layout, the physical map, and the meshes
+the pipeline produces — are **CC BY-SA 4.0**: print it, sell prints,
+remix it, provided you credit AL & JL and share design derivatives
+alike. No source data ships here (`data/` is fetched at build time) and
+all of it is public domain; see `LICENSE`.
+
 ## See also
 
 `NOTES.md` — design log: decisions and why, print-session findings,
