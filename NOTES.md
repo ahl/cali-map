@@ -158,22 +158,26 @@ exist, both unrecoverable later:
      in the slicer, not the repo, and the state is gone the moment
      something is tweaked for the next print.
 
-**KNOWN RISKS going into the P5 print:**
-- **Brim is 3 mm, which lands on EXACTLY 256.0 mm** — the bed edge,
-  zero margin. 4 mm overflows by 2 mm. If the printable area is even
-  slightly under nominal or the plate is off-centre, the brim clips.
-  Fallbacks: 2 mm (254.0), or brimless — the tray floor gives
-  full-footprint bed contact.
-- **The mountains piece has a ~0.88 mm neck near Bakersfield** (~2
-  extrusion widths), plus ~1.04 mm at Petaluma. D11's long-flagged
-  fragility, never fixed, on the print-once brown piece. Located
-  precisely; `thin_spots()` reports them every build.
-- The T3 fit was validated on the P4 coupon only (see above).
-- Piece shapes shifted slightly since ahl printed T3 (the land fix).
-  The fit NUMBERS still transfer — they are offsets applied to whatever
-  shape results — but the printed coupon is no longer byte-identical.
-- The key insert has not been printed on paper yet — border and cut
-  line are untested in the hand.
+**HOW THE P5 RISKS ACTUALLY RESOLVED** (all of these were live
+warnings until 2026-09-16/17; kept because a v2 will face them again):
+- **Brim at 3 mm lands on EXACTLY 256.0 mm**, the bed edge, zero
+  margin — it did NOT clip. 4 mm would overflow by 2 mm. Fallbacks, if
+  a future plate is less forgiving: 2 mm (254.0) or brimless, since the
+  tray floor gives full-footprint contact anyway.
+- **The 0.88 mm Bakersfield neck** (~2 extrusion widths) and the
+  1.04 mm Petaluma one printed and survived handling — on CLASSIC
+  walls and 10% gyroid, not the Arachne the checklist asks for. So they
+  are not as fragile as feared, but they were never given the wall
+  generator that suits them. Still D11, still unfixed, still reported by
+  `thin_spots()` every build.
+- **T3 was coupon-only** when the pieces were cut. It transferred: the
+  same numbers produced a working fit at ten times the span, against a
+  frame printed with four filaments and an ironing pass.
+- **Piece shapes shifted after T3** (the land fix), so the printed
+  coupon was not byte-identical to what shipped. Harmless, as predicted
+  — the clearances are offsets applied to whatever shape results.
+- **The paper insert** printed, cut and seated fine; the 2 mm border and
+  cut line work in the hand.
 
 **Open items parked deliberately:**
 - **NO POKE HOLE UNDER THE KEY (ahl 2026-09-16, deferred to v2).** Each
@@ -206,14 +210,19 @@ exist, both unrecoverable later:
   one is on the print-once brown piece. `thin_spots()` reports necks
   every build (all rings, since 2026-09-15).
 - Full-depth bodies (gray under pieces / land color to the floor):
-  revisit per ahl after judging translucency + teal cavity floors in
-  prints; spec sketched in the T1 session note.
-- Ironing: RESOLVED (ahl 2026-09-14, rose test coupon) — per-part "Top
-  surfaces" ironing on the WATER body only, flow 20% at 20 mm/s: "looks
-  fantastic." Roll into frame.3mf's water body for T2/P5 (checklist
-  updated below).
-- Bottom version stamps: DISABLED (two failed styles); revisit only via
-  a dedicated small test print.
+  v1.0 SHIPPED WITHOUT IT and ahl did not call for it after seeing the
+  finished object, so single-layer land over teal evidently reads fine.
+  Left in the v2 list as an improvement, not a defect; spec sketched in
+  the T1 session note.
+- Ironing: SETTLED and shipped — per-part "Top surfaces" on the WATER
+  body only, 20% flow at 20 mm/s. Validated on the rose coupon
+  2026-09-14 and then on the real frame 2026-09-16, which was the case
+  the coupon could not test (two top-facing regions at different Z).
+- Bottom version stamps: DISABLED (two failed styles), and v1.0 shipped
+  with UNLABELLED pieces — ahl 2026-09-16: "I can write on the pieces;
+  it will be fine." The edge stamp has since solved small-text rendering
+  (font-fallback guard, glyph merge, a depth ladder), so the rendering
+  objection no longer stands if a v2 wants them.
 - Waterways (D9): deferred to the very end; data ready in
   data/p2_waterways.geojson; baseline = no waterways.
 - US-Mexico line uses the NE polyline (consistent piece/frame geometry;
@@ -267,15 +276,15 @@ set into a frame of the surrounding geography.
 
 | # | Decision | Notes |
 |---|----------|-------|
-| D1 | Four regions: Coast, Mountains, Central Valley, Desert | Per CA curriculum scheme; exact borders TBD from canonical source (see G1) |
+| D1 | Four regions: Coast, Mountains, Central Valley, Desert | Per CA curriculum scheme. Borders SETTLED: derived in p1_regions from the DEM + a coastal band, with hand overrides in overrides/*.geojson. |
 | D2 | Coast piece extends into the Pacific as flat ocean, two-color print | Keeps Channel Islands physically connected to one rigid piece |
 | D3 | Frame printed gray or white | Signals "context, not subject" |
 | D4 | Ocean = flat datum plane | No bathymetry |
 | D5 | Linear (planimetric) scale; Z scaled independently | Terrain gets vertical exaggeration; sits on a fixed-height solid base |
 | D6 | Print bed 256×256 mm; whole model ≤ 1000×1000 mm total | Either frame fits one bed, or frame is carved into tiles |
-| D7 | Material: PLA. Fit: snug but disassemblable | Clearance values TBD (see G3) |
+| D7 | Material: PLA. Fit: snug but disassemblable | SETTLED and print-validated: 0.10 mm piece<->frame, 0.20 mm piece<->piece, ribs biting 0.05 mm. See the T3 entry. |
 | D8 | Version control: jj (colocated git), repo = this directory | |
-| D19 | **Region KEY (ahl 2026-09-15):** a rectangular plate inset into the P5 frame over NEVADA, carrying a TITLE ("California Regions", 6 mm cap = the same size as the compass rose's N/E/S/W letters, word-wrapped to "California"/"Regions") then, after a gap, the five regions (Pacific Ocean, Coastal, Mountain, Valley, Desert) at a smaller 3 mm cap, each with a 5 mm circular colour-swatch plug beside it. Each pocket has a 2.5 mm POKE HOLE through its floor (1.25 mm ledge left for the plug): plugs are fitted BEFORE the key goes into the frame, so a plug in the wrong pocket gets pushed back out from underneath while the key is still loose. Nothing is drilled through the frame — ahl 2026-09-15: "people are going to assemble the key first... we don't need to be able to poke the plug out after the key is inserted". Title layout sets the size: the text column must fit "California" at 6 mm (44.6 mm), which drove the key to 66 x 66 mm (was 56 x 57 before the title). Title and labels share ONE rectangular recess with the pockets in a column to its right, so the paper insert is a plain rectangle with no holes to punch. Cut as a recess exactly like a piece cavity. **PERMANENT press fit** — no crush ribs, no poke-hole, `[key].interference_mm` (0.05 total) of squeeze, glue optional. Bottom sits on the tray floor at the same z as every piece; **top is flush with the tallest terrain ON ITS BOUNDARY** — the build walks the rectangle's perimeter every run and takes the max, so the plate finishes level with the ground it actually abuts and moving/resizing the key re-heights it automatically (there is no height knob; verified by moving the key and watching 6.24 -> 6.69 mm). "Adjacent" means on the boundary line, NOT merely nearby: an earlier band-sampling version picked up a peak standing off from the key and made it 1.2 mm too tall. Labels are 2D-PRINTED (`out/p5/key_insert.pdf`): the page is the recess plus 5 mm of spare paper on every side with a CUT LINE + corner crop marks at the exact recess size, and a 2 mm blank border inside that so type is not flush to the paper edge (ahl 2026-09-15). The border is taken out of the usable text column, which is why the key went 66 -> 68 mm wide — "California" at the 6 mm title cap is 44.6 mm and would not fit a bordered 48 mm column. Sits in a 0.2 mm recess — FDM text at this size fights the 0.4 mm nozzle. Config `[key]`: enabled, center_mm, width_mm, height_mm, adjacent_search_mm, interference_mm, pocket_*, label_recess_mm. Location picked by scanning for the largest clear gray non-CA land block. The swatch PLUG is a plain P5 output too (`out/p5/key_plug.stl`) — ONE flat-topped cylinder, printed five times in the five region colours (Pacific Ocean = water, Coastal = coast, then the three piece colours); ahl lays the real print out by hand in Bambu Studio, so the build does not pack plugs onto a plate or merge them into another part. Plug dimensions live in `[key].plug_interference_mm` / `plug_proud_mm` and are PROVISIONAL — settle them from `pipeline/key_pocket_coupon.py` (-> `out/key_coupon/{pocket_coupon,plug}.stl`), which reads the pocket size from this same config so the coupon always matches the real key. The standalone key-panel build was REMOVED 2026-09-15 (ahl: "get rid of the stand-alone key stuff"); `key_panel.py` is now a pure library shared by p5_final and the coupon. | |
+| D19 | **Region KEY (ahl 2026-09-15):** a rectangular plate inset into the P5 frame over NEVADA, carrying a TITLE ("California Regions", 6 mm cap = the same size as the compass rose's N/E/S/W letters, word-wrapped to "California"/"Regions") then, after a gap, the five regions at a smaller 3 mm cap (labels are `key_panel.LABELS`; since 2026-09-16 they read **mountains / coast / valley / desert / water** — lower case, in ahl's order, and deliberately the SAME words the build uses for bodies, pieces, STLs and config keys, so the key, the filament slot and the code all say one name rather than synonyms), each with a 5 mm circular colour-swatch plug beside it. Each pocket has a 2.5 mm POKE HOLE through its floor (1.25 mm ledge left for the plug): plugs are fitted BEFORE the key goes into the frame, so a plug in the wrong pocket gets pushed back out from underneath while the key is still loose. Nothing is drilled through the frame — ahl 2026-09-15: "people are going to assemble the key first... we don't need to be able to poke the plug out after the key is inserted". Title layout sets the size: the text column must fit "California" at 6 mm (44.6 mm), which drove the key to 66 x 66 mm (was 56 x 57 before the title). Title and labels share ONE rectangular recess with the pockets in a column to its right, so the paper insert is a plain rectangle with no holes to punch. Cut as a recess exactly like a piece cavity. **PERMANENT press fit** — no crush ribs, no poke-hole, `[key].interference_mm` (0.05 total) of squeeze, glue optional. Bottom sits on the tray floor at the same z as every piece; **top is flush with the tallest terrain ON ITS BOUNDARY** — the build walks the rectangle's perimeter every run and takes the max, so the plate finishes level with the ground it actually abuts and moving/resizing the key re-heights it automatically (there is no height knob; verified by moving the key and watching 6.24 -> 6.69 mm). "Adjacent" means on the boundary line, NOT merely nearby: an earlier band-sampling version picked up a peak standing off from the key and made it 1.2 mm too tall. Labels are 2D-PRINTED (`out/p5/key_insert.pdf`): the page is the recess plus 5 mm of spare paper on every side with a CUT LINE + corner crop marks at the exact recess size, and a 2 mm blank border inside that so type is not flush to the paper edge (ahl 2026-09-15). The border is taken out of the usable text column, which is why the key went 66 -> 68 mm wide — "California" at the 6 mm title cap is 44.6 mm and would not fit a bordered 48 mm column. Sits in a 0.2 mm recess — FDM text at this size fights the 0.4 mm nozzle. Config `[key]`: enabled, center_mm, width_mm, height_mm, adjacent_search_mm, interference_mm, pocket_*, label_recess_mm. Location picked by scanning for the largest clear gray non-CA land block. The swatch PLUG is a plain P5 output too (`out/p5/key_plug.stl`) — ONE flat-topped cylinder, printed five times in the five region colours, TOP ROW FIRST in `LABELS` order (the build prints that list, derived rather than hardcoded — an earlier hardcoded sentence went stale the moment the labels were reordered); ahl lays the real print out by hand in Bambu Studio, so the build does not pack plugs onto a plate or merge them into another part. Plug dimensions are SETTLED: `[key].plug_d_mm` = **4.90 mm**, measured off the `pipeline/key_pocket_coupon.py` ladder (-> `out/key_coupon/{pocket_ladder,plug_ladder}.stl`), which reads the pocket size from this same config so the coupon always matches the real key. There is exactly one fit knob — the pocket is a DESIGN dimension, not a tuning one. `plug_proud_mm` = **0.0**: the plug sits FLUSH, which is self-stopping (it is exactly `pocket_depth_mm` tall, so it bottoms out on the pocket-floor annulus and cannot go under-flush). ahl's original ask was a 0.4 mm "satisfying bump"; handling the printed parts changed it. The standalone key-panel build was REMOVED 2026-09-15 (ahl: "get rid of the stand-alone key stuff"); `key_panel.py` is now a pure library shared by p5_final and the coupon. | |
 | D18 | **Retention & disassembly (ahl 2026-09-14, from T1):** pieces stay seated through handling (T1: mountains fell out when tipped); the FINGER POKE-HOLES (18 mm, may span piece-piece seams) are THE disassembly mechanism. Retention via crush ribs on piece walls (rib_* knobs; ~0.05 mm interference, tune from T2 print). Clearances split by interface: 0.15 total everywhere (frame 0.15 single-side kept from T1's good fit; piece-pair 0.075/side, was 0.30 total = loose valley). | |
 | D17 | **Compass rose (ahl 2026-09-14):** 8-point nautical rose (4 cardinal + 4 intercardinal, split-shaded points, center circle, outer ring, N/E/S/W serif letters) in the bottom-left Pacific of the Frame. Concept: "compass rose.jpeg". Design source: assets/compass_rose.svg (parametric generator pipeline/compass_rose.py — edit SVG directly or params). **Makes the Frame a 4-COLOR print** (adds black for rose outlines + lettering). Physical size + emboss method decided at placement. | |
 | D16 | **The Frame is a TRAY (ahl 2026-09-13):** a continuous floor (FLOOR_MM = 1.2, 6 layers) runs under the whole footprint; cavities are recesses, not through-holes — pieces rest ON the Frame. Poke-holes (2x 8 mm circles in the floor per piece, at interior points) allow pushing pieces out from below. Pieces carry BASE_MM - FLOOR_MM of slab so all datums/tops align. Water/base height: 3.0 mm proposed for final rigidity (ahl deciding 2.0-3.0); G2 relief rides on top (total max ~11.5 mm at 3.0). | |
@@ -445,7 +454,8 @@ under data/ (gitignored, regenerable). Fetched 2026-09-13/14.
 - **Decisions from ahl's 2026-09-13 review round**: waterways DEFERRED —
   baseline build assumes NO waterways (D9 stays optional, revisit at
   end); 3MF Bambu packaging VALIDATED in Bambu Studio (no print needed);
-  P1.5 slab print and P4 coupon prints ON HOLD until regions finalized;
+  P1.5 slab print and P4 coupon prints were held until regions
+  finalized (both since printed);
   NEW deliverable P1.5b — an engraved INSET print (coupon-style window)
   of the Carquinez/Vallejo area, where the regions interact messily;
   raster-jaggy borders (delta zoom) to be cured by vector smoothing in
@@ -476,7 +486,10 @@ under data/ (gitignored, regenerable). Fetched 2026-09-13/14.
   centerline (buffer >= ~650 m ground width, union with Havasu/Mead
   polygons). Remaining: tune Strahler threshold + width function (P3/P5).
 
-## Plan (phases with check-ins)
+## Plan (phases with check-ins) — HISTORICAL
+
+All phases are complete as of 2026-09-17. Kept as the record of how the
+project was sequenced; the live list is README "Future work".
 
 Each phase ends with a check-in deliverable; nothing downstream starts
 until its inputs are signed off. Every phase is a jj commit.
@@ -494,7 +507,7 @@ until its inputs are signed off. Every phase is a jj commit.
   out/p1_final.png. Markup->extract->apply is a standing loop for any
   future tweak (red=mountains, orange=coast on any render).
 - **P1.5 — Engraved one-piece validation print (ahl, 2026-09-13).**
-  [BUILT, print on hold until P1 signs off] RECTANGULAR SLAB, 150 mm N-S
+  [DONE — printed; z_exaggeration 9.3 came off this slab] RECTANGULAR SLAB, 150 mm N-S
   — California plus ~40 km beyond the state line (N/E/S), Pacific as
   flat datum (Channel Islands on it) — engraved recesses (<0.5 mm wide,
   1-2 layers deep at 0.2 mm layer height) for BOTH the four-region
@@ -516,22 +529,28 @@ until its inputs are signed off. Every phase is a jj commit.
   vector inset). Remaining in P2: physical size decision (scale-at-end,
   D11), frame tiling plan (G5), per-scale min-width/tolerance passes,
   dimensioned layout drawing.
-- **P3 — 3D prototype.** [NOT STARTED; foundations ready] Generate ONE
+- **P3 — 3D prototype.** [SUPERSEDED — p15/p15b and then the P4 coupon
+  did this work directly] Generate ONE
   real puzzle piece + matching frame corner at 2–3 vertical
   exaggerations; base height proposal (G2). Waterway multi-body deferred
   (D9: baseline = no waterways; 3MF packaging already validated).
   Mesh foundations exist (mesh_common.py, p15/p4 drivers).
   *Check-in: previews + STLs in slicer; pick exaggeration & base.*
-- **P4 — Fit coupon.** [BUILT, print on hold until P1 signs off] Bay
+- **P4 — Fit coupon.** [DONE — printed T1/T2/T3; T3 settled the fit] Bay
   Area window pieces at both candidate scales + 10 mm frame rim
   (out/p4_bay_235mm/, out/p4_bay_420mm/, incl. frame.stl; pieces carry
   edge clearance for the frame opening). Geometry-level fit verified to
   <0.01 mm of nominal. *Check-in: ahl prints and reports fit (G3/G4).*
-- **P5 — Full generation.** [NOT STARTED] All pieces (4 regions +
+- **P5 — Full generation.** [DONE] All pieces (4 regions +
   islands piece) + frame tiles + ocean datum; two-color islands piece
   (G7/G11); watertight verification on every mesh.
   *Check-in: full set + assembled render.*
-- **P6 — Print & iterate.** [NOT STARTED] Slice, print, adjust.
+- **P6 — Print & iterate.** [DONE 2026-09-17] Frame, all three pieces,
+  key, five plugs and the paper insert printed and assembled. ahl: "I
+  printed it all and it's fantastic."
+
+**All phases are complete.** This plan is history; the live list is
+README "Future work".
 
 ## Viewing workflow
 
@@ -600,8 +619,9 @@ FRAME (frame.3mf — 4-color)
       "Top surfaces" irons BOTH (it has no Z filter) -- expected
       harmless (no dimension-critical spec depends on cavity-floor
       finish; extra smoothness there may even help pieces sit flatter),
-      just extra ironing time on hidden area. Not yet print-tested on
-      the full frame -- confirm at T2/P5.
+      just extra ironing time on hidden area. CONFIRMED on the real
+      P5 frame 2026-09-16 -- this is the case the rose coupon could not
+      test, and it came out well.
 
 PIECES (mountains/valley/desert STLs — single color)
 - [ ] Separate plate from the frame (don't ride the color changes)
@@ -629,11 +649,14 @@ FINAL 225 x 250 FRAME ONLY
   pieces ONCE, from validated parameters. Do NOT burn them on coupons:
   test-print pieces in green/any plentiful color (fit doesn't care).
   The mountains piece is also the biggest filament consumer of the
-  three; if a reprint risk appears, order more brown before P6.
-- ahl's plan: coupon pieces in WHITE (T1 done so); frame coupons in the
-  REAL frame colors (validates the actual 4-color result). The final
-  mountains gets a full-size DRESS REHEARSAL in a plentiful color
-  before the one-shot brown print.
+  three.
+- OUTCOME: the planned full-size DRESS REHEARSAL was SKIPPED. ahl went
+  straight to the final brown mountains and it came out well, so the
+  one-shot pieces cost one print each. Coupon pieces were WHITE, frame
+  coupons in the real frame colours. Noted because the rehearsal was a
+  standing recommendation in this file and the project shipped without
+  it -- not a precedent so much as a reminder that by then the fit was
+  already coupon-validated, which is what made skipping it reasonable.
 - **VERTICAL PRINTING of pieces (open, decide at the rehearsal):** ahl
   previously printed a similar-size CA topo vertically (brim + some
   supports) with much better terrain resolution (slope becomes a side
@@ -698,13 +721,13 @@ FINAL 225 x 250 FRAME ONLY
 
 ## Print sessions
 
-- **T1 (2026-09-14, in progress):** ahl printing the mini-frame set
+- **T1 (2026-09-14, CLOSED):** ahl printing the mini-frame set
   (4-color frame.3mf w/ vector rose + mountains/valley pieces, plain
   bottoms). IRONING DEFERRED (revisit later; if wanted, the route is
   per-part "Top surfaces" on the WATER body — "topmost" mode would skip
   the water plane since terrain rises above it; note rose blue/gray ink
   merged into terrain bodies, so rose stays matte under per-part water
-  ironing). Awaiting: fit at 0.15 mm/side (G3), poke-hole/tray feel,
+  ironing). Was awaiting: fit at 0.15 mm/side (G3), poke-hole/tray feel,
   4-color seam quality, rose crispness, AND the "bodies own their full
   depth" decision (deferred by ahl until seen in plastic): judge how
   single-layer coast/gray land reads over the teal sub-surface — if the
@@ -806,10 +829,11 @@ FINAL 225 x 250 FRAME ONLY
   — retain properly. This is the end of the T1(loose) -> T2(too tight)
   -> T3(right) sequence; config.toml marks these LOCKED, and changing
   one means a fresh coupon print + build_tag, not an edit. Caveats
-  carried forward: the coupon has no desert, so three-piece wedging and
-  the mountains<->desert seam are still unproven, as is the full
-  225 x 250 frame; and 18 mm poke-hole ergonomics / 6 mm rose-letter
-  legibility went uncommented.
+  carried forward at the time: no desert on the coupon, so three-piece
+  wedging and the mountains<->desert seam were unproven, as was the full
+  225 x 250 frame; 18 mm poke-hole ergonomics and 6 mm rose-letter
+  legibility went uncommented. ALL CLEARED by the P5 prints
+  (2026-09-16/17).
   Spec as built: `build_tag` = "T3"; `make p4 p5` converged, all bodies
   watertight.
 
@@ -827,9 +851,10 @@ FINAL 225 x 250 FRAME ONLY
   hand-placed: P4 mountains 4 (3 frame + 1 pair), P4 valley 6
   (5 frame + 1 pair), P5 valley all-pair (it touches no frame).
   Caveats accepted going in: frame and pair both moved at once, so a
-  too-tight T3 won't isolate which; and the coupon has no desert, so
-  the three-piece wedging (and mountains<->desert) is untested until P5.
-  ahl: if T3 feels good, lock these clearances in.
+  too-tight T3 would not isolate which; and the coupon has no desert, so
+  three-piece wedging and mountains<->desert were untested until P5.
+  DISCHARGED 2026-09-17 -- the full object assembled, desert included,
+  with these exact numbers. Neither caveat ever had to be paid.
 - **Ribs are specified as OVERLAP WITH THE MATING FACE, not as an offset
   from nominal (ahl 2026-09-15) — and this caught a real defect.** The
   old rule put every crest at nominal + interference, which is only
